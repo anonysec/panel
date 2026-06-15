@@ -21,7 +21,6 @@ export default defineConfig({
       output: {
         manualChunks: {
           'vendor': ['vue', 'vue-router', 'pinia'],
-          'charts': ['@koris/ui/KChart.vue', '@koris/ui/KSparkline.vue', '@koris/ui/KDonut.vue'],
         }
       }
     }

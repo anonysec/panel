@@ -28,6 +28,9 @@ fi
 echo "[deploy] Version: $VERSION"
 
 if command -v npm >/dev/null 2>&1; then
+  echo "[deploy] Installing shared dependencies..."
+  (cd panel/web/shared && npm install --no-audit --no-fund)
+
   echo "[deploy] Building admin frontend..."
   (cd panel/web/admin && npm install --no-audit --no-fund && npm run build)
 
