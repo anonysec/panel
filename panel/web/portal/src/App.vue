@@ -316,22 +316,22 @@ onMounted(boot)
 
 
 <template>
-  <div v-if="screen==='loading'" class="loading"><div class="spinner"></div><p>Loading...</p></div>
+  <div v-if="screen==='loading'" class="loading"><div class="spinner"></div></div>
 
   <div v-else-if="screen==='login'" class="auth-screen">
     <div class="auth-hero">
       <div class="logo-row"><div class="logo">K</div><div><b style="font-size:17px">KorisPanel</b><small style="color:var(--muted);font-size:12px">Client Portal</small></div></div>
       <h1>Your VPN<br>Dashboard</h1>
-      <p>Monitor your account, download connection profiles, manage subscription, and get support — all in one place.</p>
+      <p>Monitor your account, download connection profiles, manage subscription, and get support.</p>
       <div class="chips"><span>OpenVPN</span><span>L2TP/IPSec</span><span>IKEv2</span></div>
     </div>
     <div class="auth-card">
       <h2>Welcome back</h2>
       <div class="sub">Sign in with your account credentials</div>
       <form class="form-stack" @submit.prevent="login">
-        <label>Username<input v-model.trim="loginForm.username" required placeholder="Your username" /></label>
-        <label>Password<input v-model="loginForm.password" type="password" required placeholder="Your password" /></label>
-        <button class="btn-primary" :disabled="busy">{{ busy ? 'Signing in...' : 'Sign In' }}</button>
+        <label>Username<input v-model.trim="loginForm.username" required placeholder="Your username"/></label>
+        <label>Password<input v-model="loginForm.password" type="password" required placeholder="Your password"/></label>
+        <button class="btn-primary" :disabled="busy">{{ busy?'Signing in...':'Sign In' }}</button>
       </form>
       <p v-if="error" class="alert danger">{{ error }}</p>
     </div>
@@ -339,12 +339,12 @@ onMounted(boot)
 
   <div v-else class="portal-shell">
     <div class="portal-topbar">
-      <div class="logo-row"><div class="logo" style="width:36px;height:36px;border-radius:10px;font-size:15px">K</div><div><b>KorisPanel</b><small style="color:var(--muted);font-size:11px">Client Portal</small></div></div>
+      <div class="logo-row"><div class="logo" style="width:34px;height:34px;border-radius:9px;font-size:14px">K</div><div><b>KorisPanel</b><small style="color:var(--muted);font-size:11px">Client Portal</small></div></div>
       <div style="display:flex;align-items:center;gap:10px"><span class="pill" :class="status==='active'?'ok':'warn'">{{ status }}</span><button class="btn-ghost" @click="logout">Logout</button></div>
     </div>
 
     <div class="welcome-card">
-      <div><div class="eyebrow">{{ status }}</div><h1>Hello, {{ titleName }}</h1><p>Your VPN account is connected and ready.</p></div>
+      <div><div class="eyebrow">{{ status }}</div><h1>Hello, {{ titleName }}</h1><p>Your VPN account is active and ready to connect.</p></div>
       <a v-if="openvpnProfile?.available" class="btn-primary" :href="openvpnProfile.download" download>Download Config</a>
       <button v-else class="btn-primary" disabled>No server available</button>
     </div>
@@ -358,100 +358,42 @@ onMounted(boot)
       <button :class="{on:portalTab==='support'}" @click="portalTab='support'">Support</button>
     </div>
 
-    <!-- DASHBOARD -->
+    <!-- Dashboard -->
     <div v-if="portalTab==='overview'">
       <div class="stats-row">
-        <div class="stat-card main"><div class="lbl">Current Plan</div><h3>{{ planName }}</h3><div class="sub">Expires: {{ formatDate(customer?.subscription?.expires_at) }}</div></div>
-        <div class="stat-card"><div class="lbl">Data Limit</div><h3>{{ dataLimit }}</h3><div class="sub">{{ usage?.online?`${usage.active_sessions} active`:'Offline' }}</div></div>
-        <div class="stat-card"><div class="lbl">Wallet</div><h3>{{ formatMoney(customer?.credit) }}</h3><div class="sub">Available balance</div></div>
+        <div class="stat-card main"><div class="lbl">Plan</div><h3>{{ planName }}</h3><div class="sub">Expires: {{ formatDate(customer?.subscription?.expires_at) }}</div></div>
+        <div class="stat-card"><div class="lbl">Data</div><h3>{{ dataLimit }}</h3><div class="sub">{{ usage?.online?`${usage.active_sessions} active`:'Offline' }}</div></div>
+        <div class="stat-card"><div class="lbl">Wallet</div><h3>{{ formatMoney(customer?.credit) }}</h3><div class="sub">Balance</div></div>
       </div>
-
-      <div v-if="usage" class="card">
-        <div class="card-head"><div><h4>Data Usage</h4><div class="sub">{{ formatBytes(usage.total_usage_bytes) }} of {{ usage.max_data_bytes?formatBytes(usage.max_data_bytes):'Unlimited' }}</div></div><span class="pill" :class="usage.online?'ok':'idle'">{{ usage.online?'Online':'Offline' }}</span></div>
-        <div class="usage-bar"><i :style="{width:usagePercent+'%'}"></i></div>
-        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted)"><span>↓ {{ formatBytes(usage.total_input_bytes) }}</span><span>↑ {{ formatBytes(usage.total_output_bytes) }}</span><span>{{ usagePercent }}% used</span></div>
-      </div>
-
-      <div class="card">
-        <div class="card-head"><h4>Connection Profiles</h4></div>
-        <div class="profile-grid">
-          <div v-for="p in profiles" :key="p.type" class="profile-card">
-            <div class="info"><b>{{ p.name }}</b><span>{{ p.remote }}:{{ p.port }} · {{ p.protocol }}</span></div>
-            <a v-if="p.available" class="btn-primary" style="padding:7px 14px;font-size:12px" :href="p.download" download>Get</a>
-            <button v-else class="btn-ghost" style="padding:7px 14px;font-size:12px" disabled>N/A</button>
-          </div>
-        </div>
-      </div>
-
-      <div v-if="usage?.sessions?.length" class="card">
-        <div class="card-head"><h4>Recent Sessions</h4></div>
-        <div style="overflow-x:auto"><table><thead><tr><th>Status</th><th>IP</th><th>Duration</th><th>↓ Down</th><th>↑ Up</th><th>Started</th></tr></thead><tbody><tr v-for="s in usage.sessions.slice(0,10)" :key="s.id"><td><span class="pill" :class="s.online?'ok':'idle'">{{ s.online?'online':'closed' }}</span></td><td>{{ s.framed_ip||'—' }}</td><td>{{ formatDuration(s.session_seconds) }}</td><td>{{ formatBytes(s.input_bytes) }}</td><td>{{ formatBytes(s.output_bytes) }}</td><td style="color:var(--muted)">{{ formatDate(s.start_time) }}</td></tr></tbody></table></div>
-      </div>
+      <div v-if="usage" class="card"><div class="card-head"><div><h4>Usage</h4><div class="sub">{{ formatBytes(usage.total_usage_bytes) }} / {{ usage.max_data_bytes?formatBytes(usage.max_data_bytes):'Unlimited' }}</div></div><span class="pill" :class="usage.online?'ok':'idle'">{{ usage.online?'Online':'Offline' }}</span></div><div class="usage-bar"><i :style="{width:usagePercent+'%'}"></i></div><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted)"><span>↓ {{ formatBytes(usage.total_input_bytes) }}</span><span>↑ {{ formatBytes(usage.total_output_bytes) }}</span><span>{{ usagePercent }}%</span></div></div>
+      <div class="card"><div class="card-head"><h4>Profiles</h4></div><div class="profile-grid"><div v-for="p in profiles" :key="p.type" class="profile-card"><div class="info"><b>{{ p.name }}</b><span>{{ p.remote }}:{{ p.port }} · {{ p.protocol }}</span></div><a v-if="p.available" class="btn-primary" style="padding:6px 12px;font-size:12px" :href="p.download" download>Get</a><button v-else class="btn-ghost" style="padding:6px 12px;font-size:12px" disabled>N/A</button></div></div></div>
+      <div v-if="usage?.sessions?.length" class="card"><div class="card-head"><h4>Sessions</h4></div><div style="overflow-x:auto"><table><thead><tr><th>Status</th><th>IP</th><th>Duration</th><th>↓</th><th>↑</th></tr></thead><tbody><tr v-for="s in usage.sessions.slice(0,8)" :key="s.id"><td><span class="pill" :class="s.online?'ok':'idle'">{{ s.online?'on':'off' }}</span></td><td>{{ s.framed_ip||'—' }}</td><td>{{ formatDuration(s.session_seconds) }}</td><td>{{ formatBytes(s.input_bytes) }}</td><td>{{ formatBytes(s.output_bytes) }}</td></tr></tbody></table></div></div>
     </div>
 
-    <!-- BILLING -->
+    <!-- Billing -->
     <div v-else-if="portalTab==='billing'">
-      <div class="card">
-        <div class="card-head"><h4>Renew Plan</h4></div>
-        <form class="form-stack" @submit.prevent="submitRenewal">
-          <label>Select Plan<select v-model.number="renewForm.plan_id"><option v-for="p in plans" :key="p.id" :value="p.id">{{ p.name }} — {{ formatGB(p.data_gb) }} · {{ formatSpeed(p.speed_mbps) }} · {{ p.duration_days }}d · {{ formatMoney(p.price) }}</option></select></label>
-          <div v-if="selectedPlan" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:8px 0"><div style="text-align:center;border:1px solid var(--border);border-radius:8px;padding:8px"><b>{{ formatGB(selectedPlan.data_gb) }}</b><br><small style="color:var(--muted)">Data</small></div><div style="text-align:center;border:1px solid var(--border);border-radius:8px;padding:8px"><b>{{ formatSpeed(selectedPlan.speed_mbps) }}</b><br><small style="color:var(--muted)">Speed</small></div><div style="text-align:center;border:1px solid var(--border);border-radius:8px;padding:8px"><b>{{ selectedPlan.duration_days }}d</b><br><small style="color:var(--muted)">Duration</small></div><div style="text-align:center;border:1px solid var(--border);border-radius:8px;padding:8px"><b>{{ formatMoney(selectedPlan.price) }}</b><br><small style="color:var(--muted)">Price</small></div></div>
-          <div v-if="selectedPlan&&selectedPlan.price>0&&walletCredit<selectedPlan.price" style="font-size:13px;color:var(--amber)">Insufficient balance. A payment request will be created.</div>
-          <button class="btn-primary" :disabled="busy||!renewForm.plan_id">{{ busy?'Processing...':'Activate Plan' }}</button>
-        </form>
-      </div>
-
-      <div class="card">
-        <div class="card-head"><h4>Top-up Wallet</h4></div>
-        <form class="form-stack" @submit.prevent="submitPaymentRequest">
-          <label>Amount<input v-model.number="paymentForm.amount" type="number" min="1" required/></label>
-          <label>Payment Method<select v-model="paymentForm.method"><option v-for="m in paymentMethods" :key="m.id" :value="m.name">{{ m.name }}</option></select></label>
-          <div v-if="selectedPaymentMethod?.instructions" style="border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--muted);font-size:13px;white-space:pre-wrap">{{ selectedPaymentMethod.instructions }}</div>
-          <label>Receipt / Reference<textarea v-model.trim="paymentForm.receipt" placeholder="Transfer ID or receipt"></textarea></label>
-          <button class="btn-primary" :disabled="busy||paymentForm.amount<=0">Submit Request</button>
-        </form>
-      </div>
-
-      <div class="card">
-        <div class="card-head"><h4>Payment History</h4></div>
-        <div style="overflow-x:auto"><table><thead><tr><th>Amount</th><th>Method</th><th>Status</th><th>Date</th></tr></thead><tbody><tr v-for="p in payments" :key="p.id"><td style="font-weight:700">{{ formatMoney(p.amount) }}</td><td>{{ p.method }}</td><td><span class="pill" :class="p.status">{{ p.status }}</span></td><td style="color:var(--muted)">{{ formatDate(p.created_at) }}</td></tr><tr v-if="!payments.length"><td colspan="4" style="text-align:center;color:var(--muted);padding:24px">No payments yet</td></tr></tbody></table></div>
-      </div>
+      <div class="card"><div class="card-head"><h4>Renew Plan</h4></div><form class="form-stack" @submit.prevent="submitRenewal"><label>Plan<select v-model.number="renewForm.plan_id"><option v-for="p in plans" :key="p.id" :value="p.id">{{ p.name }} — {{ formatGB(p.data_gb) }} · {{ p.duration_days }}d · {{ formatMoney(p.price) }}</option></select></label><div v-if="selectedPlan&&selectedPlan.price>0&&walletCredit<selectedPlan.price" style="font-size:12px;color:var(--amber)">Insufficient balance. A payment request will be created.</div><button class="btn-primary" :disabled="busy||!renewForm.plan_id">{{ busy?'...':'Activate Plan' }}</button></form></div>
+      <div class="card"><div class="card-head"><h4>Top-up Wallet</h4></div><form class="form-stack" @submit.prevent="submitPaymentRequest"><label>Amount<input v-model.number="paymentForm.amount" type="number" min="1" required/></label><label>Method<select v-model="paymentForm.method"><option v-for="m in paymentMethods" :key="m.id" :value="m.name">{{ m.name }}</option></select></label><div v-if="selectedPaymentMethod?.instructions" style="border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--muted);font-size:12px;white-space:pre-wrap">{{ selectedPaymentMethod.instructions }}</div><label>Receipt<textarea v-model.trim="paymentForm.receipt" placeholder="Transfer reference"></textarea></label><button class="btn-primary" :disabled="busy||paymentForm.amount<=0">Submit</button></form></div>
+      <div class="card"><div class="card-head"><h4>History</h4></div><div style="overflow-x:auto"><table><thead><tr><th>Amount</th><th>Method</th><th>Status</th><th>Date</th></tr></thead><tbody><tr v-for="p in payments" :key="p.id"><td style="font-weight:600">{{ formatMoney(p.amount) }}</td><td>{{ p.method }}</td><td><span class="pill" :class="p.status">{{ p.status }}</span></td><td style="color:var(--muted)">{{ formatDate(p.created_at) }}</td></tr><tr v-if="!payments.length"><td colspan="4" style="text-align:center;color:var(--muted);padding:20px">No payments</td></tr></tbody></table></div></div>
     </div>
 
-    <!-- SUPPORT -->
+    <!-- Support -->
     <div v-else-if="portalTab==='support'">
-      <div class="card">
-        <div class="card-head"><h4>New Ticket</h4></div>
-        <form class="form-stack" @submit.prevent="createTicket">
-          <label>Subject<input v-model.trim="ticketForm.subject" required placeholder="Brief description"/></label>
-          <label>Priority<select v-model="ticketForm.priority"><option value="low">Low</option><option value="normal">Normal</option><option value="high">High</option></select></label>
-          <label>Message<textarea v-model.trim="ticketForm.message" required placeholder="Describe your issue in detail"></textarea></label>
-          <button class="btn-primary" :disabled="busy">{{ busy?'Submitting...':'Submit Ticket' }}</button>
-        </form>
-      </div>
+      <div style="margin-bottom:16px"><button class="btn-primary" style="padding:8px 14px;font-size:13px" @click="selectedTicket=null">+ New Ticket</button></div>
+      <div class="card"><div class="card-head"><h4>My Tickets</h4></div><div style="overflow-x:auto"><table><thead><tr><th>Subject</th><th>Priority</th><th>Status</th><th></th></tr></thead><tbody><tr v-for="t in tickets" :key="t.id"><td>{{ t.subject }}</td><td><span class="pill warn">{{ t.priority }}</span></td><td><span class="pill" :class="t.status==='open'?'ok':'idle'">{{ t.status }}</span></td><td><button class="btn-ghost" style="padding:4px 10px;font-size:11px" @click="openTicket(t.id)">View</button></td></tr><tr v-if="!tickets.length"><td colspan="4" style="text-align:center;color:var(--muted);padding:20px">No tickets</td></tr></tbody></table></div></div>
+    </div>
 
-      <div class="card">
-        <div class="card-head"><h4>My Tickets</h4></div>
-        <div style="overflow-x:auto"><table><thead><tr><th>Subject</th><th>Priority</th><th>Status</th><th>Updated</th><th></th></tr></thead><tbody><tr v-for="t in tickets" :key="t.id"><td>{{ t.subject }}</td><td><span class="pill warn">{{ t.priority }}</span></td><td><span class="pill" :class="t.status==='open'?'ok':'idle'">{{ t.status }}</span></td><td style="color:var(--muted)">{{ formatDate(t.updated_at) }}</td><td><button class="btn-ghost" style="padding:4px 10px;font-size:11px" @click="openTicket(t.id)">View</button></td></tr><tr v-if="!tickets.length"><td colspan="5" style="text-align:center;color:var(--muted);padding:24px">No tickets yet</td></tr></tbody></table></div>
-      </div>
-
-      <!-- Ticket detail - FIXED: proper card layout above table -->
-      <div v-if="selectedTicket" class="card">
-        <div class="card-head">
-          <div><h4>#{{ selectedTicket.id }}: {{ selectedTicket.subject }}</h4><div class="sub">{{ selectedTicket.priority }} priority</div></div>
-          <button v-if="selectedTicket.status==='open'" class="btn-ghost" style="padding:6px 12px;font-size:12px" @click="closeTicket">Close</button>
-        </div>
-        <div class="ticket-thread">
-          <div v-for="msg in selectedTicket.messages" :key="msg.id" class="ticket-msg" :class="msg.sender_type">
-            <div class="msg-head"><b>{{ msg.sender_name }}</b><small>{{ formatDate(msg.created_at) }}</small></div>
-            <p>{{ msg.message }}</p>
-          </div>
-        </div>
-        <form class="form-stack" style="border-top:1px solid var(--border);padding-top:14px" @submit.prevent="replyTicket">
-          <label>Your Reply<textarea v-model.trim="ticketReply" placeholder="Type your message..."></textarea></label>
-          <button class="btn-primary" :disabled="busy||!ticketReply.trim()">Send Reply</button>
-        </form>
+    <!-- Ticket Detail Modal -->
+    <div v-if="selectedTicket" class="modal-backdrop" @click.self="selectedTicket=null">
+      <div class="modal">
+        <div class="modal-head"><h3>#{{ selectedTicket.id }}: {{ selectedTicket.subject }}</h3><button class="modal-close" @click="selectedTicket=null">✕</button></div>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px"><span class="pill" :class="selectedTicket.status==='open'?'ok':'idle'">{{ selectedTicket.status }}</span><span style="color:var(--muted);font-size:12px">{{ selectedTicket.priority }}</span><button v-if="selectedTicket.status==='open'" class="btn-ghost" style="margin-left:auto;padding:5px 10px;font-size:11px" @click="closeTicket">Close</button></div>
+        <div class="ticket-thread"><div v-for="msg in selectedTicket.messages" :key="msg.id" class="ticket-msg" :class="msg.sender_type"><div class="msg-head"><b>{{ msg.sender_name }}</b><small>{{ formatDate(msg.created_at) }}</small></div><p>{{ msg.message }}</p></div></div>
+        <form class="form-stack" style="border-top:1px solid var(--border);padding-top:12px" @submit.prevent="replyTicket"><label>Reply<textarea v-model.trim="ticketReply" placeholder="Type your message..."></textarea></label><button class="btn-primary" :disabled="busy||!ticketReply.trim()">Send</button></form>
       </div>
     </div>
+
+    <!-- New Ticket Modal -->
+    <div v-if="portalTab==='support'&&!selectedTicket" class="modal-backdrop" style="display:none"><!-- placeholder for future --></div>
   </div>
 </template>
