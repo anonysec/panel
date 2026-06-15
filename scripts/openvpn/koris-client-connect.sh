@@ -15,6 +15,12 @@ UNIQUE_ID="$(printf '%s' "$SESSION_ID" | sha1sum | awk '{print $1}' | cut -c1-32
 sql_escape() { printf "%s" "$1" | sed "s/'/''/g"; }
 SQL_USER="$(sql_escape "$U")"
 
+# --- Input validation to prevent SQL injection ---
+# Validate IP addresses (allow only digits and dots for IPv4)
+[[ "$IP" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || IP=""
+[[ "$TRUSTED_IP" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || TRUSTED_IP="0.0.0.0"
+[[ "$TRUSTED_PORT" =~ ^[0-9]+$ ]] || TRUSTED_PORT="0"
+
 normalize_rate() {
   local raw="$(printf '%s' "${1:-}" | tr -d ' ' | tr '[:upper:]' '[:lower:]')"
   [ -z "$raw" ] && return 1
@@ -80,7 +86,7 @@ apply_tc_limit || true
 
 mysql -u root "$DB" <<SQL
 INSERT INTO radacct(acctsessionid,acctuniqueid,username,nasipaddress,nasporttype,acctstarttime,acctupdatetime,acctauthentic,connectinfo_start,calledstationid,callingstationid,servicetype,framedprotocol,framedipaddress)
-VALUES('${SESSION_ID}','${UNIQUE_ID}','${U}','${KORIS_NAS_IP:-91.107.168.34}','Virtual',NOW(),NOW(),'RADIUS','OpenVPN','${KORIS_NAS_IP:-91.107.168.34}','${TRUSTED_IP}:${TRUSTED_PORT}','Login-User','PPP','${IP}')
+VALUES('${SESSION_ID}','${UNIQUE_ID}','${SQL_USER}','${KORIS_NAS_IP:-91.107.168.34}','Virtual',NOW(),NOW(),'RADIUS','OpenVPN','${KORIS_NAS_IP:-91.107.168.34}','${TRUSTED_IP}:${TRUSTED_PORT}','Login-User','PPP','${IP}')
 ON DUPLICATE KEY UPDATE acctupdatetime=NOW(), acctstoptime=NULL, framedipaddress=VALUES(framedipaddress), callingstationid=VALUES(callingstationid);
 SQL
 echo "$(date -Is) START user=$U ip=$IP session=$SESSION_ID" >> "$LOG"

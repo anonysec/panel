@@ -12,6 +12,20 @@ DUR="${time_duration:-0}"
 CAUSE="${signal:-User-Request}"
 [ -z "$U" ] && exit 0
 
+# --- Input validation to prevent SQL injection ---
+# Validate numeric fields: must be non-negative integers
+[[ "$IN" =~ ^[0-9]+$ ]] || IN="0"
+[[ "$OUT" =~ ^[0-9]+$ ]] || OUT="0"
+[[ "$DUR" =~ ^[0-9]+$ ]] || DUR="0"
+
+# Sanitize CAUSE: allow only safe characters (alphanum, dash, underscore, space, dot)
+CAUSE="$(printf '%s' "$CAUSE" | tr -cd 'A-Za-z0-9 _.:-' | head -c 64)"
+[ -z "$CAUSE" ] && CAUSE="User-Request"
+
+sql_escape() { printf "%s" "$1" | sed "s/'/''/g"; }
+SQL_USER="$(sql_escape "$U")"
+SQL_CAUSE="$(sql_escape "$CAUSE")"
+
 cleanup_tc_limit() {
   [ -n "$IP" ] || return 0
   command -v tc >/dev/null 2>&1 || return 0
@@ -31,8 +45,8 @@ cleanup_tc_limit || true
 
 mysql -u root "$DB" <<SQL
 UPDATE radacct
-SET acctstoptime=NOW(), acctupdatetime=NOW(), acctsessiontime=${DUR}, acctinputoctets=${IN}, acctoutputoctets=${OUT}, acctterminatecause='${CAUSE}', connectinfo_stop='OpenVPN disconnect'
-WHERE username='${U}' AND acctstoptime IS NULL
+SET acctstoptime=NOW(), acctupdatetime=NOW(), acctsessiontime=${DUR}, acctinputoctets=${IN}, acctoutputoctets=${OUT}, acctterminatecause='${SQL_CAUSE}', connectinfo_stop='OpenVPN disconnect'
+WHERE username='${SQL_USER}' AND acctstoptime IS NULL
 ORDER BY radacctid DESC LIMIT 1;
 SQL
 echo "$(date -Is) STOP user=$U ip=$IP in=$IN out=$OUT duration=$DUR cause=$CAUSE" >> "$LOG"

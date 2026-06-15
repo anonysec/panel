@@ -58,6 +58,39 @@ func (s Service) CreateOwner(username, password string) error {
 	return err
 }
 
+// RateLimitWindow is the time window for counting failed login attempts.
+const RateLimitWindow = 15 * time.Minute
+
+// MaxLoginAttempts is the maximum number of failed attempts per IP within the window.
+const MaxLoginAttempts = 10
+
+// IsRateLimited checks if the given IP has exceeded the login attempt limit.
+func (s Service) IsRateLimited(ip string) bool {
+	var count int
+	err := s.DB.QueryRow(
+		`SELECT COUNT(*) FROM admin_login_attempts WHERE ip=? AND success=0 AND created_at > ?`,
+		ip, time.Now().Add(-RateLimitWindow),
+	).Scan(&count)
+	if err != nil {
+		return false // fail open on DB error
+	}
+	return count >= MaxLoginAttempts
+}
+
+// RecordLoginAttempt records a login attempt for rate limiting purposes.
+func (s Service) RecordLoginAttempt(ip, username string, success bool) {
+	successInt := 0
+	if success {
+		successInt = 1
+	}
+	_, _ = s.DB.Exec(
+		`INSERT INTO admin_login_attempts(ip, username, success) VALUES(?, ?, ?)`,
+		ip, username, successInt,
+	)
+	// Prune old entries periodically (older than 24h)
+	_, _ = s.DB.Exec(`DELETE FROM admin_login_attempts WHERE created_at < ?`, time.Now().Add(-24*time.Hour))
+}
+
 func (s Service) LoginAdmin(username, password string) (bool, error) {
 	username = strings.TrimSpace(username)
 	var hash string

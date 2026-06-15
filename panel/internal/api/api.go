@@ -417,6 +417,11 @@ func (s *Server) adminLogin(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method", http.StatusMethodNotAllowed)
 		return
 	}
+	ip := clientIP(r)
+	if s.Auth.IsRateLimited(ip) {
+		writeJSONCode(w, http.StatusTooManyRequests, map[string]any{"ok": false, "error": "too_many_attempts"})
+		return
+	}
 	var in struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
@@ -432,9 +437,11 @@ func (s *Server) adminLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !ok {
+		s.Auth.RecordLoginAttempt(ip, in.Username, false)
 		writeJSONCode(w, http.StatusUnauthorized, map[string]any{"ok": false, "error": "invalid"})
 		return
 	}
+	s.Auth.RecordLoginAttempt(ip, in.Username, true)
 	auth.SetSession(w, auth.AdminCookieName, in.Username, s.Config.SessionSecret)
 	role := "admin"
 	_ = s.DB.QueryRow(`SELECT role FROM admins WHERE username=? LIMIT 1`, in.Username).Scan(&role)
@@ -468,6 +475,11 @@ func (s *Server) customerLogin(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method", http.StatusMethodNotAllowed)
 		return
 	}
+	ip := clientIP(r)
+	if s.Auth.IsRateLimited(ip) {
+		writeJSONCode(w, http.StatusTooManyRequests, map[string]any{"ok": false, "error": "too_many_attempts"})
+		return
+	}
 	var in struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
@@ -480,9 +492,11 @@ func (s *Server) customerLogin(w http.ResponseWriter, r *http.Request) {
 	var pw string
 	err := s.DB.QueryRow(`SELECT value FROM radcheck WHERE username=? AND attribute IN('Cleartext-Password','User-Password') ORDER BY id DESC LIMIT 1`, in.Username).Scan(&pw)
 	if err != nil || pw != in.Password {
+		s.Auth.RecordLoginAttempt(ip, in.Username, false)
 		writeJSONCode(w, http.StatusUnauthorized, map[string]any{"ok": false, "error": "invalid"})
 		return
 	}
+	s.Auth.RecordLoginAttempt(ip, in.Username, true)
 	_, _ = s.DB.Exec(`INSERT IGNORE INTO customers(username,sub_token) VALUES(?,?)`, in.Username, auth.RandomToken(24))
 	_, _ = s.DB.Exec(`INSERT IGNORE INTO wallets(username,credit) VALUES(?,0)`, in.Username)
 	auth.SetSession(w, auth.CustomerCookieName, in.Username, s.Config.SessionSecret)
@@ -5088,6 +5102,13 @@ func (s *Server) killSession(w http.ResponseWriter, r *http.Request) {
 func (s *Server) resellerCheckout(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Safety gate: self-checkout must be explicitly enabled via environment variable.
+	// Without a real payment gateway integration, this endpoint allows unlimited credit.
+	if os.Getenv("PANEL_RESELLER_CHECKOUT_ENABLED") != "true" {
+		writeJSONCode(w, http.StatusForbidden, map[string]any{"ok": false, "error": "reseller_checkout_disabled"})
 		return
 	}
 
