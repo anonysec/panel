@@ -15,6 +15,7 @@ type Config struct {
 	PublicBase     string
 	AdminWebDir    string
 	PortalWebDir   string
+	TemplateDir    string
 	SecureCookies  bool
 	TrustedProxies []string
 	AllowedOrigins []string
@@ -85,6 +86,7 @@ func Load() Config {
 		PublicBase:     getenv("PANEL_PUBLIC_BASE", "/dashboard"),
 		AdminWebDir:    getenv("PANEL_ADMIN_WEB_DIR", "/opt/koris-next/panel/web/admin/www"),
 		PortalWebDir:   getenv("PANEL_PORTAL_WEB_DIR", "/opt/koris-next/panel/web/portal/www"),
+		TemplateDir:    getenv("PANEL_TEMPLATE_DIR", "/etc/koris/templates/"),
 		SecureCookies:  !devMode,
 		TrustedProxies: trustedProxies,
 		AllowedOrigins: allowedOrigins,
