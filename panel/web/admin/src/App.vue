@@ -1183,6 +1183,23 @@ onUnmounted(() => {
           </div>
         </div>
 
+        <!-- Node Health -->
+        <div v-if="nodes.length" class="card" style="margin-top:16px">
+          <div class="card-head"><div><h4>Node Health</h4><div class="sub">{{ nodes.length }} node{{ nodes.length>1?'s':'' }}</div></div><button class="btn-ghost btn-sm" @click="section='nodes'">Manage</button></div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px">
+            <div v-for="node in nodes" :key="'health-'+node.id" style="border:1px solid var(--border);border-radius:10px;padding:12px;background:var(--surface-2)">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+                <span class="pill" :class="node.status==='online'?'ok':node.status==='disabled'?'bad':'warn'" style="font-size:9px">{{ node.status }}</span>
+                <b style="font-size:12px">{{ node.name }}</b>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+                <div><div style="display:flex;justify-content:space-between;font-size:9.5px;color:var(--muted);margin-bottom:3px"><span>CPU</span><span>{{ Math.round(node.status_metrics?.cpu_percent||0) }}%</span></div><div style="height:4px;border-radius:4px;background:var(--border);overflow:hidden"><div :style="{width:Math.round(node.status_metrics?.cpu_percent||0)+'%',height:'100%',borderRadius:'4px',background:(node.status_metrics?.cpu_percent||0)>80?'var(--red)':(node.status_metrics?.cpu_percent||0)>50?'var(--amber)':'var(--green)'}"></div></div></div>
+                <div><div style="display:flex;justify-content:space-between;font-size:9.5px;color:var(--muted);margin-bottom:3px"><span>RAM</span><span>{{ Math.round(node.status_metrics?.ram_percent||0) }}%</span></div><div style="height:4px;border-radius:4px;background:var(--border);overflow:hidden"><div :style="{width:Math.round(node.status_metrics?.ram_percent||0)+'%',height:'100%',borderRadius:'4px',background:(node.status_metrics?.ram_percent||0)>80?'var(--red)':(node.status_metrics?.ram_percent||0)>50?'var(--amber)':'var(--green)'}"></div></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Live Sessions -->
         <div class="card" style="margin-top:16px">
           <div class="card-head"><div><h4>{{ t('label.live_sessions') }}</h4><div class="sub">{{ liveSessions.length }} active</div></div></div>
