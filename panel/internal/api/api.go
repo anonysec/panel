@@ -332,6 +332,10 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("/api/resellers/payments", s.requireAdmin(s.resellerPayments))
 	mux.HandleFunc("/api/sessions/kill", s.requireAdmin(s.killSession))
 	mux.HandleFunc("/portal/sub", s.subscriptionLink)
+	mux.HandleFunc("/api/nodes/vpn-config/", s.requireAdmin(s.nodeVPNConfig))
+	mux.HandleFunc("/api/certificates", s.requireAdmin(s.certificates))
+	mux.HandleFunc("/api/certificates/", s.requireAdmin(s.certificateByID))
+	mux.HandleFunc("/api/panel-settings", s.requireAdmin(s.panelSettings))
 	mux.HandleFunc("/api/export/customers.csv", s.requireAdmin(s.exportCustomersCSV))
 	mux.HandleFunc("/api/export/payments.csv", s.requireAdmin(s.exportPaymentsCSV))
 	mux.HandleFunc("/api/export/radacct.csv", s.requireAdmin(s.exportRadacctCSV))
@@ -5333,4 +5337,294 @@ func writeJSONCode(w http.ResponseWriter, code int, v any) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+
+
+// ========== Per-Node VPN Config ==========
+
+type NodeVPNConfig struct {
+	ID       int64           `json:"id"`
+	NodeID   int64           `json:"node_id"`
+	Protocol string          `json:"protocol"`
+	Enabled  bool            `json:"enabled"`
+	Port     int             `json:"port"`
+	Network  string          `json:"network"`
+	Extra    json.RawMessage `json:"extra_json,omitempty"`
+}
+
+func (s *Server) nodeVPNConfig(w http.ResponseWriter, r *http.Request) {
+	rest := strings.TrimPrefix(r.URL.Path, "/api/nodes/vpn-config/")
+	parts := strings.Split(strings.Trim(rest, "/"), "/")
+	if len(parts) == 0 || parts[0] == "" {
+		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "node_id_required"})
+		return
+	}
+	nodeID, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil || nodeID <= 0 {
+		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid_node_id"})
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		s.getNodeVPNConfigs(w, nodeID)
+	case http.MethodPost, http.MethodPatch:
+		s.upsertNodeVPNConfig(w, r, nodeID)
+	default:
+		http.Error(w, "method", http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) getNodeVPNConfigs(w http.ResponseWriter, nodeID int64) {
+	rows, err := s.DB.Query(`SELECT id, node_id, protocol, enabled, port, COALESCE(network,''), extra_json FROM node_vpn_configs WHERE node_id=? ORDER BY FIELD(protocol,'openvpn','l2tp','ikev2','ssh')`, nodeID)
+	if err != nil {
+		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	defer rows.Close()
+	configs := []NodeVPNConfig{}
+	for rows.Next() {
+		var c NodeVPNConfig
+		var enabled int
+		var extra []byte
+		if err := rows.Scan(&c.ID, &c.NodeID, &c.Protocol, &enabled, &c.Port, &c.Network, &extra); err == nil {
+			c.Enabled = enabled == 1
+			c.Extra = extra
+			configs = append(configs, c)
+		}
+	}
+	writeJSON(w, map[string]any{"ok": true, "configs": configs})
+}
+
+func (s *Server) upsertNodeVPNConfig(w http.ResponseWriter, r *http.Request, nodeID int64) {
+	var in struct {
+		Protocol string          `json:"protocol"`
+		Enabled  bool            `json:"enabled"`
+		Port     int             `json:"port"`
+		Network  string          `json:"network"`
+		Extra    json.RawMessage `json:"extra_json"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad_json"})
+		return
+	}
+	in.Protocol = strings.ToLower(strings.TrimSpace(in.Protocol))
+	if in.Protocol != "openvpn" && in.Protocol != "l2tp" && in.Protocol != "ikev2" && in.Protocol != "ssh" {
+		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid_protocol"})
+		return
+	}
+	if in.Port <= 0 || in.Port > 65535 {
+		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid_port"})
+		return
+	}
+
+	enabledInt := 0
+	if in.Enabled {
+		enabledInt = 1
+	}
+	extraStr := ""
+	if len(in.Extra) > 0 {
+		extraStr = string(in.Extra)
+	}
+
+	_, err := s.DB.Exec(`INSERT INTO node_vpn_configs(node_id, protocol, enabled, port, network, extra_json)
+		VALUES(?, ?, ?, ?, ?, ?)
+		ON DUPLICATE KEY UPDATE enabled=VALUES(enabled), port=VALUES(port), network=VALUES(network), extra_json=VALUES(extra_json)`,
+		nodeID, in.Protocol, enabledInt, in.Port, strings.TrimSpace(in.Network), nullString(extraStr))
+	if err != nil {
+		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+
+	actor, _, _ := s.currentAdmin(r)
+	s.logAudit(actor, "node.vpn_config_updated", "node", strconv.FormatInt(nodeID, 10), nil, map[string]any{"protocol": in.Protocol, "port": in.Port, "enabled": in.Enabled}, clientIP(r))
+	writeJSON(w, map[string]any{"ok": true})
+}
+
+// ========== Certificates ==========
+
+type VPNCertificate struct {
+	ID        int64  `json:"id"`
+	Name      string `json:"name"`
+	Type      string `json:"type"`
+	NodeID    *int64 `json:"node_id,omitempty"`
+	Content   string `json:"content"`
+	IsDefault bool   `json:"is_default"`
+	CreatedAt string `json:"created_at"`
+}
+
+func (s *Server) certificates(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		s.listCertificates(w)
+	case http.MethodPost:
+		s.uploadCertificate(w, r)
+	default:
+		http.Error(w, "method", http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) listCertificates(w http.ResponseWriter) {
+	rows, err := s.DB.Query(`SELECT id, name, type, node_id, SUBSTRING(content, 1, 80), is_default, created_at FROM vpn_certificates ORDER BY is_default DESC, id DESC`)
+	if err != nil {
+		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	defer rows.Close()
+	certs := []VPNCertificate{}
+	for rows.Next() {
+		var c VPNCertificate
+		var nodeID sql.NullInt64
+		var isDefault int
+		var created sql.NullTime
+		var preview string
+		if err := rows.Scan(&c.ID, &c.Name, &c.Type, &nodeID, &preview, &isDefault, &created); err == nil {
+			if nodeID.Valid {
+				c.NodeID = &nodeID.Int64
+			}
+			c.Content = preview + "..."
+			c.IsDefault = isDefault == 1
+			if created.Valid {
+				c.CreatedAt = created.Time.Format(time.RFC3339)
+			}
+			certs = append(certs, c)
+		}
+	}
+	writeJSON(w, map[string]any{"ok": true, "certificates": certs})
+}
+
+func (s *Server) uploadCertificate(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Name      string `json:"name"`
+		Type      string `json:"type"`
+		NodeID    *int64 `json:"node_id"`
+		Content   string `json:"content"`
+		IsDefault bool   `json:"is_default"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad_json"})
+		return
+	}
+	in.Name = strings.TrimSpace(in.Name)
+	in.Type = strings.ToLower(strings.TrimSpace(in.Type))
+	in.Content = strings.TrimSpace(in.Content)
+
+	if in.Name == "" || in.Content == "" {
+		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "name_content_required"})
+		return
+	}
+	if in.Type != "ca" && in.Type != "tls_crypt" && in.Type != "client_cert" && in.Type != "client_key" {
+		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid_type"})
+		return
+	}
+
+	defaultInt := 0
+	if in.IsDefault {
+		defaultInt = 1
+		// Unset other defaults of same type
+		_, _ = s.DB.Exec(`UPDATE vpn_certificates SET is_default=0 WHERE type=?`, in.Type)
+	}
+
+	res, err := s.DB.Exec(`INSERT INTO vpn_certificates(name, type, node_id, content, is_default) VALUES(?,?,?,?,?)`,
+		in.Name, in.Type, in.NodeID, in.Content, defaultInt)
+	if err != nil {
+		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	id, _ := res.LastInsertId()
+
+	actor, _, _ := s.currentAdmin(r)
+	s.logAudit(actor, "certificate.uploaded", "certificate", strconv.FormatInt(id, 10), nil, map[string]any{"name": in.Name, "type": in.Type}, clientIP(r))
+	writeJSON(w, map[string]any{"ok": true, "id": id})
+}
+
+func (s *Server) certificateByID(w http.ResponseWriter, r *http.Request) {
+	id, _, ok := pathID(r.URL.Path, "/api/certificates/")
+	if !ok {
+		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		var c VPNCertificate
+		var nodeID sql.NullInt64
+		var isDefault int
+		var created sql.NullTime
+		err := s.DB.QueryRow(`SELECT id, name, type, node_id, content, is_default, created_at FROM vpn_certificates WHERE id=?`, id).Scan(&c.ID, &c.Name, &c.Type, &nodeID, &c.Content, &isDefault, &created)
+		if err == sql.ErrNoRows {
+			writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
+			return
+		}
+		if err != nil {
+			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+			return
+		}
+		if nodeID.Valid {
+			c.NodeID = &nodeID.Int64
+		}
+		c.IsDefault = isDefault == 1
+		if created.Valid {
+			c.CreatedAt = created.Time.Format(time.RFC3339)
+		}
+		writeJSON(w, map[string]any{"ok": true, "certificate": c})
+
+	case http.MethodDelete:
+		if _, err := s.DB.Exec(`DELETE FROM vpn_certificates WHERE id=?`, id); err != nil {
+			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+			return
+		}
+		actor, _, _ := s.currentAdmin(r)
+		s.logAudit(actor, "certificate.deleted", "certificate", strconv.FormatInt(id, 10), nil, nil, clientIP(r))
+		writeJSON(w, map[string]any{"ok": true})
+
+	default:
+		http.Error(w, "method", http.StatusMethodNotAllowed)
+	}
+}
+
+
+
+
+// ========== Panel Settings ==========
+
+func (s *Server) panelSettings(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		rows, err := s.DB.Query(`SELECT setting_key, setting_value FROM panel_settings ORDER BY setting_key`)
+		if err != nil {
+			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+			return
+		}
+		defer rows.Close()
+		settings := map[string]string{}
+		for rows.Next() {
+			var k, v string
+			if rows.Scan(&k, &v) == nil {
+				settings[k] = v
+			}
+		}
+		writeJSON(w, map[string]any{"ok": true, "settings": settings})
+
+	case http.MethodPatch:
+		var in map[string]string
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad_json"})
+			return
+		}
+		for k, v := range in {
+			k = strings.TrimSpace(k)
+			if k == "" {
+				continue
+			}
+			_, _ = s.DB.Exec(`INSERT INTO panel_settings(setting_key, setting_value) VALUES(?,?) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value)`, k, v)
+		}
+		actor, _, _ := s.currentAdmin(r)
+		s.logAudit(actor, "settings.updated", "panel_settings", "", nil, map[string]any{"keys": len(in)}, clientIP(r))
+		writeJSON(w, map[string]any{"ok": true})
+
+	default:
+		http.Error(w, "method", http.StatusMethodNotAllowed)
+	}
 }
