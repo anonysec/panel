@@ -9,7 +9,7 @@
     :aria-disabled="disabled"
     class="k-textarea"
     :class="{ 'k-textarea--disabled': disabled }"
-    :style="{ minHeight: `${rows * 1.5 + 1}em` }"
+    :style="{ minHeight: `${Number(rows) * 1.5 + 1}em` }"
     @input="onInput"
   ></textarea>
 </template>
@@ -19,7 +19,7 @@ export interface KTextareaProps {
   modelValue?: string
   placeholder?: string
   disabled?: boolean
-  rows?: number
+  rows?: number | string
   id?: string
   ariaDescribedby?: string
 }

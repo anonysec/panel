@@ -8,8 +8,8 @@ import type { VNode } from 'vue'
 // --- KButton ---
 
 export interface KButtonProps {
-  variant: 'primary' | 'ghost' | 'danger' | 'text'
-  size: 'sm' | 'md' | 'lg'
+  variant?: 'primary' | 'ghost' | 'danger' | 'text'
+  size?: 'sm' | 'md' | 'lg'
   loading?: boolean
   disabled?: boolean
   icon?: string
@@ -108,7 +108,7 @@ export interface ValidationRule {
 
 export interface KFormFieldProps {
   label: string
-  name: string
+  name?: string
   rules?: ValidationRule[]
   error?: string
   hint?: string

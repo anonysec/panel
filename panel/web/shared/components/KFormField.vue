@@ -37,7 +37,10 @@ import type { KFormFieldProps } from '@koris/types/components'
 
 const props = defineProps<KFormFieldProps>()
 
-const fieldId = computed(() => `field-${props.name}`)
+let fieldCounter = 0
+const autoId = `field-auto-${++fieldCounter}`
+
+const fieldId = computed(() => props.name ? `field-${props.name}` : autoId)
 const errorId = computed(() => `${fieldId.value}-error`)
 const hintId = computed(() => `${fieldId.value}-hint`)
 

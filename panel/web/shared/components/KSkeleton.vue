@@ -1,9 +1,9 @@
 <template>
   <div class="k-skeleton-group" :aria-busy="true" aria-label="Loading content">
     <div
-      v-for="i in count"
+      v-for="i in resolvedCount"
       :key="i"
-      :class="['k-skeleton', `k-skeleton--${variant}`]"
+      :class="['k-skeleton', `k-skeleton--${resolvedVariant}`]"
       :style="skeletonStyle"
       role="status"
       aria-hidden="true"
@@ -17,10 +17,10 @@
 import { computed } from 'vue'
 
 interface KSkeletonProps {
-  variant?: 'text' | 'card' | 'circle' | 'table-row'
+  variant?: 'text' | 'card' | 'circle' | 'table-row' | 'rect'
   width?: string
-  height?: string
-  count?: number
+  height?: string | number
+  count?: number | string
 }
 
 const props = withDefaults(defineProps<KSkeletonProps>(), {
@@ -28,10 +28,19 @@ const props = withDefaults(defineProps<KSkeletonProps>(), {
   count: 1,
 })
 
+const resolvedVariant = computed(() => {
+  if (props.variant === 'rect') return 'text'
+  return props.variant
+})
+
+const resolvedCount = computed(() => {
+  return typeof props.count === 'string' ? parseInt(props.count, 10) || 1 : props.count
+})
+
 const skeletonStyle = computed(() => {
   const style: Record<string, string> = {}
   if (props.width) style.width = props.width
-  if (props.height) style.height = props.height
+  if (props.height) style.height = typeof props.height === 'number' ? `${props.height}px` : props.height
   return style
 })
 </script>

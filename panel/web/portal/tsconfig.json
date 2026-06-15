@@ -19,11 +19,15 @@
     "paths": {
       "@/*": ["src/*"],
       "@koris/ui/*": ["../shared/components/*"],
+      "@koris/ui": ["../shared/components"],
       "@koris/composables/*": ["../shared/composables/*"],
+      "@koris/composables": ["../shared/composables"],
       "@koris/types/*": ["../shared/types/*"],
-      "@koris/styles/*": ["../shared/styles/*"]
+      "@koris/types": ["../shared/types"],
+      "@koris/styles/*": ["../shared/styles/*"],
+      "@koris/styles": ["../shared/styles"]
     }
   },
-  "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.tsx", "src/**/*.vue"],
+  "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.tsx", "src/**/*.vue", "../shared/**/*.ts", "../shared/**/*.vue"],
   "references": []
 }

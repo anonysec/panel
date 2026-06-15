@@ -21,7 +21,7 @@ import { computed, ref } from 'vue'
 
 export interface KAvatarProps {
   name: string
-  size?: number
+  size?: number | 'sm' | 'md' | 'lg'
   src?: string
 }
 
@@ -30,6 +30,16 @@ const props = withDefaults(defineProps<KAvatarProps>(), {
 })
 
 const imgFailed = ref(false)
+
+const resolvedSize = computed(() => {
+  if (typeof props.size === 'number') return props.size
+  switch (props.size) {
+    case 'sm': return 24
+    case 'md': return 32
+    case 'lg': return 48
+    default: return 32
+  }
+})
 
 const initials = computed(() => {
   return props.name.slice(0, 2).toUpperCase()
@@ -53,9 +63,9 @@ const gradientBackground = computed(() => {
 })
 
 const avatarStyles = computed(() => ({
-  width: `${props.size}px`,
-  height: `${props.size}px`,
-  fontSize: `${Math.round(props.size * 0.38)}px`,
+  width: `${resolvedSize.value}px`,
+  height: `${resolvedSize.value}px`,
+  fontSize: `${Math.round(resolvedSize.value * 0.38)}px`,
   background: (!props.src || imgFailed.value) ? gradientBackground.value : 'transparent',
 }))
 
