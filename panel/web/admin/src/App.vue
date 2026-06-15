@@ -100,6 +100,8 @@ const nodeModalOpen = ref(false)
 const customerModalOpen = ref(false)
 const realtimeConnected = ref(false)
 const notifOpen = ref(false)
+const cmdOpen = ref(false)
+const cmdQuery = ref('')
 const isDark = ref(true)
 const liveSessions = ref<any[]>([])
 let realtimeSocket: WebSocket | null = null
@@ -135,6 +137,27 @@ const statusSummary = computed(() => {
   return summary
 })
 const notifCount = computed(() => (stats.value.pending_payments || 0) + (stats.value.open_tickets || 0) + nodes.value.filter(n => n.status === 'offline').length)
+
+const cmdActions = computed(() => {
+  const q = cmdQuery.value.toLowerCase().trim()
+  const all = [
+    { label: 'Dashboard', desc: 'Overview & stats', action: () => { section.value = 'overview'; cmdOpen.value = false } },
+    { label: 'Transactions', desc: 'Payments & billing', action: () => { section.value = 'payments'; cmdOpen.value = false } },
+    { label: 'Users', desc: 'Customer accounts', action: () => { section.value = 'customers'; cmdOpen.value = false } },
+    { label: 'Tickets', desc: 'Support tickets', action: () => { section.value = 'tickets'; cmdOpen.value = false } },
+    { label: 'Resellers', desc: 'Reseller management', action: () => { section.value = 'resellers'; loadResellers(); cmdOpen.value = false } },
+    { label: 'Services', desc: 'Nodes & VPN cores', action: () => { section.value = 'nodes'; cmdOpen.value = false } },
+    { label: 'Plans', desc: 'Subscription plans', action: () => { section.value = 'plans'; cmdOpen.value = false } },
+    { label: 'Settings', desc: 'Panel configuration', action: () => { section.value = 'system'; cmdOpen.value = false } },
+    { label: 'New User', desc: 'Create a customer', action: () => { customerModalOpen.value = true; cmdOpen.value = false } },
+    { label: 'New Node', desc: 'Register a node', action: () => { nodeModalOpen.value = true; cmdOpen.value = false } },
+    { label: 'New Plan', desc: 'Create a plan', action: () => { openNewPlan(); cmdOpen.value = false } },
+    { label: 'Toggle Theme', desc: 'Switch dark/light', action: () => { toggleTheme(); cmdOpen.value = false } },
+    { label: 'Logout', desc: 'Sign out', action: () => { logout(); cmdOpen.value = false } },
+  ]
+  if (!q) return all.slice(0, 8)
+  return all.filter(a => a.label.toLowerCase().includes(q) || a.desc.toLowerCase().includes(q))
+})
 
 async function api<T>(url: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers || {})
@@ -838,9 +861,11 @@ watch(section, (newSec) => {
   window.location.hash = '/' + newSec
 })
 
-// Keyboard: Escape closes modals
+// Keyboard: Escape closes modals, Ctrl+K opens command palette
 function handleEscape(e: KeyboardEvent) {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); cmdOpen.value = !cmdOpen.value; cmdQuery.value = ''; return }
   if (e.key !== 'Escape') return
+  if (cmdOpen.value) { cmdOpen.value = false; return }
   if (notifOpen.value) { notifOpen.value = false; return }
   if (selectedTicket.value) { selectedTicket.value = null; return }
   if (planModalOpen.value) { planModalOpen.value = false; return }
@@ -2093,6 +2118,23 @@ onUnmounted(() => {
             <button type="button" class="btn-ghost" @click="planModalOpen=false">Cancel</button>
           </div>
         </form>
+      </div>
+    </div>
+
+    <!-- Command Palette (Ctrl+K) -->
+    <div v-if="cmdOpen" class="modal-backdrop" style="align-items:flex-start;padding-top:15vh" @click.self="cmdOpen=false">
+      <div class="cmd-palette" @click.stop>
+        <div class="cmd-input-row">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;color:var(--muted);flex-shrink:0"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+          <input v-model="cmdQuery" placeholder="Type a command..." autofocus style="flex:1;background:none;border:none;outline:none;color:var(--text);font-size:14px;min-height:auto;padding:0">
+          <kbd>esc</kbd>
+        </div>
+        <div class="cmd-list">
+          <div v-for="(action, i) in cmdActions" :key="i" class="cmd-item" @click="action.action()">
+            <div class="cmd-item-text"><b>{{ action.label }}</b><span>{{ action.desc }}</span></div>
+          </div>
+          <div v-if="!cmdActions.length" class="cmd-empty">No matching commands</div>
+        </div>
       </div>
     </div>
 
