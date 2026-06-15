@@ -236,6 +236,29 @@ kbd{font-size:10px;padding:2px 5px;border-radius:4px;background:var(--surface-2)
 [data-theme="light"] .toast.success{background:rgba(255,255,255,.97);border-color:rgba(22,163,74,.3)}
 [data-theme="light"] .toast.error{background:rgba(255,255,255,.97);border-color:rgba(220,38,38,.3)}
 
+/* Language select */
+.lang-select{width:auto;min-width:38px;min-height:28px;padding:3px 6px;font-size:10px;font-weight:600;border-radius:7px;background:var(--surface-2);border:1px solid var(--border);color:var(--muted);cursor:pointer;text-align:center}
+.lang-select:focus{border-color:var(--brand)}
+
+/* RTL support */
+[dir="rtl"] .sidebar{border-right:none;border-left:1px solid var(--border)}
+[dir="rtl"] .nav-item{text-align:right;flex-direction:row-reverse}
+[dir="rtl"] .nav-item .badge{margin-left:0;margin-right:auto}
+[dir="rtl"] .topbar-right{margin-left:0;margin-right:auto}
+[dir="rtl"] .sidebar-foot{direction:rtl}
+[dir="rtl"] .user-cell{flex-direction:row-reverse}
+[dir="rtl"] .card-head{flex-direction:row-reverse}
+[dir="rtl"] .action-row{flex-direction:row-reverse}
+[dir="rtl"] th{text-align:right}
+[dir="rtl"] .modal-head{flex-direction:row-reverse}
+[dir="rtl"] .search-box{flex-direction:row-reverse}
+[dir="rtl"] .legend{flex-direction:row-reverse}
+[dir="rtl"] .dlist .row{flex-direction:row-reverse}
+[dir="rtl"] .dlist .row .v{margin-left:0;margin-right:auto}
+[dir="rtl"] .tabs{flex-direction:row-reverse}
+[dir="rtl"] .brand{flex-direction:row-reverse}
+[dir="rtl"] .brand-text{text-align:right}
+
 /* Responsive */
 @media(max-width:1100px){.g4{grid-template-columns:repeat(2,1fr)}.g2{grid-template-columns:1fr}.settings-layout{grid-template-columns:1fr}}
 @media(max-width:768px){.g4{grid-template-columns:1fr}#app{flex-direction:column;height:auto;overflow:auto}.sidebar{width:100%;height:auto;flex-direction:row;flex-wrap:wrap;overflow-x:auto;padding:10px}.main{height:auto;overflow:visible;padding:16px}.auth-screen{grid-template-columns:1fr}.two-col{grid-template-columns:1fr}.node-metrics{grid-template-columns:repeat(3,1fr)}}
