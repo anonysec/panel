@@ -101,3 +101,18 @@ td{padding:10px 12px;border-top:1px solid var(--border)}
 .ticket-msg p{white-space:pre-wrap;font-size:13px;line-height:1.5}
 
 @media(max-width:860px){.auth-screen{grid-template-columns:1fr}.auth-card{border-left:none;border-top:1px solid var(--border)}.stats-row{grid-template-columns:1fr}.welcome-card{flex-direction:column;align-items:stretch}.profile-grid{grid-template-columns:1fr}.portal-topbar{flex-direction:column;align-items:stretch}}
+
+
+/* Light theme */
+[data-theme="light"]{--bg:#f8fafc;--surface:#ffffff;--surface-2:#f1f5f9;--border:#e2e8f0;--text:#0f172a;--muted:#64748b;--brand:#3b82f6;--brand-2:#6366f1;--green:#16a34a;--amber:#d97706;--red:#dc2626;--shadow:0 4px 12px rgba(0,0,0,.08)}
+[data-theme="light"] .auth-screen{background:#f8fafc}
+[data-theme="light"] .auth-card{background:#ffffff}
+[data-theme="light"] .welcome-card{background:#ffffff}
+[data-theme="light"] .portal-topbar{border-bottom:1px solid var(--border)}
+
+/* QR Code */
+.qr-card{display:flex;align-items:center;gap:16px;padding:16px;border:1px solid var(--border);border-radius:10px;background:var(--surface-2);margin-top:12px}
+.qr-card img,.qr-card canvas{width:120px;height:120px;border-radius:8px;background:#fff;padding:8px}
+.qr-card .qr-info{flex:1}
+.qr-card .qr-info b{display:block;font-size:13px;margin-bottom:4px}
+.qr-card .qr-info span{display:block;font-size:11px;color:var(--muted);line-height:1.5}
