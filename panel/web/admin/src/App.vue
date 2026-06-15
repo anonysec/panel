@@ -99,6 +99,7 @@ const planModalOpen = ref(false)
 const nodeModalOpen = ref(false)
 const customerModalOpen = ref(false)
 const realtimeConnected = ref(false)
+const notifOpen = ref(false)
 const isDark = ref(true)
 const liveSessions = ref<any[]>([])
 let realtimeSocket: WebSocket | null = null
@@ -133,6 +134,7 @@ const statusSummary = computed(() => {
   for (const customer of customers.value) summary[customer.status] = (summary[customer.status] || 0) + 1
   return summary
 })
+const notifCount = computed(() => (stats.value.pending_payments || 0) + (stats.value.open_tickets || 0) + nodes.value.filter(n => n.status === 'offline').length)
 
 async function api<T>(url: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers || {})
@@ -839,6 +841,7 @@ watch(section, (newSec) => {
 // Keyboard: Escape closes modals
 function handleEscape(e: KeyboardEvent) {
   if (e.key !== 'Escape') return
+  if (notifOpen.value) { notifOpen.value = false; return }
   if (selectedTicket.value) { selectedTicket.value = null; return }
   if (planModalOpen.value) { planModalOpen.value = false; return }
   if (nodeModalOpen.value) { nodeModalOpen.value = false; return }
@@ -1018,7 +1021,7 @@ onUnmounted(() => {
       </div>
     </aside>
 
-    <main class="main">
+    <main class="main" @click="notifOpen=false">
       <!-- Toast (success/error) -->
       <div v-if="notice" class="toast success" @click="notice=''">
         <svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
@@ -1042,11 +1045,31 @@ onUnmounted(() => {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
             <input v-model="search" @keyup.enter="loadDashboard" :placeholder="t('label.search')">
           </div>
-          <div :class="['status-dot',{offline:!realtimeConnected}]" :title="realtimeConnected?'Connected':'Disconnected'"></div>
-          <button class="icon-btn" title="Notifications">
-            <span v-if="stats.pending_payments" class="notif-dot"></span>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 01-3.4 0"/></svg>
-          </button>
+          <div :class="['status-dot',{offline:!realtimeConnected}]" :title="realtimeConnected?t('label.connected'):t('label.disconnected')"></div>
+          <div style="position:relative">
+            <button class="icon-btn" :title="t('label.notifications')" @click="notifOpen=!notifOpen">
+              <span v-if="notifCount" class="notif-dot"></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 01-3.4 0"/></svg>
+            </button>
+            <div v-if="notifOpen" class="notif-dropdown" @click.stop>
+              <div class="notif-head"><b>Notifications</b><span class="pill" :class="notifCount?'warn':'idle'" style="font-size:9px">{{ notifCount }}</span></div>
+              <div class="notif-list">
+                <div v-if="stats.pending_payments" class="notif-item" @click="section='payments';notifOpen=false">
+                  <div class="notif-icon" style="color:var(--amber)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg></div>
+                  <div class="notif-text"><b>{{ stats.pending_payments }} pending payment{{ stats.pending_payments>1?'s':'' }}</b><span>Awaiting approval</span></div>
+                </div>
+                <div v-if="stats.open_tickets" class="notif-item" @click="section='tickets';notifOpen=false">
+                  <div class="notif-icon" style="color:var(--red)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg></div>
+                  <div class="notif-text"><b>{{ stats.open_tickets }} open ticket{{ stats.open_tickets>1?'s':'' }}</b><span>Needs attention</span></div>
+                </div>
+                <div v-for="node in nodes.filter(n=>n.status==='offline')" :key="'off-'+node.id" class="notif-item" @click="section='nodes';notifOpen=false">
+                  <div class="notif-icon" style="color:var(--red)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><rect x="3" y="4" width="18" height="6" rx="1"/><rect x="3" y="14" width="18" height="6" rx="1"/></svg></div>
+                  <div class="notif-text"><b>{{ node.name }} offline</b><span>{{ node.public_ip }}</span></div>
+                </div>
+                <div v-if="!notifCount" class="notif-empty">All clear — no alerts</div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
