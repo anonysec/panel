@@ -899,6 +899,8 @@ onMounted(() => {
 
       <div class="nav-group">Overview</div>
       <button class="nav-item" :class="{active:section==='overview'}" @click="section='overview'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>Dashboard</button>
+      <button class="nav-item" :class="{active:section==='payments'}" @click="section='payments'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>Analytics</button>
+      <button class="nav-item" :class="{active:section==='tickets'}" @click="section='tickets'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>Transactions<span v-if="stats.pending_payments" class="badge">{{ stats.pending_payments }}</span></button>
       <button class="nav-item" :class="{active:section==='payments'}" @click="section='payments'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>Transactions<span v-if="stats.pending_payments" class="badge">{{ stats.pending_payments }}</span></button>
 
       <div class="nav-group">Manage</div>
