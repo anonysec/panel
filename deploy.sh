@@ -1,0 +1,70 @@
+#!/bin/bash
+set -euo pipefail
+
+PROJECT_DIR="/root/koris-next"
+INSTALL_DIR="/opt/koris-next/panel"
+VERSION="$(cat "$PROJECT_DIR/VERSION" 2>/dev/null || echo next-dev)"
+
+cd "$PROJECT_DIR"
+
+# Safety check: abort if there are uncommitted local changes
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  echo "[deploy] ERROR: uncommitted changes found in $PROJECT_DIR"
+  echo "[deploy] Commit or stash them before deploying."
+  git status --short
+  exit 1
+fi
+
+echo "[deploy] Version: $VERSION"
+
+if command -v npm >/dev/null 2>&1; then
+  echo "[deploy] Building admin frontend..."
+  (cd panel/web/admin && npm install --no-audit --no-fund && npm run build)
+
+  echo "[deploy] Building portal frontend..."
+  (cd panel/web/portal && npm install --no-audit --no-fund && npm run build)
+else
+  echo "[deploy] npm not found; assuming prebuilt www/ directories exist"
+fi
+
+echo "[deploy] Building panel binary..."
+go mod tidy
+go build -o /usr/local/bin/panel ./panel/cmd/panel
+chmod +x /usr/local/bin/panel
+
+copy_dir() {
+  local src="$1"
+  local dst="$2"
+  mkdir -p "$(dirname "$dst")"
+  rm -rf "$dst"
+  if [ -d "$src" ]; then
+    cp -a "$src" "$dst"
+  else
+    mkdir -p "$dst"
+  fi
+}
+
+echo "[deploy] Copying static files..."
+copy_dir "$PROJECT_DIR/panel/migrations" "$INSTALL_DIR/migrations"
+copy_dir "$PROJECT_DIR/panel/web/admin/www" "$INSTALL_DIR/web/admin/www"
+copy_dir "$PROJECT_DIR/panel/web/portal/www" "$INSTALL_DIR/web/portal/www"
+
+echo "[deploy] Restarting panel service..."
+sudo systemctl daemon-reload
+sudo systemctl restart panel.service
+
+sleep 2
+
+PANEL_ADDR="$(grep -E '^PANEL_ADDR=' /etc/panel/panel.env 2>/dev/null | cut -d= -f2 | tr -d "'"\" || true)"
+PANEL_ADDR="${PANEL_ADDR:-127.0.0.1:8088}"
+
+echo "[deploy] Running health check on http://${PANEL_ADDR}/api/health ..."
+if curl -fsS "http://${PANEL_ADDR}/api/health" >/dev/null 2>&1; then
+  echo "[deploy] Health check passed."
+else
+  echo "[deploy] Health check failed. Showing recent logs:"
+  journalctl -u panel -n 50 --no-pager
+  exit 1
+fi
+
+echo "[deploy] Done."
