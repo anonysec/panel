@@ -23,6 +23,7 @@ import (
 
 	"koris-next/panel/internal/auth"
 	"koris-next/panel/internal/config"
+	"koris-next/panel/internal/notify"
 
 	"github.com/gorilla/websocket"
 )
@@ -31,6 +32,7 @@ type Server struct {
 	DB               *sql.DB
 	Config           config.Config
 	Auth             auth.Service
+	Notify           *notify.Notifier
 	prevSessionBytes map[int64]SessionBytes
 	sessionMutex     sync.RWMutex
 }
@@ -272,6 +274,7 @@ func New(db *sql.DB, cfg config.Config) *Server {
 		DB:               db,
 		Config:           cfg,
 		Auth:             auth.Service{DB: db},
+		Notify:           notify.New(),
 		prevSessionBytes: make(map[int64]SessionBytes),
 	}
 }
@@ -516,6 +519,8 @@ func (s *Server) dashboardStatsPayload() map[string]any {
 		"active_customers":  s.count(`SELECT COUNT(*) FROM customers WHERE deleted_at IS NULL AND status='active'`),
 		"plans":             s.count(`SELECT COUNT(*) FROM plans WHERE is_active=1`),
 		"nodes":             s.count(`SELECT COUNT(*) FROM nodes WHERE status IN('online','stale')`),
+		"online_users":      s.count(`SELECT COUNT(DISTINCT username) FROM radacct WHERE acctstoptime IS NULL`),
+		"active_sessions":   s.count(`SELECT COUNT(*) FROM radacct WHERE acctstoptime IS NULL`),
 		"open_tickets":      s.count(`SELECT COUNT(*) FROM tickets WHERE deleted_at IS NULL AND status='open'`),
 		"pending_payments":  s.count(`SELECT COUNT(*) FROM payments WHERE status='pending'`),
 		"approved_payments": s.sum(`SELECT COALESCE(SUM(amount),0) FROM payments WHERE status='approved'`),
@@ -625,11 +630,13 @@ func (s *Server) createCustomer(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Username    string   `json:"username"`
 		Password    string   `json:"password"`
-		DisplayName string   `json:"display_name"`
-		PlanID      *int64   `json:"plan_id"`
-		DataGB      *float64 `json:"data_gb"`
-		SpeedMbps   *float64 `json:"speed_mbps"`
-		Days        *int     `json:"days"`
+		DisplayName      string   `json:"display_name"`
+		PlanID           *int64   `json:"plan_id"`
+		DataGB           *float64 `json:"data_gb"`
+		SpeedMbps        *float64 `json:"speed_mbps"`
+		Days             *int     `json:"days"`
+		IPLimit          *int     `json:"ip_limit"`
+		ActivateOnConnect bool    `json:"activate_on_connect"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad_json"})
@@ -718,7 +725,7 @@ func (s *Server) createCustomer(w http.ResponseWriter, r *http.Request) {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
-	if _, err = tx.Exec(`INSERT INTO radcheck(username,attribute,op,value) VALUES(?,'Simultaneous-Use',':=','1')`, in.Username); err != nil {
+	if _, err = tx.Exec(`INSERT INTO radcheck(username,attribute,op,value) VALUES(?,'Simultaneous-Use',':=',?)`, in.Username, strconv.Itoa(func() int { if in.IPLimit != nil && *in.IPLimit > 0 { return *in.IPLimit }; return 1 }())); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
@@ -738,10 +745,18 @@ func (s *Server) createCustomer(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if days > 0 {
-		expires := time.Now().AddDate(0, 0, days)
-		if _, err = tx.Exec(`INSERT INTO subscriptions(customer_id,username,plan_id,expires_at) VALUES(?,?,?,?)`, customerID, in.Username, in.PlanID, expires); err != nil {
-			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-			return
+		if in.ActivateOnConnect {
+			// First-connection activation: don't set expires_at yet; auth script will set it on first VPN connect
+			if _, err = tx.Exec(`INSERT INTO subscriptions(customer_id,username,plan_id,activate_on_connect) VALUES(?,?,?,1)`, customerID, in.Username, in.PlanID); err != nil {
+				writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+				return
+			}
+		} else {
+			expires := time.Now().AddDate(0, 0, days)
+			if _, err = tx.Exec(`INSERT INTO subscriptions(customer_id,username,plan_id,expires_at) VALUES(?,?,?,?)`, customerID, in.Username, in.PlanID, expires); err != nil {
+				writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+				return
+			}
 		}
 	}
 	if err := tx.Commit(); err != nil {
@@ -792,6 +807,8 @@ func (s *Server) customerByID(w http.ResponseWriter, r *http.Request) {
 		s.setCustomerStatus(w, id, "disabled")
 	case "reset-password":
 		s.resetCustomerPassword(w, r, id)
+	case "reset-traffic":
+		s.resetCustomerTraffic(w, r, id)
 	case "renew":
 		s.renewCustomer(w, r, id)
 	case "restore":
@@ -1015,6 +1032,7 @@ func (s *Server) updateCustomer(w http.ResponseWriter, r *http.Request, id int64
 		DataGB      *float64 `json:"data_gb"`
 		SpeedMbps   *float64 `json:"speed_mbps"`
 		Days        *int     `json:"days"`
+		IPLimit     *int     `json:"ip_limit"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad_json"})
@@ -1100,6 +1118,13 @@ func (s *Server) updateCustomer(w http.ResponseWriter, r *http.Request, id int64
 		expires := time.Now().AddDate(0, 0, *in.Days)
 		_, _ = s.DB.Exec(`INSERT INTO subscriptions(customer_id,username,plan_id,expires_at) VALUES(?,?,?,?)`, id, username, planID, expires)
 	}
+	if in.IPLimit != nil {
+		if *in.IPLimit <= 0 {
+			_, _ = s.DB.Exec(`DELETE FROM radcheck WHERE username=? AND attribute='Simultaneous-Use'`, username)
+		} else {
+			_ = s.upsertRadCheck(username, "Simultaneous-Use", strconv.Itoa(*in.IPLimit))
+		}
+	}
 
 	if (in.Status != nil && *in.Status != "active") || in.DataGB != nil || in.SpeedMbps != nil || in.PlanID != nil {
 		s.disconnectCustomerSessions(username)
@@ -1168,6 +1193,35 @@ func (s *Server) resetCustomerPassword(w http.ResponseWriter, r *http.Request, i
 		}
 	}
 	writeJSON(w, map[string]any{"ok": true})
+}
+
+func (s *Server) resetCustomerTraffic(w http.ResponseWriter, r *http.Request, id int64) {
+	username, err := s.customerUsername(id)
+	if err == sql.ErrNoRows {
+		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
+		return
+	}
+	if err != nil {
+		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+
+	// Reset traffic by archiving old radacct records (set stop time) so usage counters restart
+	result, err := s.DB.Exec(`UPDATE radacct SET acctstoptime=COALESCE(acctstoptime, NOW()), acctterminatecause=COALESCE(acctterminatecause, 'Admin-Reset') WHERE username=?`, username)
+	if err != nil {
+		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	affected, _ := result.RowsAffected()
+
+	// If customer was in 'limited' status, re-enable them
+	_, _ = s.DB.Exec(`UPDATE customers SET status='active' WHERE username=? AND status='limited' AND deleted_at IS NULL`, username)
+
+	actor, _, _ := s.currentAdmin(r)
+	s.logAudit(actor, "customer.traffic_reset", "customer", strconv.FormatInt(id, 10), nil, map[string]any{"username": username, "sessions_reset": affected}, clientIP(r))
+	s.createEvent("customer", "info", fmt.Sprintf("Traffic reset: %s", username), fmt.Sprintf("Admin %s reset traffic counters for %s (%d sessions archived)", actor, username, affected), actor, username)
+
+	writeJSON(w, map[string]any{"ok": true, "sessions_reset": affected})
 }
 
 func (s *Server) renewCustomer(w http.ResponseWriter, r *http.Request, id int64) {
@@ -4122,6 +4176,12 @@ func (s *Server) auditLogs(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) createEvent(eventType, severity, title, message, actor, related string) {
 	_, _ = s.DB.Exec(`INSERT INTO events(type,severity,title,message,actor,related) VALUES(?,?,?,?,?,?)`, eventType, severity, title, message, actor, related)
+	// Send Telegram notification for warning/error events and key info events
+	if severity == "warning" || severity == "error" {
+		s.Notify.SendEvent(eventType, title, message)
+	} else if eventType == "customer" || eventType == "payment" || eventType == "node" {
+		s.Notify.SendEvent(eventType, title, message)
+	}
 }
 
 func (s *Server) events(w http.ResponseWriter, r *http.Request) {
@@ -4664,8 +4724,6 @@ func (s *Server) subscriptionLink(w http.ResponseWriter, r *http.Request) {
 
 	if strings.Contains(ua, "clash") {
 		host, port, _, _ := s.openVPNEndpoint(r)
-		var psk string
-		_ = s.DB.QueryRow(`SELECT COALESCE(ipsec_psk,'') FROM vpn_core_settings WHERE id=1`).Scan(&psk)
 
 		yaml := fmt.Sprintf(`port: 7890
 socks-port: 7891
@@ -4682,7 +4740,7 @@ proxies:
     type: socks5
     server: "%s"
     port: 1701
-    # Secret PSK: %s, User: %s
+    # L2TP/IPSec connection available. Configure in device settings.
 proxy-groups:
   - name: PROXY
     type: select
@@ -4696,7 +4754,7 @@ rules:
   - DOMAIN-KEYWORD,adservice,REJECT
   - DOMAIN-KEYWORD,analytics,REJECT
   - MATCH,PROXY
-`, username, host, port, r.Host, token, username, host, psk, username, username, username)
+`, username, host, port, r.Host, token, username, host, username, username)
 
 		w.Header().Set("Content-Type", "application/yaml; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
@@ -4761,7 +4819,7 @@ rules:
 			"offline":   "Offline",
 			"langs":     `LANGS: <a href="?token=%s&lang=en">EN</a> · <a href="?token=%s&lang=fa">FA</a> · <a href="?token=%s&lang=ru">RU</a> · <a href="?token=%s&lang=zh">ZH</a>`,
 			"guide_title": "Manual Setup Connection Guides",
-			"guide_desc": "For Windows, iOS & macOS native setups: Add an L2TP/IPSec VPN connection. Use the Server Address above, select Username/Password authentication, and enter the pre-shared secret (PSK) as 'testing123' or as configured in settings.",
+			"guide_desc": "For Windows, iOS & macOS native setups: Add an L2TP/IPSec VPN connection. Use the Server Address above, select Username/Password authentication, and enter the pre-shared secret (PSK) provided by your administrator.",
 		},
 		"fa": {
 			"title":     "پورتال دسترسی امن یکپارچه",

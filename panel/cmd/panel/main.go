@@ -14,6 +14,7 @@ import (
 	"koris-next/panel/internal/api"
 	"koris-next/panel/internal/config"
 	"koris-next/panel/internal/db"
+	"koris-next/panel/internal/notify"
 )
 
 func dbNameFromDSN(dsn string) string {
@@ -44,13 +45,31 @@ func mysqlCredsFromDSN(dsn string) (user, pass, db string) {
 }
 
 func startWorker(db *sql.DB) {
+	notifier := notify.New()
 	ticker := time.NewTicker(time.Minute)
 	go func() {
 		for t := range ticker.C {
-			_, _ = db.Exec(`UPDATE customers c JOIN (SELECT username, MAX(expires_at) as max_expires FROM subscriptions WHERE status='active' GROUP BY username) s ON c.username=s.username SET c.status='expired' WHERE c.status='active' AND s.max_expires <= NOW()`)
-			_, _ = db.Exec(`UPDATE customers c JOIN radcheck r ON c.username=r.username AND r.attribute='Max-Data' JOIN (SELECT username, COALESCE(SUM(acctinputoctets+acctoutputoctets),0) AS used FROM radacct GROUP BY username) a ON c.username=a.username SET c.status='limited' WHERE c.status='active' AND CAST(r.value AS UNSIGNED) > 0 AND a.used >= CAST(r.value AS UNSIGNED)`)
+			if _, err := db.Exec(`UPDATE customers c JOIN (SELECT username, MAX(expires_at) as max_expires FROM subscriptions WHERE status='active' GROUP BY username) s ON c.username=s.username SET c.status='expired' WHERE c.status='active' AND s.max_expires <= NOW()`); err != nil {
+				log.Printf("[worker] expire subscriptions: %v", err)
+			}
+			if _, err := db.Exec(`UPDATE customers c JOIN radcheck r ON c.username=r.username AND r.attribute='Max-Data' JOIN (SELECT username, COALESCE(SUM(acctinputoctets+acctoutputoctets),0) AS used FROM radacct GROUP BY username) a ON c.username=a.username SET c.status='limited' WHERE c.status='active' AND CAST(r.value AS UNSIGNED) > 0 AND a.used >= CAST(r.value AS UNSIGNED)`); err != nil {
+				log.Printf("[worker] data limit enforcement: %v", err)
+			}
 			_, _ = db.Exec(`UPDATE radacct SET acctstoptime=NOW(), acctterminatecause='Stalled session' WHERE acctstoptime IS NULL AND acctupdatetime < (NOW() - INTERVAL 5 MINUTE)`)
+
+			// Mark nodes offline and notify via Telegram
+			rows, err := db.Query(`SELECT name, public_ip FROM nodes WHERE status IN('online','stale') AND last_seen_at < (NOW() - INTERVAL 5 MINUTE)`)
+			if err == nil {
+				for rows.Next() {
+					var name, ip string
+					if rows.Scan(&name, &ip) == nil {
+						notifier.NotifyNodeOffline(name, ip)
+					}
+				}
+				rows.Close()
+			}
 			_, _ = db.Exec(`UPDATE nodes SET status='offline' WHERE status IN('online','stale') AND last_seen_at < (NOW() - INTERVAL 5 MINUTE)`)
+
 			if t.Hour() == 2 && t.Minute() == 0 {
 				dir := "/var/backups/koris-next"
 				_ = os.MkdirAll(dir, 0755)

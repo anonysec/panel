@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+
+# Build output (regenerated during deploy)
+panel/web/admin/www/assets/
+panel/web/portal/www/assets/
+
+# Lock files (regenerated on npm install)
+package-lock.json
+
+# Go build artifacts
+dist/
+/panel-binary
+/node-binary
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo

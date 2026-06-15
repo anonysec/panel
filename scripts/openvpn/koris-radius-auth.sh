@@ -58,6 +58,22 @@ if [[ "$MAX_DATA" =~ ^[0-9]+$ ]] && [ "$MAX_DATA" -gt 0 ] && [[ "$USED_BYTES" =~
   reject "$USER_NAME" "data limit reached used=${USED_BYTES} max=${MAX_DATA}"
 fi
 
+# First-connection activation: if there's a pending subscription with activate_on_connect=1,
+# set first_connect_at and calculate expires_at based on plan duration_days.
+PENDING_SUB="$(mysql -N -B -u root "$DB" -e "SELECT s.id, COALESCE(p.duration_days,0) FROM subscriptions s LEFT JOIN plans p ON p.id=s.plan_id WHERE s.username='${SQL_USER}' AND s.activate_on_connect=1 AND s.first_connect_at IS NULL ORDER BY s.id DESC LIMIT 1" 2>>"$LOG" || true)"
+if [ -n "$PENDING_SUB" ]; then
+  SUB_ID="$(printf '%s' "$PENDING_SUB" | awk '{print $1}')"
+  PLAN_DAYS="$(printf '%s' "$PENDING_SUB" | awk '{print $2}')"
+  if [[ "$SUB_ID" =~ ^[0-9]+$ ]] && [[ "$PLAN_DAYS" =~ ^[0-9]+$ ]]; then
+    if [ "$PLAN_DAYS" -gt 0 ]; then
+      mysql -u root "$DB" -e "UPDATE subscriptions SET first_connect_at=NOW(), started_at=NOW(), expires_at=DATE_ADD(NOW(), INTERVAL ${PLAN_DAYS} DAY), activate_on_connect=0 WHERE id=${SUB_ID}" 2>>"$LOG" || true
+    else
+      mysql -u root "$DB" -e "UPDATE subscriptions SET first_connect_at=NOW(), started_at=NOW(), activate_on_connect=0 WHERE id=${SUB_ID}" 2>>"$LOG" || true
+    fi
+    echo "$(date -Is) ACTIVATE user=$USER_NAME sub_id=$SUB_ID days=$PLAN_DAYS" >> "$LOG"
+  fi
+fi
+
 REQ="$(mktemp)"
 OUT="$(mktemp)"
 cleanup(){ rm -f "$REQ" "$OUT"; }
