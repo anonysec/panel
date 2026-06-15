@@ -779,414 +779,178 @@ onMounted(() => {
 })
 </script>
 
+
+
 <template>
-  <main v-if="screen === 'loading'" class="loading-screen"><div class="orb"></div><p>Loading KorisPanel…</p></main>
-
-  <main v-else-if="screen === 'setup' || screen === 'login'" class="auth-screen">
-    <section class="auth-hero">
-      <div class="brand-row"><span class="brand-mark">K</span><div><strong>KorisPanel</strong><small>Next generation VPN operations</small></div></div>
-      <h1>Premium, compact control for customers, nodes and billing.</h1>
-      <p>Go backend, Vue 3 frontend, clean schema, split panel/node architecture.</p>
-      <div class="hero-grid"><span>Go API online</span><span>Vue dashboard</span><span>FreeRADIUS ready</span></div>
-      <div class="ux-preview" aria-label="KorisPanel product flow preview"><div><small>01</small><b>Secure setup</b><span>Owner bootstrap with signed sessions</span></div><div><small>02</small><b>Customer ops</b><span>Create Radius users in one compact flow</span></div><div><small>03</small><b>Payments</b><span>Manual top-up and wallet adjustment</span></div></div>
-    </section>
-    <section class="auth-card glass-card"><div class="auth-card-head"><span>{{ screen === 'setup' ? 'First run' : 'Admin access' }}</span><b>{{ screen === 'setup' ? 'Create owner' : 'Sign in' }}</b></div><form v-if="screen === 'setup'" @submit.prevent="submitSetup" class="form-stack"><label v-if="setupStatus.setup_key_required">Setup key<input v-model="setupForm.setup_key" autocomplete="one-time-code" placeholder="Paste setup key" required /></label><label>Owner username<input v-model.trim="setupForm.username" autocomplete="username" placeholder="owner" required /></label><label>Password<input v-model="setupForm.password" type="password" autocomplete="new-password" placeholder="At least 6 characters" required /></label><button :disabled="busy" class="primary-btn">{{ busy ? 'Creating…' : 'Create owner' }}</button></form><form v-else @submit.prevent="submitLogin" class="form-stack"><label>Username<input v-model.trim="loginForm.username" autocomplete="username" placeholder="admin username" required /></label><label>Password<input v-model="loginForm.password" type="password" autocomplete="current-password" placeholder="••••••••" required /></label><button :disabled="busy" class="primary-btn">{{ busy ? 'Signing in…' : 'Enter dashboard' }}</button></form><p v-if="error" class="alert danger">{{ error }}</p><small class="muted">Root path intentionally stays closed; admin UI is served from <b>/dashboard/</b>.</small></section>
-  </main>
-
-  <main v-else class="panel-shell">
-    <aside class="sidebar"><div class="brand-row compact"><span class="brand-mark">K</span><div><strong>KorisPanel</strong><small>koris-next</small></div></div><nav><button :class="{ active: section === 'overview' }" @click="section = 'overview'"><span>Overview</span><b>{{ activePercent }}%</b></button><button :class="{ active: section === 'customers' || section === 'customer-detail' }" @click="section = 'customers'"><span>Customers</span><b>{{ stats.customers }}</b></button><button :class="{ active: section === 'plans' }" @click="section = 'plans'"><span>Plans</span><b>{{ stats.plans }}</b></button><button v-if="user.role !== 'reseller'" :class="{ active: section === 'payments' }" @click="section = 'payments'"><span>Payments</span><b>{{ stats.pending_payments || payments.length }}</b></button><button :class="{ active: section === 'tickets' }" @click="section = 'tickets'"><span>Tickets</span><b>{{ stats.open_tickets || tickets.length }}</b></button><button v-if="user.role === 'owner' || user.role === 'admin'" :class="{ active: section === 'resellers' }" @click="section = 'resellers'; loadResellers()"><span>Resellers</span><b>System</b></button><button v-if="user.role !== 'reseller'" :class="{ active: section === 'nodes' }" @click="section = 'nodes'"><span>Infrastructure</span><b>{{ nodes.length }}</b></button><button v-if="user.role !== 'reseller'" :class="{ active: section === 'system' }" @click="section = 'system'; loadDiagnostics(); loadAuditLogs()"><span>System logs</span><b>Utility</b></button></nav><div class="release-card"><span>Design system</span><b>Pro compact</b><small>Glass depth · dense tables · clear status language</small></div><div class="sidebar-footer"><small>API status</small><strong :class="health?.ok ? 'online' : 'offline'">{{ health?.ok ? 'Online' : 'Offline' }}</strong></div></aside>
-
-    <section class="workspace">
-      <header class="topbar"><div><span class="eyebrow">{{ section }}</span><h1>{{ section === 'overview' ? 'Command dashboard' : section === 'plans' ? 'Plans catalog' : section === 'payments' ? 'Payments & wallets' : section === 'tickets' ? 'Support tickets' : section === 'nodes' ? 'Infrastructure & VPN' : section === 'system' ? 'System Logs & Utilities' : section === 'resellers' ? 'Reseller fleet' : section === 'customer-detail' ? 'Customer detail' : 'Customer operations' }}</h1></div><div class="top-actions"><div class="score-chip" role="status"><span>{{ systemScore }}%</span><small>ready</small></div><div v-if="user.role === 'reseller'" class="notify-chip" style="background: rgba(34, 211, 238, 0.15); color: var(--cyan); border: 1px solid rgba(34, 211, 238, 0.3);">Reseller Credit: {{ formatMoney(user.credit) }}</div><div v-if="stats.pending_payments && user.role !== 'reseller'" class="notify-chip"><b>{{ stats.pending_payments }}</b> pending payment{{ stats.pending_payments === 1 ? '' : 's' }}</div><div :class="['live-chip', { online: realtimeConnected }]"><span></span>{{ realtimeConnected ? 'Live' : 'Offline' }}</div><div class="user-chip"><span>{{ initials }}</span><div><b>{{ user.username }}</b><small>{{ user.role }}</small></div></div><button class="icon-btn" title="Logout" aria-label="Logout" @click="logout">↗</button></div></header>
-      <div v-if="notice" class="toast success">{{ notice }}</div><p v-if="error" class="alert danger">{{ error }}</p>
-
-      <section v-if="section === 'overview'" class="dashboard-grid"><article class="metric-card primary"><small>Total customers</small><strong>{{ stats.customers }}</strong><span>{{ stats.active_customers }} active · {{ activePercent }}% healthy</span></article><article class="metric-card"><small>Approved payments</small><strong>{{ formatMoney(stats.approved_payments) }}</strong><span>{{ stats.pending_payments }} pending review</span></article><article class="metric-card"><small>Nodes online</small><strong>{{ stats.nodes }}</strong><span>HTTP node API only</span></article><article class="metric-card"><small>Active plans</small><strong>{{ stats.plans }}</strong><span>{{ activePlans.length }} available packages</span></article>
-
-        <article class="glass-card wide-card" style="grid-column: span 4; height: 180px;">
-          <div class="section-head" style="margin-bottom: 4px;">
-            <div>
-              <span class="eyebrow" style="color: var(--cyan);">Real-Time aggregate bandwidth</span>
-              <h2>Multi-Node Bandwidth Speedometer</h2>
-            </div>
-            <div style="font-size: 13px; font-weight: bold;">
-              <span style="color: var(--cyan); margin-right: 12px;">● RX: {{ formatBytes((stats.total_rx_bps || 0) / 8) }}/s</span>
-              <span style="color: var(--blue);">● TX: {{ formatBytes((stats.total_tx_bps || 0) / 8) }}/s</span>
-            </div>
-          </div>
-          <div style="width: 100%; height: 90px; margin-top: 10px;">
-            <svg viewBox="0 0 360 60" style="width: 100%; height: 100%; overflow: visible;">
-              <polyline fill="none" stroke="var(--cyan)" stroke-width="2.5" :points="rxPoints" />
-              <polyline fill="none" stroke="var(--blue)" stroke-width="2.5" :points="txPoints" />
-            </svg>
-          </div>
-        </article>
-
-        <article class="glass-card wide-card" style="grid-column: span 4;">
-          <div class="section-head">
-            <div>
-              <span class="eyebrow" style="color: var(--cyan);">Real-Time active throughput</span>
-              <h2>3x-ui Live Session Speedometer</h2>
-            </div>
-            <span class="pill active" style="background: rgba(34, 211, 238, 0.15); color: var(--cyan); border: 1px solid rgba(34, 211, 238, 0.3);">WebSocket Live Streaming</span>
-          </div>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Session ID</th>
-                  <th>Customer</th>
-                  <th>Framed IP</th>
-                  <th>Duration</th>
-                  <th>Real-Time Rx / Speed (Download)</th>
-                  <th>Real-Time Tx / Speed (Upload)</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="s in liveSessions" :key="s.id">
-                  <td>#{{ s.id }}</td>
-                  <td><b>{{ s.username }}</b></td>
-                  <td><code>{{ s.ip || '—' }}</code></td>
-                  <td>{{ formatDuration(s.duration) }}</td>
-                  <td>
-                    <span>{{ formatBytes(s.rx_bytes) }}</span>
-                    <b style="color: var(--cyan); margin-left: 12px; font-family: monospace;">↑ {{ s.rx_speed_kbps.toFixed(1) }} KB/s</b>
-                  </td>
-                  <td>
-                    <span>{{ formatBytes(s.tx_bytes) }}</span>
-                    <b style="color: var(--blue); margin-left: 12px; font-family: monospace;">↓ {{ s.tx_speed_kbps.toFixed(1) }} KB/s</b>
-                  </td>
-                  <td>
-                    <button class="mini-btn" style="background: rgba(239, 68, 68, 0.15); color: var(--red); border-color: rgba(239, 68, 68, 0.3);" @click="killSession(s.id)">Disconnect</button>
-                  </td>
-                </tr>
-                <tr v-if="!liveSessions.length">
-                  <td colspan="7" class="empty" style="text-align: center; padding: 30px; color: var(--muted);">No active VPN connections right now. Live sessions appear instantly here.</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </article><article class="glass-card ops-card"><div class="section-head"><div><span class="eyebrow">Operational flow</span><h2>Panel readiness</h2></div><strong>{{ systemScore }}%</strong></div><div class="ops-steps"><div class="done"><i></i><b>Setup</b><small>Owner/session API</small></div><div :class="stats.customers ? 'done' : ''"><i></i><b>Customers</b><small>{{ stats.customers ? 'Radius writes active' : 'Create first user' }}</small></div><div :class="stats.plans ? 'done' : ''"><i></i><b>Plans</b><small>{{ stats.plans ? 'Catalog ready' : 'Create packages' }}</small></div></div></article><article class="glass-card wide-card"><div class="section-head"><div><span class="eyebrow">Recent users</span><h2>Latest customers</h2></div><button class="ghost-btn" @click="section = 'customers'">Manage</button></div><div class="mini-list"><div v-for="customer in customers.slice(0, 6)" :key="customer.id" class="mini-row" @click="openCustomer(customer)"><span class="avatar">{{ customer.username.slice(0, 2).toUpperCase() }}</span><div><b>{{ customer.username }}</b><small>{{ customer.display_name || 'No display name' }}</small></div><em :class="['status-dot', customer.status]">{{ customer.status }}</em></div><p v-if="!customers.length" class="empty">No customers yet. Create the first account.</p></div></article>        <article v-if="user.role === 'reseller'" class="glass-card create-card">
-          <div class="section-head">
-            <div>
-              <span class="eyebrow" style="color: var(--cyan);">Self-service checkout</span>
-              <h2>Automatic Top-up</h2>
-            </div>
-          </div>
-          <p class="muted small-text">Top up reseller wallet credits instantly via simulation checkout gateway.</p>
-          <form class="form-stack" @submit.prevent="checkoutResellerCredit">
-            <label>Top-up Amount (IRT)<input v-model.number="resellerTopupAmount" type="number" min="1000" step="1000" required /></label>
-            <button class="primary-btn wide-action" :disabled="busy">Top-up Wallet Credit</button>
-          </form>
-        </article>
-
-        <article v-if="user.role === 'reseller'" class="glass-card create-card">
-          <div class="section-head">
-            <div>
-              <span class="eyebrow" style="color: var(--cyan);">Bank transfer</span>
-              <h2>Submit top-up request</h2>
-            </div>
-          </div>
-          <p class="muted small-text">Submit manual payment transfer receipt to master admin for credit approval.</p>
-          <form class="form-stack" @submit.prevent="submitManualResellerPayment">
-            <label>Amount (IRT)<input v-model.number="resellerManualPayForm.amount" type="number" min="1000" step="1000" required /></label>
-            <label>Receipt details / ID<input v-model.trim="resellerManualPayForm.description" placeholder="Card reference #" required /></label>
-            <button class="ghost-btn wide-action" :disabled="busy">Submit Receipt Request</button>
-          </form>
-        </article>
-
-        <article v-if="user.role === 'reseller'" class="glass-card table-card detail-wide">
-          <div class="section-head">
-            <div>
-              <span class="eyebrow" style="color: var(--cyan);">Receipt history</span>
-              <h2>Submitted Top-up Requests</h2>
-            </div>
-            <button class="ghost-btn" @click="loadResellerPayments">Sync Status</button>
-          </div>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Request ID</th>
-                  <th>Amount</th>
-                  <th>Status</th>
-                  <th>Receipt Details</th>
-                  <th>Submitted At</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="p in resellerPayments" :key="p.id">
-                  <td>#{{ p.id }}</td>
-                  <td><b>{{ formatMoney(p.amount) }}</b></td>
-                  <td><span :class="['pill', p.status === 'approved' ? 'active' : p.status === 'rejected' ? 'disabled' : 'limited']">{{ p.status }}</span></td>
-                  <td>{{ p.note }}</td>
-                  <td>{{ formatDate(p.created_at) }}</td>
-                </tr>
-                <tr v-if="!resellerPayments.length">
-                  <td colspan="5" class="empty" style="text-align: center; padding: 24px; color: var(--muted);">No manual top-up receipts submitted yet.</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </article>
-
-        <article class="glass-card create-card"><div class="section-head"><div><span class="eyebrow">Quick action</span><h2>New customer</h2></div></div><p class="muted small-text">Create VPN users in a focused popup so the dashboard stays compact.</p><button class="primary-btn wide-action" @click="customerModalOpen = true">+ New customer</button></article></section>
-
-      <section v-else-if="section === 'customers'" class="customers-layout"><article class="glass-card create-panel action-panel"><div class="section-head"><div><span class="eyebrow">Radius user</span><h2>New customer</h2></div></div><p class="muted small-text">Open a focused popup for creating a VPN user with plan defaults, unlimited data/speed options, and Radius policy writes.</p><button class="primary-btn wide-action" @click="customerModalOpen = true">+ New customer</button><div class="modal-hints"><span>0 GB = unlimited data</span><span>0 Mbps = unlimited speed</span><span>Plan values are only defaults</span></div></article><article class="glass-card table-card">
-        <!-- Compact Inline View Toggle -->
-        <div style="display: flex; gap: 8px; margin-bottom: 16px; background: rgba(0,0,0,0.15); padding: 4px; border-radius: 12px; width: fit-content; border: 1px solid var(--line);">
-          <button class="ghost-btn" style="padding: 6px 14px; border: 0; border-radius: 8px; font-weight: 850; cursor: pointer; transition: all 0.2s;" :style="customerView === 'active' ? 'background: linear-gradient(135deg, var(--blue), var(--cyan)); color: #fff;' : 'color: var(--muted); background: none;'" @click="customerView = 'active'">Active ({{ stats.customers }})</button>
-          <button class="ghost-btn" style="padding: 6px 14px; border: 0; border-radius: 8px; font-weight: 850; cursor: pointer; transition: all 0.2s;" :style="customerView === 'archived' ? 'background: linear-gradient(135deg, var(--blue), var(--cyan)); color: #fff;' : 'color: var(--muted); background: none;'" @click="customerView = 'archived'">Archived ({{ deletedCustomers.length }})</button>
-        </div>
-
-        <div class="section-head table-head"><div><span class="eyebrow">{{ filteredCustomers.length }} records</span><h2>{{ customerView === 'active' ? 'Customers' : 'Archived Deleted Customers' }}</h2></div><div class="search-box"><input v-model="search" @keyup.enter="loadDashboard" placeholder="Search user, name, status…" /><button class="ghost-btn" @click="loadDashboard">Search</button></div></div><div v-if="customerView === 'active'" class="status-summary"><span><b>{{ statusSummary.active || 0 }}</b> active</span><span><b>{{ statusSummary.limited || 0 }}</b> limited</span><span><b>{{ statusSummary.expired || 0 }}</b> expired</span><span><b>{{ statusSummary.disabled || 0 }}</b> disabled</span></div><div class="table-wrap"><table><thead><tr><th>User</th><th>Status</th><th>Plan</th><th>Wallet</th><th>Created</th><th></th></tr></thead><tbody><tr v-for="customer in filteredCustomers" :key="customer.id"><td><div class="identity"><span class="avatar">{{ customer.username.slice(0, 2).toUpperCase() }}</span><div><b>{{ customer.username }}</b><small>{{ customer.display_name || '—' }}</small></div></div></td><td><span :class="['pill', customer.status]">{{ customer.status }}</span></td><td>{{ customer.plan || '—' }}</td><td>{{ formatMoney(customer.credit) }}</td><td>{{ formatDate(customer.created_at) }}</td><td>
-          <button v-if="customerView === 'active'" class="mini-btn" @click="openCustomer(customer)">Detail</button>
-          <button v-else class="mini-btn" style="background: rgba(34, 211, 238, 0.15); color: var(--cyan); border-color: rgba(34, 211, 238, 0.3);" :disabled="busy" @click="restoreDeletedCustomer(customer as any)">Restore</button>
-        </td></tr></tbody></table><p v-if="!filteredCustomers.length" class="empty">No matching customers.</p></div></article></section>
-
-      <section v-else-if="section === 'customer-detail'" class="detail-section"><button class="ghost-btn back-btn" @click="section = 'customers'">← Back to customers</button><p v-if="detailLoading" class="empty">Loading customer detail…</p><div v-else-if="selectedCustomer" class="detail-layout"><article class="glass-card detail-hero" style="grid-column: span 2;"><div><span class="avatar large">{{ selectedCustomer.username.slice(0, 2).toUpperCase() }}</span></div><div><span class="eyebrow">{{ selectedCustomer.status }}</span><h2>{{ selectedCustomer.username }}</h2><p>{{ selectedCustomer.display_name || 'No display name' }} · {{ selectedCustomer.plan || 'No plan' }}</p></div><div class="detail-money"><small>Wallet</small><b>{{ formatMoney(selectedCustomer.credit) }}</b></div></article>
-
-          <!-- Premium Secondary Tabs -->
-          <div class="secondary-tabs" style="grid-column: span 2; display: flex; gap: 8px; border-bottom: 1px solid var(--line); padding-bottom: 8px; margin-top: 10px; margin-bottom: 14px;">
-            <button class="tab-btn" @click="detailTab = 'profile'" style="background: none; border: 0; color: var(--muted); padding: 8px 16px; font-weight: 800; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s;" :style="detailTab === 'profile' ? 'color: var(--cyan); border-bottom-color: var(--cyan);' : ''">Profile & Wallet</button>
-            <button class="tab-btn" @click="detailTab = 'usage'" style="background: none; border: 0; color: var(--muted); padding: 8px 16px; font-weight: 800; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s;" :style="detailTab === 'usage' ? 'color: var(--cyan); border-bottom-color: var(--cyan);' : ''">VPN Sessions & Usage</button>
-            <button class="tab-btn" @click="detailTab = 'history'" style="background: none; border: 0; color: var(--muted); padding: 8px 16px; font-weight: 800; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s;" :style="detailTab === 'history' ? 'color: var(--cyan); border-bottom-color: var(--cyan);' : ''">Ledgers & History</button>
-          </div>
-
-          <article v-if="detailTab === 'profile'" class="glass-card detail-card"><div class="section-head"><div><span class="eyebrow">Profile</span><h2>Edit customer</h2></div></div><form class="form-stack" @submit.prevent="saveCustomerDetail"><label>Display name<input v-model.trim="detailForm.display_name" /></label><div class="two-col"><label>Status<select v-model="detailForm.status"><option value="active">active</option><option value="limited">limited</option><option value="expired">expired</option><option value="disabled">disabled</option></select></label><label>Plan<select v-model.number="detailForm.plan_id" @change="applyDetailPlan"><option :value="0">No plan</option><option v-for="plan in plans" :key="plan.id" :value="plan.id">{{ plan.name }}{{ plan.is_active ? '' : ' (inactive)' }}</option></select></label></div><div class="two-col"><label>Max data GB<input v-model.number="detailForm.data_gb" type="number" min="0" step="1" placeholder="0 = unlimited" /></label><label>Speed Mbps<input v-model.number="detailForm.speed_mbps" type="number" min="0" step="1" placeholder="0 = unlimited" /></label></div><label>Add subscription days<input v-model.number="detailForm.days" type="number" min="0" step="1" /></label><label>Notes<textarea v-model.trim="detailForm.notes" placeholder="Internal notes"></textarea></label><button class="primary-btn" :disabled="busy">{{ busy ? 'Saving…' : 'Save detail' }}</button></form></article><article v-if="detailTab === 'profile'" class="glass-card detail-card"><div class="section-head"><div><span class="eyebrow">Renewal</span><h2>Apply plan</h2></div></div><form class="form-stack" @submit.prevent="renewCustomerPlan"><label>Plan<select v-model.number="renewForm.plan_id"><option :value="0">Select plan</option><option v-for="plan in activePlans" :key="plan.id" :value="plan.id">{{ plan.name }} · {{ formatMoney(plan.price) }}</option></select></label><div v-if="selectedRenewPlan" class="renew-summary"><span><b>{{ formatGB(selectedRenewPlan.data_gb) }}</b><small>data</small></span><span><b>{{ formatSpeed(selectedRenewPlan.speed_mbps) }}</b><small>speed</small></span><span><b>{{ selectedRenewPlan.duration_days }}d</b><small>duration</small></span><span><b>{{ formatMoney(selectedRenewPlan.price) }}</b><small>wallet charge</small></span></div><button class="primary-btn" :disabled="busy || !renewForm.plan_id">{{ busy ? 'Applying…' : 'Apply / renew plan' }}</button><small class="muted">Paid plans deduct from wallet immediately. Pay as you go costs 0.</small></form></article><article v-if="detailTab === 'profile'" class="glass-card detail-card"><div class="section-head"><div><span class="eyebrow">Access & wallet</span><h2>Password / funds</h2></div></div><form class="form-stack" @submit.prevent="resetCustomerPassword"><label>New VPN password<input v-model="passwordForm.password" placeholder="New password" /></label><button class="primary-btn" :disabled="busy">Reset password</button></form><form class="form-stack wallet-mini" @submit.prevent="setWalletBalance"><label>Set wallet balance<input v-model.number="walletSetForm.balance" type="number" step="1" placeholder="exact balance" /></label><button class="primary-btn" :disabled="busy">Save balance</button></form><form class="form-stack wallet-mini" @submit.prevent="adjustWallet"><label>Adjust by amount<input v-model.number="walletForm.amount" type="number" step="1" placeholder="positive or negative" /></label><button class="ghost-btn" :disabled="busy">Apply adjustment</button></form><div class="action-row"><button class="ghost-btn" :disabled="busy" @click="setSelectedCustomerStatus('active')">Enable</button><button class="danger-btn" :disabled="busy" @click="setSelectedCustomerStatus('disabled')">Disable</button><button class="danger-btn" :disabled="busy" @click="archiveSelectedCustomer">Archive</button></div><p class="muted small-text">Subscription: {{ subscriptionText(selectedCustomer) }}</p>
-<div v-if="selectedCustomer?.sub_token" style="margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line);">
-  <span class="eyebrow" style="color: var(--cyan); font-size: 10px; display: block; margin-bottom: 6px;">Subscriber URL (Unified Config Link)</span>
-  <div style="display: flex; gap: 8px; align-items: center;">
-    <input readonly :value="panelOrigin + '/portal/sub/' + selectedCustomer.sub_token" style="font-family: monospace; font-size: 12px; background: rgba(0,0,0,0.2); flex: 1; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); color: #fff;" />
-    <button class="mini-btn ghost-btn" @click="copyToClipboard(panelOrigin + '/portal/sub/' + selectedCustomer.sub_token)" style="white-space: nowrap; height: 32px; border-radius: 8px; padding: 0 12px;">Copy Link</button>
+  <!-- Loading -->
+  <div v-if="screen === 'loading'" class="loading">
+    <div class="spinner"></div>
+    <p>Loading KorisPanel...</p>
   </div>
-</div>
-</article><article v-if="detailTab === 'usage'" class="glass-card table-card detail-wide"><div class="section-head"><div><span class="eyebrow">Usage</span><h2>VPN usage & sessions</h2></div><span v-if="selectedUsage" :class="['pill', selectedUsage.online ? 'active' : 'disabled']">{{ selectedUsage.online ? 'online' : 'offline' }}</span></div><div v-if="selectedUsage" class="usage-summary"><span><b>{{ formatBytes(selectedUsage.total_usage_bytes) }}</b><small>total</small></span><span><b>{{ formatBytes(selectedUsage.total_input_bytes) }}</b><small>download</small></span><span><b>{{ formatBytes(selectedUsage.total_output_bytes) }}</b><small>upload</small></span><span><b>{{ selectedUsage.remaining_bytes === undefined ? 'Unlimited' : formatBytes(selectedUsage.remaining_bytes) }}</b><small>remaining</small></span><span><b>{{ selectedUsage.active_sessions }}</b><small>active sessions</small></span></div><div v-if="selectedUsage" class="table-wrap"><table><thead><tr><th>ID</th><th>Status</th><th>IP</th><th>Duration</th><th>Down</th><th>Up</th><th>Started</th><th>Stopped</th></tr></thead><tbody><tr v-for="session in selectedUsage.sessions" :key="session.id"><td>#{{ session.id }}</td><td><span :class="['pill', session.online ? 'active' : 'disabled']">{{ session.online ? 'online' : 'closed' }}</span></td><td>{{ session.framed_ip || '—' }}</td><td>{{ formatDuration(session.session_seconds) }}</td><td>{{ formatBytes(session.input_bytes) }}</td><td>{{ formatBytes(session.output_bytes) }}</td><td>{{ formatDate(session.start_time) }}</td><td>{{ formatDate(session.stop_time) }}</td></tr></tbody></table><p v-if="!selectedUsage.sessions.length" class="empty">No VPN sessions yet.</p></div></article><article v-if="detailTab === 'history'" class="glass-card table-card detail-wide"><div class="section-head"><div><span class="eyebrow">Wallet</span><h2>Transaction history</h2></div></div><div class="table-wrap"><table><thead><tr><th>ID</th><th>Amount</th><th>Type</th><th>Description</th><th>Actor</th><th>Date</th></tr></thead><tbody><tr v-for="tx in (selectedCustomer.wallet_transactions || [])" :key="tx.id"><td>#{{ tx.id }}</td><td><b :class="tx.amount >= 0 ? 'amount-plus' : 'amount-minus'">{{ signedMoney(tx.amount) }}</b></td><td><span class="pill limited">{{ tx.type }}</span></td><td>{{ tx.description || '—' }}</td><td>{{ tx.actor || '—' }}</td><td>{{ formatDate(tx.created_at) }}</td></tr></tbody></table><p v-if="!selectedCustomer.wallet_transactions || !selectedCustomer.wallet_transactions.length" class="empty">No wallet transactions yet.</p></div></article><article v-if="detailTab === 'history'" class="glass-card table-card detail-wide"><div class="section-head"><div><span class="eyebrow">Subscriptions</span><h2>Subscription history</h2></div></div><div class="table-wrap"><table><thead><tr><th>ID</th><th>Plan</th><th>Status</th><th>Paid</th><th>Started</th><th>Expires</th></tr></thead><tbody><tr v-for="sub in (selectedCustomer.subscriptions || [])" :key="sub.id"><td>#{{ sub.id }}</td><td>{{ sub.plan || '—' }}</td><td><span :class="['pill', sub.status === 'active' ? 'active' : sub.status === 'expired' ? 'disabled' : 'limited']">{{ sub.status }}</span></td><td>{{ formatMoney(sub.paid_amount) }}</td><td>{{ formatDate(sub.started_at) }}</td><td>{{ formatDate(sub.expires_at) }}</td></tr></tbody></table><p v-if="!selectedCustomer.subscriptions || !selectedCustomer.subscriptions.length" class="empty">No subscription history yet.</p></div></article><article v-if="detailTab === 'history'" class="glass-card table-card detail-wide"><div class="section-head"><div><span class="eyebrow">FreeRADIUS</span><h2>radcheck / radreply</h2></div></div><div class="table-wrap"><table><thead><tr><th>Table</th><th>Attribute</th><th>Op</th><th>Value</th></tr></thead><tbody><tr v-for="check in (selectedCustomer.radius_checks || [])" :key="`c-${check.id}`"><td>radcheck</td><td>{{ check.attribute }}</td><td>{{ check.op }}</td><td><code>{{ check.value }}</code></td></tr><tr v-for="reply in (selectedCustomer.radius_replies || [])" :key="`r-${reply.id}`"><td>radreply</td><td>{{ reply.attribute }}</td><td>{{ reply.op }}</td><td><code>{{ reply.value }}</code></td></tr></tbody></table><p v-if="(!selectedCustomer.radius_checks || !selectedCustomer.radius_checks.length) && (!selectedCustomer.radius_replies || !selectedCustomer.radius_replies.length)" class="empty">No radius policy rows for this customer.</p></div></article></div></section>
 
-      <section v-else-if="section === 'plans'" class="plans-layout"><article class="glass-card plan-editor action-panel"><div class="section-head"><div><span class="eyebrow">Catalog</span><h2>Plan actions</h2></div></div><p class="muted small-text">Create and edit plans in a focused popup. Prices are free-form IRT amounts.</p><button class="primary-btn wide-action" @click="openNewPlan">+ New plan</button><div class="modal-hints"><span>0 GB = unlimited</span><span>0 Mbps = unlimited</span><span>Price is IRT</span></div></article><article class="glass-card table-card"><div class="section-head"><div><span class="eyebrow">{{ plans.length }} plans</span><h2>Plans CRUD</h2></div></div><div class="plan-grid"><div v-for="plan in plans" :key="plan.id" :class="['plan-card', { inactive: !plan.is_active }]"><div class="section-head"><div><span :class="['pill', plan.is_active ? 'active' : 'disabled']">{{ plan.is_active ? 'active' : 'inactive' }}</span><h3>{{ plan.name }}</h3></div></div><div class="plan-numbers"><span><b>{{ formatGB(plan.data_gb) }}</b><small>data</small></span><span><b>{{ formatSpeed(plan.speed_mbps) }}</b><small>speed</small></span><span><b>{{ plan.duration_days }}d</b><small>duration</small></span><span><b>{{ formatMoney(plan.price) }}</b><small>price</small></span></div><div class="action-row"><button class="ghost-btn" @click="editPlan(plan)">Edit</button><button class="danger-btn" :disabled="!plan.is_active" @click="archivePlan(plan)">Deactivate</button></div></div><p v-if="!plans.length" class="empty">No plans yet. Create the first package.</p></div></article></section>
-
-      <section v-else-if="section === 'nodes'" class="nodes-layout">
-        <!-- Infrastructure Sub-Tabs -->
-        <div class="secondary-tabs" style="grid-column: span 2; display: flex; gap: 8px; border-bottom: 1px solid var(--line); padding-bottom: 8px; margin-bottom: 14px;">
-          <button class="tab-btn" @click="infraTab = 'nodes'" style="background: none; border: 0; color: var(--muted); padding: 8px 16px; font-weight: 800; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s;" :style="infraTab === 'nodes' ? 'color: var(--cyan); border-bottom-color: var(--cyan);' : ''">Nodes Status</button>
-          <button class="tab-btn" @click="infraTab = 'vpn'" style="background: none; border: 0; color: var(--muted); padding: 8px 16px; font-weight: 800; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s;" :style="infraTab === 'vpn' ? 'color: var(--cyan); border-bottom-color: var(--cyan);' : ''">OpenVPN Core Settings</button>
+  <!-- Auth: Setup / Login -->
+  <div v-else-if="screen === 'setup' || screen === 'login'" class="auth-screen">
+    <div class="auth-hero">
+      <div class="brand">
+        <div class="logo">K</div>
+        <div>
+          <h1 style="font-size:17px;font-weight:700">KorisPanel</h1>
+          <span style="font-size:11px;color:var(--muted)">Control Center</span>
         </div>
+      </div>
+      <h1>Next generation<br>VPN operations</h1>
+      <p>Go backend, Vue 3 frontend, clean schema, split panel/node architecture. Manage customers, nodes and billing from one compact dashboard.</p>
+    </div>
+    <div class="auth-card">
+      <h2>{{ screen === 'setup' ? 'Create Owner' : 'Sign In' }}</h2>
+      <div class="sub">{{ screen === 'setup' ? 'Set up the initial owner account' : 'Enter your admin credentials' }}</div>
+      <form v-if="screen === 'setup'" class="form-stack" @submit.prevent="submitSetup">
+        <label v-if="setupStatus.setup_key_required">Setup Key<input v-model="setupForm.setup_key" placeholder="Paste setup key" required /></label>
+        <label>Username<input v-model.trim="setupForm.username" placeholder="owner" required /></label>
+        <label>Password<input v-model="setupForm.password" type="password" placeholder="Min 6 characters" required /></label>
+        <button class="btn-primary" :disabled="busy">{{ busy ? 'Creating...' : 'Create Owner' }}</button>
+      </form>
+      <form v-else class="form-stack" @submit.prevent="submitLogin">
+        <label>Username<input v-model.trim="loginForm.username" placeholder="admin username" required /></label>
+        <label>Password<input v-model="loginForm.password" type="password" placeholder="Password" required /></label>
+        <button class="btn-primary" :disabled="busy">{{ busy ? 'Signing in...' : 'Sign In' }}</button>
+      </form>
+      <p v-if="error" class="alert danger">{{ error }}</p>
+    </div>
+  </div>
 
-        <template v-if="infraTab === 'nodes'">
-          <article class="glass-card create-panel action-panel"><div class="section-head"><div><span class="eyebrow">Node fleet</span><h2>Management</h2></div></div><p class="muted small-text">Create nodes, copy their token once, and let node agents push status through HTTP. No SSH dependency.</p><button class="primary-btn wide-action" @click="nodeModalOpen = true; resetNodeForm()">+ New node</button><div class="modal-hints"><span>HTTP push only</span><span>Token shown once</span><span>Stale after 2 minutes</span></div></article>
-          <article class="glass-card table-card"><div class="section-head"><div><span class="eyebrow">{{ nodes.length }} nodes</span><h2>Node status</h2></div><button class="ghost-btn" @click="loadDashboard">Sync</button></div><div class="node-grid"><div v-for="node in nodes" :key="node.id" class="node-card"><div class="section-head"><div><span :class="['pill', node.status === 'online' ? 'active' : node.status === 'disabled' ? 'disabled' : 'limited']">{{ node.status }}</span><h3>{{ node.name }}</h3><small>{{ node.public_ip }} {{ node.domain ? '· ' + node.domain : '' }}</small></div></div><div class="node-metrics"><span><b>{{ Math.round(node.status_metrics?.cpu_percent || 0) }}%</b><small>CPU</small></span><span><b>{{ Math.round(node.status_metrics?.ram_percent || 0) }}%</b><small>RAM</small></span><span><b>{{ Math.round(node.status_metrics?.disk_percent || 0) }}%</b><small>Disk</small></span><span><b>{{ bps(node.status_metrics?.rx_bps) }}</b><small>RX</small></span><span><b>{{ bps(node.status_metrics?.tx_bps) }}</b><small>TX</small></span></div><div class="status-summary service-summary"><span><b>OpenVPN</b> {{ serviceLabel(node, 'openvpn') }}</span><span><b>L2TP</b> {{ serviceLabel(node, 'l2tp') }}</span><span><b>IKEv2</b> {{ serviceLabel(node, 'ikev2') }}</span></div>
-            <div v-if="node.history && node.history.length" style="margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; margin-bottom: 8px;">
-              <span class="eyebrow" style="color: var(--cyan); font-size: 9px; display: block; margin-bottom: 6px;">Bandwidth Analytics (History)</span>
-              <div style="height: 44px; width: 100%;">
-                <svg viewBox="0 0 150 40" style="width: 100%; height: 100%; overflow: visible;">
-                  <polyline fill="none" stroke="var(--cyan)" stroke-width="1.8" :points="nodeHistoryPoints(node.history)" />
-                </svg>
-              </div>
-            </div>
-            <p class="muted small-text">Last seen: {{ formatDate(node.last_seen_at) }}</p><div class="action-row"><button class="ghost-btn" @click="createNodeTask(node, 'agent.status')">Ping agent</button><button class="ghost-btn" @click="createNodeTask(node, 'service.restart', { service: 'openvpn' })">Restart OpenVPN</button><button class="ghost-btn" @click="createNodeTask(node, 'service.restart', { service: 'l2tp' })">Restart L2TP</button><button class="ghost-btn" @click="createNodeTask(node, 'service.restart', { service: 'ikev2' })">Restart IKEv2</button><button class="ghost-btn" @click="rotateNodeToken(node)">Rotate token</button><button v-if="node.status === 'disabled'" class="ghost-btn" @click="setNodeEnabled(node, true)">Enable</button><button v-else class="danger-btn" @click="setNodeEnabled(node, false)">Disable</button></div></div><p v-if="!nodes.length" class="empty">No nodes yet. Create a node and run the node agent with its token.</p></div></article>
-          <article class="glass-card table-card detail-wide"><div class="section-head"><div><span class="eyebrow">{{ nodeTasks.length }} tasks</span><h2>Recent node tasks</h2></div></div><div class="table-wrap"><table><thead><tr><th>ID</th><th>Node</th><th>Action</th><th>Status</th><th>Error</th><th>Created</th></tr></thead><tbody><tr v-for="task in nodeTasks.slice(0, 20)" :key="task.id"><td>#{{ task.id }}</td><td>{{ task.node_name || task.node_id }}</td><td>{{ task.action }}</td><td><span :class="['pill', task.status === 'succeeded' ? 'active' : task.status === 'failed' ? 'disabled' : 'limited']">{{ task.status }}</span></td><td>{{ task.error || '—' }}</td><td>{{ formatDate(task.created_at) }}</td></tr></tbody></table><p v-if="!nodeTasks.length" class="empty">No node tasks yet.</p></div></article>
-        </template>
-
-        <template v-else-if="infraTab === 'vpn'">
-          <!-- OpenVPN Core Settings Stacked cleanly to prevent side-by-side clutter -->
-          <article class="glass-card plan-editor" style="grid-column: span 2;"><div class="section-head"><div><span class="eyebrow">OpenVPN</span><h2>Core settings</h2></div></div><form class="form-stack" @submit.prevent="saveVPNSettings(false)"><div class="two-col"><label>Port<input v-model.number="vpnForm.openvpn_port" type="number" min="1" max="65535" /></label><label>Protocol<select v-model="vpnForm.openvpn_protocol"><option value="udp">udp</option><option value="tcp">tcp</option></select></label></div><label>OpenVPN network<input v-model.trim="vpnForm.openvpn_network" placeholder="10.8.0.0/24" /></label><div class="two-col"><label>DNS 1<input v-model.trim="vpnForm.dns_1" /></label><label>DNS 2<input v-model.trim="vpnForm.dns_2" /></label></div><div class="two-col"><label>L2TP network<input v-model.trim="vpnForm.l2tp_network" /></label><label>IKEv2 network<input v-model.trim="vpnForm.ikev2_network" /></label></div><label>IPSec PSK<input v-model.trim="vpnForm.ipsec_psk" placeholder="optional" /></label><div class="action-row"><button class="primary-btn" :disabled="busy">Save DB settings</button><button class="danger-btn" type="button" :disabled="busy" @click="saveVPNSettings(true)">Save & restart OpenVPN</button></div></form></article>
-          <article class="glass-card table-card detail-wide" style="grid-column: span 2; margin-top: 14px;"><div class="section-head"><div><span class="eyebrow">Runtime</span><h2>Status & files</h2></div><span :class="['pill', vpnSettings?.openvpn_service_status === 'active' ? 'active' : 'disabled']">{{ vpnSettings?.openvpn_service_status || 'unknown' }}</span></div><div class="vpn-status-grid"><span><b>{{ vpnSettings?.remote_host || '—' }}</b><small>remote host</small></span><span><b>{{ vpnSettings?.active_node || '—' }}</b><small>active node</small></span><span><b>{{ vpnSettings?.ca_exists ? 'OK' : 'Missing' }}</b><small>CA: {{ vpnSettings?.ca_file || '—' }}</small></span><span><b>{{ vpnSettings?.tls_crypt_exists ? 'OK' : 'Missing' }}</b><small>tls-crypt: {{ vpnSettings?.tls_crypt_file || '—' }}</small></span><span><b>{{ vpnSettings?.openvpn_port }}/{{ vpnSettings?.openvpn_protocol }}</b><small>profile endpoint</small></span><span><b>{{ vpnSettings?.updated_at ? formatDate(vpnSettings.updated_at) : '—' }}</b><small>updated</small></span></div><p class="muted small-text">Save DB settings updates generated profiles. Save & restart also rewrites OpenVPN server.conf and restarts OpenVPN.</p></article>
-        </template>
-      </section>
-
-      <section v-else-if="section === 'system'" class="customers-layout">
-        <!-- System Sub-Tabs -->
-        <div class="secondary-tabs" style="grid-column: span 2; display: flex; gap: 8px; border-bottom: 1px solid var(--line); padding-bottom: 8px; margin-bottom: 14px;">
-          <button class="tab-btn" @click="systemTab = 'diagnostics'" style="background: none; border: 0; color: var(--muted); padding: 8px 16px; font-weight: 800; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s;" :style="systemTab === 'diagnostics' ? 'color: var(--cyan); border-bottom-color: var(--cyan);' : ''">Diagnostics</button>
-          <button class="tab-btn" @click="systemTab = 'audit'" style="background: none; border: 0; color: var(--muted); padding: 8px 16px; font-weight: 800; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s;" :style="systemTab === 'audit' ? 'color: var(--cyan); border-bottom-color: var(--cyan);' : ''">Audit Logs</button>
-          <button class="tab-btn" @click="systemTab = 'backups'" style="background: none; border: 0; color: var(--muted); padding: 8px 16px; font-weight: 800; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s;" :style="systemTab === 'backups' ? 'color: var(--cyan); border-bottom-color: var(--cyan);' : ''">CSV Backups</button>
+  <!-- App Shell -->
+  <template v-else>
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logo">K</div>
+        <div>
+          <h1>KorisPanel</h1>
+          <span>Control Center v{{ health?.version || 'dev' }}</span>
         </div>
-
-        <template v-if="systemTab === 'diagnostics'">
-          <article class="glass-card create-panel action-panel">
-            <div class="section-head"><div><span class="eyebrow">System</span><h2>Diagnostics</h2></div></div>
-            <p class="muted small-text">System health, service status, and listening ports.</p>
-            <div class="status-summary" style="display: flex; flex-direction: column; gap: 8px; margin: 12px 0;">
-              <span>Disk: <b>{{ diagnosticsData?.disk || 'N/A' }}</b></span>
-              <span>Memory: <b>{{ diagnosticsData?.mem || 'N/A' }}</b></span>
-            </div>
-            <button class="primary-btn wide-action" :disabled="diagnosticsLoading" @click="loadDiagnostics">
-              {{ diagnosticsLoading ? 'Checking…' : 'Run check' }}
-            </button>
-          </article>
-          <article class="glass-card table-card" style="grid-column: span 1;">
-            <div class="section-head"><div><span class="eyebrow">Checks</span><h2>Services Status</h2></div></div>
-            <div class="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Check</th>
-                    <th>Status</th>
-                    <th>Details</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="c in diagnosticsData?.checks" :key="c.name">
-                    <td><b>{{ c.name }}</b></td>
-                    <td>
-                      <span :class="['pill', c.ok ? 'active' : 'disabled']">
-                        {{ c.ok ? 'OK' : 'Issue' }}
-                      </span>
-                    </td>
-                    <td><code>{{ c.detail }}</code></td>
-                  </tr>
-                </tbody>
-              </table>
-              <p v-if="diagnosticsLoading" class="empty">Running diagnostic checks…</p>
-              <p v-else-if="!diagnosticsData" class="empty">No diagnostics executed yet. Click "Run check" to execute.</p>
-            </div>
-            <div v-if="diagnosticsData?.ports" style="margin-top: 18px; padding: 12px; border-top: 1px solid var(--line);">
-              <h3 style="margin-top: 0;">Listening ports</h3>
-              <pre class="code-block" style="white-space: pre-wrap; font-size: 12px; font-family: monospace; color: var(--muted);">{{ diagnosticsData?.ports }}</pre>
-            </div>
-          </article>
-        </template>
-
-        <template v-else-if="systemTab === 'audit'">
-          <article class="glass-card table-card detail-wide" style="grid-column: span 2;"><div class="section-head"><div><span class="eyebrow">{{ auditLogs.length }} records</span><h2>Audit logs</h2></div><div class="action-row compact-actions"><button class="ghost-btn" @click="auditOffset = Math.max(0, auditOffset - auditLimit); loadAuditLogs()">Prev</button><button class="ghost-btn" @click="auditOffset += auditLimit; loadAuditLogs()">Next</button></div></div><div class="table-wrap"><table><thead><tr><th>ID</th><th>Actor</th><th>Action</th><th>Entity</th><th>Entity ID</th><th>IP</th><th>Before</th><th>After</th><th>Created</th></tr></thead><tbody><tr v-for="log in auditLogs" :key="log.id"><td>#{{ log.id }}</td><td>{{ log.actor }}</td><td><span class="pill limited">{{ log.action }}</span></td><td>{{ log.entity_type }}</td><td>{{ log.entity_id }}</td><td>{{ log.ip }}</td><td><pre class="code-block">{{ log.before_json }}</pre></td><td><pre class="code-block">{{ log.after_json }}</pre></td><td>{{ formatDate(log.created_at) }}</td></tr></tbody></table><p v-if="auditLoading" class="empty">Loading audit logs…</p><p v-else-if="!auditLogs.length" class="empty">No audit logs yet.</p></div></article>
-        </template>
-
-        <template v-else-if="systemTab === 'backups'">
-          <article class="glass-card create-panel action-panel" style="grid-column: span 2;"><div class="section-head"><div><span class="eyebrow">Data</span><h2>Exports & backups</h2></div></div><p class="muted small-text">Download CSV snapshots directly from the database. Daily SQL backups are handled by the panel worker.</p><div class="action-row compact-actions"><button class="primary-btn" @click="exportCSV('customers')">Customers CSV</button><button class="primary-btn" @click="exportCSV('payments')">Payments CSV</button><button class="primary-btn" @click="exportCSV('radacct')">RADIUS CSV</button><button class="primary-btn" @click="exportCSV('wallet-transactions')">Wallet CSV</button></div></article>
-        </template>
-      </section>
-
-      <section v-else-if="section === 'resellers'" class="customers-layout">
-        <article class="glass-card create-panel action-panel">
-          <div class="section-head"><div><span class="eyebrow">Ecosystem</span><h2>New Reseller</h2></div></div>
-          <p class="muted small-text">Create sub-admin resellers. Resellers can create and manage their own customers using allocated credit.</p>
-          <form class="form-stack" @submit.prevent="createReseller">
-            <label>Username<input v-model.trim="resellerForm.username" required placeholder="reseller username" /></label>
-            <label>Password<input v-model="resellerForm.password" required placeholder="reseller password" type="password" /></label>
-            <button class="primary-btn wide-action" :disabled="busy">Create Reseller</button>
-          </form>
-        </article>
-        <article class="glass-card table-card" style="grid-column: span 1;">
-          <div class="section-head"><div><span class="eyebrow">{{ resellersList.length }} sub-admins</span><h2>Resellers Fleet</h2></div></div>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Username</th>
-                  <th>Credit</th>
-                  <th>Status</th>
-                  <th>Created</th>
-                  <th>Credit Adjustment</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="r in resellersList" :key="r.id">
-                  <td><b>{{ r.username }}</b></td>
-                  <td><b>{{ formatMoney(r.credit) }}</b></td>
-                  <td><span :class="['pill', r.is_active ? 'active' : 'disabled']">{{ r.is_active ? 'Active' : 'Inactive' }}</span></td>
-                  <td>{{ formatDate(r.created_at) }}</td>
-                  <td>
-                    <div style="display: flex; gap: 6px; align-items: center;">
-                      <input v-model.number="resellerCreditForm[r.id]" type="number" step="1000" style="width: 100px; min-height: 32px;" placeholder="Amount" />
-                      <button class="mini-btn" @click="adjustResellerCredit(r.id, true)">Add</button>
-                      <button class="mini-btn" style="background: rgba(239, 68, 68, 0.15);" @click="adjustResellerCredit(r.id, false)">Sub</button>
-                    </div>
-                  </td>
-                  <td>
-                    <button class="danger-btn mini-btn" @click="deleteReseller(r.id)">Delete</button>
-                  </td>
-                </tr>
-                <tr v-if="!resellersList.length">
-                  <td colspan="6" class="empty">No resellers registered. Create your first reseller using the form on the left.</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </article>
-
-        <article class="glass-card table-card detail-wide" style="grid-column: span 2; margin-top: 20px;">
-          <div class="section-head">
-            <div>
-              <span class="eyebrow" style="color: var(--cyan);">Audit Ledger</span>
-              <h2>Reseller Credit Transactions Log</h2>
-            </div>
-            <button class="ghost-btn" @click="loadResellerTxs">Sync Logs</button>
-          </div>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Log ID</th>
-                  <th>Reseller</th>
-                  <th>Amount Adjustment</th>
-                  <th>Type</th>
-                  <th>Activity Details</th>
-                  <th>Actor</th>
-                  <th>Timestamp</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="t in resellerTxs" :key="t.id">
-                  <td>#{{ t.id }}</td>
-                  <td><b>{{ t.reseller_username }}</b></td>
-                  <td><b :class="t.amount >= 0 ? 'amount-plus' : 'amount-minus'">{{ signedMoney(t.amount) }}</b></td>
-                  <td><span :class="['pill', t.type === 'allocation' ? 'active' : 'disabled']">{{ t.type }}</span></td>
-                  <td>{{ t.description }}</td>
-                  <td>{{ t.actor }}</td>
-                  <td>{{ formatDate(t.created_at) }}</td>
-                </tr>
-                <tr v-if="!resellerTxs.length">
-                  <td colspan="7" class="empty" style="text-align: center; padding: 24px; color: var(--muted);">No credit transactions recorded in the audit ledger yet.</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </article>
-      </section>
-
-      <section v-else-if="section === 'payments'" class="payments-layout"><article class="glass-card plan-editor"><div class="section-head"><div><span class="eyebrow">Manual</span><h2>Record payment</h2></div></div><form class="form-stack" @submit.prevent="createManualPayment"><label>Username<input v-model.trim="paymentForm.username" required placeholder="customer username" /></label><label>Amount<input v-model.number="paymentForm.amount" type="number" min="0" step="1" required /></label><label>Method<select v-model="paymentForm.method"><option value="manual">manual</option><option v-for="method in paymentMethods.filter(m => m.is_active)" :key="method.id" :value="method.name">{{ method.name }}</option></select></label><label>Description<textarea v-model.trim="paymentForm.description" placeholder="Receipt or admin note"></textarea></label><button class="primary-btn" :disabled="busy">Record approved payment</button></form><div class="method-editor"><div class="section-head"><div><span class="eyebrow">Methods</span><h2>{{ editingMethodId ? 'Edit method' : 'New method' }}</h2></div><button v-if="editingMethodId" class="ghost-btn" @click="resetMethodForm">Cancel</button></div><form class="form-stack" @submit.prevent="savePaymentMethod"><label>Name<input v-model.trim="methodForm.name" placeholder="Bank transfer" required /></label><label>Type<input v-model.trim="methodForm.type" placeholder="manual / card / crypto" /></label><label>Instructions<textarea v-model.trim="methodForm.instructions" placeholder="Payment instructions shown in portal"></textarea></label><div class="two-col"><label>Sort<input v-model.number="methodForm.sort_order" type="number" step="1" /></label><label class="check-line"><input v-model="methodForm.is_active" type="checkbox" /> Active</label></div><button class="primary-btn" :disabled="busy">{{ editingMethodId ? 'Update method' : 'Create method' }}</button></form><div class="method-list"><div v-for="method in paymentMethods" :key="method.id" class="method-row"><div><b>{{ method.name }}</b><small>{{ method.type }} · {{ method.is_active ? 'active' : 'inactive' }}</small></div><div class="action-row compact-actions"><button class="mini-btn" @click="editPaymentMethod(method)">Edit</button><button class="mini-btn" :disabled="!method.is_active" @click="deactivatePaymentMethod(method)">Disable</button></div></div></div></div></article><article class="glass-card table-card"><div class="section-head"><div><span class="eyebrow">{{ payments.length }} payments</span><h2>Payment ledger</h2></div></div><div class="table-wrap"><table><thead><tr><th>ID</th><th>User</th><th>Amount</th><th>Method</th><th>Intent</th><th>Status</th><th>Created</th><th></th></tr></thead><tbody><tr v-for="payment in payments" :key="payment.id"><td>#{{ payment.id }}</td><td>{{ payment.username }}</td><td>{{ formatMoney(payment.amount) }}</td><td>{{ payment.method }}</td><td><span class="pill limited">{{ payment.intent_type === 'plan_renewal' ? `renew ${payment.intent_label || payment.intent_id}` : 'wallet topup' }}</span></td><td><span :class="['pill', payment.status === 'approved' ? 'active' : payment.status === 'rejected' ? 'disabled' : 'limited']">{{ payment.status }}</span></td><td>{{ formatDate(payment.created_at) }}</td><td><div class="action-row compact-actions"><button class="mini-btn" :disabled="payment.status === 'approved'" @click="approvePayment(payment, 'approve')">{{ payment.intent_type === 'plan_renewal' ? 'Approve & renew' : 'Approve' }}</button><button class="mini-btn" :disabled="payment.status === 'rejected'" @click="approvePayment(payment, 'reject')">Reject</button></div></td></tr></tbody></table><p v-if="!payments.length" class="empty">No payments yet.</p></div></article></section>
-
-      <section v-else-if="section === 'tickets'" class="tickets-layout"><article class="glass-card create-panel action-panel"><div class="section-head"><div><span class="eyebrow">Support</span><h2>New ticket</h2></div></div><form class="form-stack" @submit.prevent="createAdminTicket"><label>Username<input v-model.trim="adminTicketForm.username" required placeholder="customer username" /></label><label>Subject<input v-model.trim="adminTicketForm.subject" required placeholder="Issue subject" /></label><label>Priority<select v-model="adminTicketForm.priority"><option value="low">low</option><option value="normal">normal</option><option value="high">high</option></select></label><label>Message<textarea v-model.trim="adminTicketForm.message" required placeholder="Initial message"></textarea></label><button class="primary-btn" :disabled="busy">Create ticket</button></form></article><article class="glass-card table-card"><div class="section-head"><div><span class="eyebrow">{{ tickets.length }} tickets</span><h2>Support queue</h2></div></div><div class="table-wrap"><table><thead><tr><th>ID</th><th>User</th><th>Subject</th><th>Priority</th><th>Status</th><th>Updated</th><th></th></tr></thead><tbody><tr v-for="ticket in tickets" :key="ticket.id"><td>#{{ ticket.id }}</td><td>{{ ticket.username }}</td><td>{{ ticket.subject }}</td><td><span class="pill limited">{{ ticket.priority }}</span></td><td><span :class="['pill', ticket.status === 'open' ? 'active' : 'disabled']">{{ ticket.status }}</span></td><td>{{ formatDate(ticket.updated_at) }}</td><td><button class="mini-btn" @click="loadTicket(ticket.id)">Open</button></td></tr></tbody></table><p v-if="!tickets.length" class="empty">No tickets yet.</p></div></article><article v-if="selectedTicket" class="glass-card table-card detail-wide"><div class="section-head"><div><span class="eyebrow">Ticket #{{ selectedTicket.id }}</span><h2>{{ selectedTicket.subject }}</h2><small>{{ selectedTicket.username }} · {{ selectedTicket.priority }}</small></div><div class="action-row"><button v-if="selectedTicket.status === 'open'" class="danger-btn" @click="setTicketStatus(selectedTicket, 'closed')">Close</button><button v-else class="ghost-btn" @click="setTicketStatus(selectedTicket, 'open')">Reopen</button></div></div><div class="ticket-thread"><div v-for="message in selectedTicket.messages" :key="message.id" :class="['ticket-message', message.sender_type]"><b>{{ message.sender_name }} <small>{{ message.sender_type }} · {{ formatDate(message.created_at) }}</small></b><p>{{ message.message }}</p></div></div><form class="form-stack ticket-reply" @submit.prevent="replyTicket"><label>Reply<textarea v-model.trim="ticketReply" placeholder="Write a reply"></textarea></label><button class="primary-btn" :disabled="busy || !ticketReply.trim()">Send reply</button></form></article></section>
-
-      <div v-if="customerModalOpen" class="modal-backdrop" @click.self="customerModalOpen = false">
-        <section class="modal-card glass-card" role="dialog" aria-modal="true" aria-label="Create new customer">
-          <div class="section-head modal-head"><div><span class="eyebrow">Radius user</span><h2>New customer</h2></div><button class="icon-btn" aria-label="Close" @click="customerModalOpen = false">×</button></div>
-          <form class="form-stack" @submit.prevent="createCustomer">
-            <div class="two-col"><label>Username<input v-model.trim="createForm.username" required placeholder="customer username" /></label><label>Password<input v-model="createForm.password" required placeholder="VPN password" /></label></div>
-            <label>Display name<input v-model.trim="createForm.display_name" placeholder="Optional name" /></label>
-            <label>Plan<select v-model.number="createForm.plan_id" @change="applyCreatePlan"><option :value="0">No plan / custom</option><option v-for="plan in activePlans" :key="plan.id" :value="plan.id">{{ plan.name }} · {{ formatGB(plan.data_gb) }} · {{ formatSpeed(plan.speed_mbps) }}</option></select></label>
-            <div class="two-col"><label>Data GB<input v-model.number="createForm.data_gb" type="number" min="0" step="1" placeholder="0 = unlimited" /></label><label>Speed Mbps<input v-model.number="createForm.speed_mbps" type="number" min="0" step="1" placeholder="0 = unlimited" /></label></div>
-            <label>Duration days<input v-model.number="createForm.days" type="number" min="0" step="1" /></label>
-            <div class="modal-hints"><span>Plan values are defaults only</span><span>0 GB removes Max-Data</span><span>0 Mbps removes rate-limit</span></div>
-            <div class="action-row"><button class="primary-btn" :disabled="busy">{{ busy ? 'Creating…' : 'Create customer' }}</button><button class="ghost-btn" type="button" @click="customerModalOpen = false">Cancel</button></div>
-          </form>
-        </section>
       </div>
-      <div v-if="nodeModalOpen" class="modal-backdrop" @click.self="nodeModalOpen = false">
-        <section class="modal-card glass-card" role="dialog" aria-modal="true" aria-label="Create node">
-          <div class="section-head modal-head"><div><span class="eyebrow">Node agent</span><h2>New node</h2></div><button class="icon-btn" aria-label="Close" @click="nodeModalOpen = false">×</button></div>
-          <form class="form-stack" @submit.prevent="createNode">
-            <div class="two-col"><label>Name<input v-model.trim="nodeForm.name" required placeholder="node-1" /></label><label>Public IP<input v-model.trim="nodeForm.public_ip" required placeholder="203.0.113.10" /></label></div>
-            <label>Domain<input v-model.trim="nodeForm.domain" placeholder="optional node domain" /></label>
-            <button class="primary-btn" :disabled="busy">{{ busy ? 'Creating…' : 'Create node token' }}</button>
-          </form>
-          <div v-if="nodeToken" class="token-box"><span class="eyebrow">Copy token now</span><code>{{ nodeToken }}</code><small>This token is shown once. Keep it private.</small><span class="eyebrow">Install command</span><code class="install-command">{{ nodeInstallCommand }}</code><small>Run this on the node server from an extracted koris-next source directory.</small></div>
-        </section>
+      <div class="nav-label">Overview</div>
+      <button class="nav-item" :class="{ active: section === 'overview' }" @click="section = 'overview'">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+        Dashboard
+      </button>
+      <button v-if="selectedCustomer" class="nav-item" :class="{ active: section === 'customer-detail' }" @click="section = 'customer-detail'">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>
+        Analytics
+      </button>
+      <div class="nav-label">Manage</div>
+      <button class="nav-item" :class="{ active: section === 'payments' }" @click="section = 'payments'">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h18M3 12h18M3 17h12"/></svg>
+        Transactions
+        <span v-if="stats.pending_payments" class="badge">{{ stats.pending_payments }}</span>
+      </button>
+      <button class="nav-item" :class="{ active: section === 'customers' }" @click="section = 'customers'">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0113 0"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.5A5 5 0 0121.5 20"/></svg>
+        Users
+      </button>
+      <button class="nav-item" :class="{ active: section === 'nodes' }" @click="section = 'nodes'">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="6" rx="1"/><rect x="3" y="14" width="18" height="6" rx="1"/><circle cx="7" cy="7" r="1" fill="currentColor"/><circle cx="7" cy="17" r="1" fill="currentColor"/></svg>
+        Services
+      </button>
+      <button class="nav-item" :class="{ active: section === 'plans' }" @click="section = 'plans'">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
+        Billing
+      </button>
+      <button class="nav-item" :class="{ active: section === 'tickets' }" @click="section = 'tickets'">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+        Tickets
+        <span v-if="stats.open_tickets" class="badge">{{ stats.open_tickets }}</span>
+      </button>
+      <div class="nav-label">System</div>
+      <button class="nav-item" :class="{ active: section === 'system' }" @click="section = 'system'; loadDiagnostics(); loadAuditLogs()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.9l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.9-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.9.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.9 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.9l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.9.3H10a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.9-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.9V10a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg>
+        Settings
+      </button>
+      <button v-if="user.role === 'owner' || user.role === 'admin'" class="nav-item" :class="{ active: section === 'resellers' }" @click="section = 'resellers'; loadResellers()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg>
+        Resellers
+      </button>
+      <div class="sidebar-foot">
+        <div class="avatar brand-av">{{ initials }}</div>
+        <div class="who">{{ user.username }}<small>{{ user.role }}</small></div>
+        <button class="icon-btn" style="width:32px;height:32px;margin-left:auto;border-radius:8px" title="Logout" @click="logout">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+        </button>
       </div>
-      <div v-if="planModalOpen" class="modal-backdrop" @click.self="planModalOpen = false">
-        <section class="modal-card glass-card" role="dialog" aria-modal="true" aria-label="Create or edit plan">
-          <div class="section-head modal-head"><div><span class="eyebrow">Plan catalog</span><h2>{{ editingPlanId ? 'Edit plan' : 'New plan' }}</h2></div><button class="icon-btn" aria-label="Close" @click="planModalOpen = false">×</button></div>
-          <form class="form-stack" @submit.prevent="savePlan">
-            <label>Plan name<input v-model.trim="planForm.name" required placeholder="30GB / 30 days" /></label>
-            <div class="two-col"><label>Data GB<input v-model.number="planForm.data_gb" type="number" min="0" step="1" placeholder="0 = unlimited" /></label><label>Speed Mbps<input v-model.number="planForm.speed_mbps" type="number" min="0" step="1" placeholder="0 = unlimited" /></label></div>
-            <div class="two-col"><label>Days<input v-model.number="planForm.duration_days" type="number" min="0" step="1" /></label><label>Price IRT<input v-model.number="planForm.price" type="number" min="0" step="1" placeholder="Any IRT amount" /></label></div>
-            <label>Sort order<input v-model.number="planForm.sort_order" type="number" step="1" /></label>
-            <label class="check-line"><input v-model="planForm.is_active" type="checkbox" /> Active plan</label>
-            <div class="action-row"><button class="primary-btn" :disabled="busy">{{ busy ? 'Saving…' : editingPlanId ? 'Update plan' : 'Create plan' }}</button><button class="ghost-btn" type="button" @click="planModalOpen = false">Cancel</button></div>
-          </form>
-        </section>
+    </aside>
+
+    <main class="main">
+      <div v-if="notice" class="toast success">{{ notice }}</div>
+      <div class="topbar">
+        <div>
+          <h2>{{ section === 'overview' ? 'Dashboard' : section === 'customers' ? 'Users' : section === 'customer-detail' ? 'Analytics' : section === 'payments' ? 'Transactions' : section === 'plans' ? 'Billing' : section === 'nodes' ? 'Services' : section === 'tickets' ? 'Tickets' : section === 'system' ? 'Settings' : 'Resellers' }}</h2>
+          <p>{{ section === 'overview' ? `Welcome back, ${user.username}` : section === 'customers' ? 'Manage members, roles and access.' : section === 'customer-detail' ? 'Deep-dive metrics and usage.' : section === 'payments' ? 'Track payments and wallet activity.' : section === 'plans' ? 'Plans and pricing packages.' : section === 'nodes' ? 'Monitor services and uptime.' : section === 'tickets' ? 'Support queue.' : section === 'system' ? 'Configuration and diagnostics.' : 'Reseller fleet.' }}</p>
+        </div>
+        <div class="search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+          <input v-model="search" @keyup.enter="loadDashboard" placeholder="Search anything...">
+        </div>
+        <button class="icon-btn" title="Notifications"><span v-if="stats.pending_payments" class="dot"></span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 01-3.4 0"/></svg></button>
+        <button class="btn-primary" @click="customerModalOpen = true">+ New Customer</button>
       </div>
-    </section>
-  </main>
+      <p v-if="error" class="alert danger">{{ error }}</p>
+
+      <!-- DASHBOARD -->
+      <div v-if="section === 'overview'" class="page-content">
+        <div class="grid stats">
+          <div class="card stat"><div class="ic" style="background:rgba(91,157,255,.15);color:var(--brand)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg></div><div class="lbl">Total Revenue</div><h3>{{ formatMoney(stats.approved_payments) }}</h3><div class="trend up">{{ stats.pending_payments }} pending</div></div>
+          <div class="card stat"><div class="ic" style="background:rgba(124,92,255,.15);color:var(--brand-2)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0113 0"/></svg></div><div class="lbl">Active Users</div><h3>{{ stats.active_customers }}</h3><div class="trend up">{{ activePercent }}% of {{ stats.customers }}</div></div>
+          <div class="card stat"><div class="ic" style="background:rgba(52,211,153,.15);color:var(--green)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="6" rx="1"/><rect x="3" y="14" width="18" height="6" rx="1"/></svg></div><div class="lbl">Nodes Online</div><h3>{{ stats.nodes }}</h3><div class="trend up">{{ liveSessions.length }} sessions</div></div>
+          <div class="card stat"><div class="ic" style="background:rgba(248,113,113,.15);color:var(--red)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg></div><div class="lbl">Open Tickets</div><h3>{{ stats.open_tickets }}</h3><div class="trend" :class="stats.open_tickets ? 'down' : 'up'">{{ stats.open_tickets ? 'Needs attention' : 'All clear' }}</div></div>
+        </div>
+        <div class="grid charts">
+          <div class="card"><div class="card-head"><div><h4>Bandwidth Overview</h4><div class="sub">Real-time aggregate (RX/TX)</div></div><span class="pill" :class="realtimeConnected ? 'ok' : 'bad'">{{ realtimeConnected ? 'Live' : 'Offline' }}</span></div><div class="area-wrap"><svg viewBox="0 0 360 60" preserveAspectRatio="none" style="width:100%;height:100%"><polyline fill="none" stroke="var(--brand)" stroke-width="2" :points="rxPoints"/><polyline fill="none" stroke="var(--brand-2)" stroke-width="2" :points="txPoints"/></svg></div><div class="legend"><span><i style="background:var(--brand)"></i>RX {{ formatBytes((stats.total_rx_bps||0)/8) }}/s</span><span><i style="background:var(--brand-2)"></i>TX {{ formatBytes((stats.total_tx_bps||0)/8) }}/s</span></div></div>
+          <div class="card"><div class="card-head"><div><h4>User Status</h4><div class="sub">Customer distribution</div></div></div><div class="donut-wrap"><div class="donut"><svg width="170" height="170" viewBox="0 0 190 190" style="transform:rotate(-90deg)"><circle r="70" cx="95" cy="95" fill="none" stroke="var(--brand)" stroke-width="22" :stroke-dasharray="`${(statusSummary.active/Math.max(stats.customers,1))*440} 440`"/><circle r="70" cx="95" cy="95" fill="none" stroke="var(--amber)" stroke-width="22" :stroke-dasharray="`${((statusSummary.limited||0)/Math.max(stats.customers,1))*440} 440`" :stroke-dashoffset="`${-(statusSummary.active/Math.max(stats.customers,1))*440}`"/><circle r="70" cx="95" cy="95" fill="none" stroke="var(--red)" stroke-width="22" :stroke-dasharray="`${((statusSummary.expired||0)/Math.max(stats.customers,1))*440} 440`" :stroke-dashoffset="`${-((statusSummary.active+(statusSummary.limited||0))/Math.max(stats.customers,1))*440}`"/></svg><div class="center"><b>{{ stats.customers }}</b><small>Total</small></div></div><div class="dlist"><div class="row"><i style="background:var(--brand)"></i>Active <span class="v">{{ statusSummary.active }}</span></div><div class="row"><i style="background:var(--amber)"></i>Limited <span class="v">{{ statusSummary.limited||0 }}</span></div><div class="row"><i style="background:var(--red)"></i>Expired <span class="v">{{ statusSummary.expired||0 }}</span></div><div class="row"><i style="background:var(--muted)"></i>Disabled <span class="v">{{ statusSummary.disabled||0 }}</span></div></div></div></div>
+        </div>
+        <div class="card table-wrap"><div class="card-head"><div><h4>Recent Users</h4><div class="sub">Latest sign-ups</div></div><button class="btn-ghost" @click="section='customers'">View All</button></div><table><thead><tr><th>User</th><th>Plan</th><th>Status</th><th>Wallet</th><th>Created</th></tr></thead><tbody><tr v-for="c in customers.slice(0,8)" :key="c.id" style="cursor:pointer" @click="openCustomer(c)"><td><div class="uname"><div class="u" style="background:linear-gradient(135deg,var(--brand),var(--brand-2))">{{ c.username.slice(0,1).toUpperCase() }}</div><div>{{ c.username }}<br><span style="color:var(--muted);font-size:12px">{{ c.display_name||'—' }}</span></div></div></td><td>{{ c.plan||'—' }}</td><td><span class="pill" :class="c.status==='active'?'ok':c.status==='disabled'?'bad':'warn'">{{ c.status }}</span></td><td>{{ formatMoney(c.credit) }}</td><td style="color:var(--muted)">{{ formatDate(c.created_at) }}</td></tr></tbody></table></div>
+      </div>
+
+      <!-- USERS -->
+      <div v-else-if="section === 'customers'" class="page-content">
+        <div style="display:flex;gap:8px;margin-bottom:18px"><button class="btn-primary" style="padding:8px 14px" @click="customerView='active'">Active ({{ stats.customers }})</button><button class="btn-ghost" @click="customerView='archived'">Archived ({{ deletedCustomers.length }})</button></div>
+        <div class="card table-wrap"><div class="card-head"><h4>{{ filteredCustomers.length }} users</h4></div><table><thead><tr><th>User</th><th>Status</th><th>Plan</th><th>Wallet</th><th>Created</th><th></th></tr></thead><tbody><tr v-for="c in filteredCustomers" :key="c.id"><td><div class="uname"><div class="u" style="background:linear-gradient(135deg,var(--brand),var(--brand-2))">{{ c.username.slice(0,2).toUpperCase() }}</div><div>{{ c.username }}<br><span style="color:var(--muted);font-size:12px">{{ c.display_name||'—' }}</span></div></div></td><td><span class="pill" :class="c.status==='active'?'ok':c.status==='disabled'?'bad':'warn'">{{ c.status }}</span></td><td>{{ c.plan||'—' }}</td><td>{{ formatMoney(c.credit) }}</td><td style="color:var(--muted)">{{ formatDate(c.created_at) }}</td><td><button v-if="customerView==='active'" class="btn-ghost" style="padding:5px 10px;font-size:12px" @click="openCustomer(c)">Detail</button><button v-else class="btn-primary" style="padding:5px 10px;font-size:12px" @click="restoreDeletedCustomer(c as any)">Restore</button></td></tr><tr v-if="!filteredCustomers.length"><td colspan="6" style="text-align:center;color:var(--muted);padding:28px">No customers found</td></tr></tbody></table></div>
+      </div>
+
+      <!-- CUSTOMER DETAIL -->
+      <div v-else-if="section === 'customer-detail'" class="page-content">
+        <button class="btn-ghost" style="margin-bottom:14px" @click="section='customers';selectedCustomer=null">← Back to Users</button>
+        <div v-if="detailLoading" style="text-align:center;color:var(--muted);padding:40px">Loading...</div>
+        <div v-else-if="selectedCustomer">
+          <div class="detail-hero"><div class="avatar brand-av" style="width:56px;height:56px;border-radius:14px;font-size:18px">{{ selectedCustomer.username.slice(0,2).toUpperCase() }}</div><div style="flex:1"><h3>{{ selectedCustomer.username }}</h3><p>{{ selectedCustomer.display_name||'' }} · {{ selectedCustomer.plan||'No plan' }} · <span class="pill" :class="selectedCustomer.status==='active'?'ok':'warn'">{{ selectedCustomer.status }}</span></p></div><div style="text-align:right"><div style="color:var(--muted);font-size:12px">Wallet</div><div style="font-size:22px;font-weight:700">{{ formatMoney(selectedCustomer.credit) }}</div></div></div>
+          <div class="tabs" style="margin:18px 0"><button :class="{on:detailTab==='profile'}" @click="detailTab='profile'">Profile</button><button :class="{on:detailTab==='usage'}" @click="detailTab='usage'">Usage</button><button :class="{on:detailTab==='history'}" @click="detailTab='history'">History</button></div>
+          <div v-if="detailTab==='profile'" class="detail-grid"><div class="card"><div class="card-head"><h4>Edit Customer</h4></div><form class="form-stack" @submit.prevent="saveCustomerDetail"><label>Display Name<input v-model.trim="detailForm.display_name"/></label><div class="two-col"><label>Status<select v-model="detailForm.status"><option value="active">active</option><option value="limited">limited</option><option value="expired">expired</option><option value="disabled">disabled</option></select></label><label>Plan<select v-model.number="detailForm.plan_id" @change="applyDetailPlan"><option :value="0">No plan</option><option v-for="p in plans" :key="p.id" :value="p.id">{{ p.name }}</option></select></label></div><div class="two-col"><label>Data GB<input v-model.number="detailForm.data_gb" type="number" min="0"/></label><label>Speed Mbps<input v-model.number="detailForm.speed_mbps" type="number" min="0"/></label></div><label>Add Days<input v-model.number="detailForm.days" type="number" min="0"/></label><label>Notes<textarea v-model.trim="detailForm.notes"></textarea></label><button class="btn-primary" :disabled="busy">Save</button></form></div><div class="card"><div class="card-head"><h4>Password & Wallet</h4></div><form class="form-stack" @submit.prevent="resetCustomerPassword"><label>New VPN Password<input v-model="passwordForm.password"/></label><button class="btn-primary" :disabled="busy">Reset Password</button></form><div style="border-top:1px solid var(--border);margin-top:16px;padding-top:16px"><form class="form-stack" @submit.prevent="setWalletBalance"><label>Set Balance<input v-model.number="walletSetForm.balance" type="number"/></label><button class="btn-ghost" :disabled="busy">Set</button></form></div><div style="border-top:1px solid var(--border);margin-top:16px;padding-top:16px"><form class="form-stack" @submit.prevent="adjustWallet"><label>Adjust By<input v-model.number="walletForm.amount" type="number"/></label><button class="btn-ghost" :disabled="busy">Adjust</button></form></div><div class="card-head" style="margin-top:18px"><h4>Renew Plan</h4></div><form class="form-stack" @submit.prevent="renewCustomerPlan"><label>Plan<select v-model.number="renewForm.plan_id"><option :value="0">Select</option><option v-for="p in activePlans" :key="p.id" :value="p.id">{{ p.name }} · {{ formatMoney(p.price) }}</option></select></label><button class="btn-primary" :disabled="busy||!renewForm.plan_id">Apply</button></form><div class="action-row"><button class="btn-ghost" :disabled="busy" @click="setSelectedCustomerStatus('active')">Enable</button><button class="btn-danger" :disabled="busy" @click="setSelectedCustomerStatus('disabled')">Disable</button><button class="btn-danger" :disabled="busy" @click="archiveSelectedCustomer">Archive</button></div></div></div>
+          <div v-else-if="detailTab==='usage'"><div v-if="selectedUsage" class="grid stats" style="grid-template-columns:repeat(5,1fr);margin-bottom:18px"><div class="card stat" style="padding:14px"><div class="lbl">Total</div><h3 style="font-size:18px">{{ formatBytes(selectedUsage.total_usage_bytes) }}</h3></div><div class="card stat" style="padding:14px"><div class="lbl">Down</div><h3 style="font-size:18px">{{ formatBytes(selectedUsage.total_input_bytes) }}</h3></div><div class="card stat" style="padding:14px"><div class="lbl">Up</div><h3 style="font-size:18px">{{ formatBytes(selectedUsage.total_output_bytes) }}</h3></div><div class="card stat" style="padding:14px"><div class="lbl">Remaining</div><h3 style="font-size:18px">{{ selectedUsage.remaining_bytes===undefined?'∞':formatBytes(selectedUsage.remaining_bytes) }}</h3></div><div class="card stat" style="padding:14px"><div class="lbl">Sessions</div><h3 style="font-size:18px">{{ selectedUsage.active_sessions }}</h3></div></div><div class="card table-wrap"><table><thead><tr><th>ID</th><th>Status</th><th>IP</th><th>Duration</th><th>Down</th><th>Up</th><th>Started</th></tr></thead><tbody><tr v-for="s in (selectedUsage?.sessions||[])" :key="s.id"><td>#{{ s.id }}</td><td><span class="pill" :class="s.online?'ok':'idle'">{{ s.online?'online':'closed' }}</span></td><td>{{ s.framed_ip||'—' }}</td><td>{{ formatDuration(s.session_seconds) }}</td><td>{{ formatBytes(s.input_bytes) }}</td><td>{{ formatBytes(s.output_bytes) }}</td><td style="color:var(--muted)">{{ formatDate(s.start_time) }}</td></tr></tbody></table></div></div>
+          <div v-else-if="detailTab==='history'"><div class="card table-wrap" style="margin-bottom:18px"><div class="card-head"><h4>Wallet Transactions</h4></div><table><thead><tr><th>Amount</th><th>Type</th><th>Description</th><th>Actor</th><th>Date</th></tr></thead><tbody><tr v-for="tx in (selectedCustomer.wallet_transactions||[])" :key="tx.id"><td :style="{color:tx.amount>=0?'var(--green)':'var(--red)'}"><b>{{ tx.amount>=0?'+':'' }}{{ formatMoney(tx.amount) }}</b></td><td><span class="pill warn">{{ tx.type }}</span></td><td>{{ tx.description||'—' }}</td><td style="color:var(--muted)">{{ tx.actor }}</td><td style="color:var(--muted)">{{ formatDate(tx.created_at) }}</td></tr></tbody></table></div><div class="card table-wrap"><div class="card-head"><h4>Subscriptions</h4></div><table><thead><tr><th>Plan</th><th>Status</th><th>Paid</th><th>Started</th><th>Expires</th></tr></thead><tbody><tr v-for="sub in (selectedCustomer.subscriptions||[])" :key="sub.id"><td>{{ sub.plan||'—' }}</td><td><span class="pill" :class="sub.status==='active'?'ok':'bad'">{{ sub.status }}</span></td><td>{{ formatMoney(sub.paid_amount) }}</td><td style="color:var(--muted)">{{ formatDate(sub.started_at) }}</td><td style="color:var(--muted)">{{ formatDate(sub.expires_at) }}</td></tr></tbody></table></div></div>
+        </div>
+      </div>
+
+      <!-- TRANSACTIONS -->
+      <div v-else-if="section === 'payments'" class="page-content"><div class="grid" style="grid-template-columns:380px 1fr"><div class="card"><div class="card-head"><h4>Record Payment</h4></div><form class="form-stack" @submit.prevent="createManualPayment"><label>Username<input v-model.trim="paymentForm.username" required/></label><label>Amount<input v-model.number="paymentForm.amount" type="number" min="0" required/></label><label>Method<select v-model="paymentForm.method"><option value="manual">manual</option><option v-for="m in paymentMethods.filter(m=>m.is_active)" :key="m.id" :value="m.name">{{ m.name }}</option></select></label><label>Description<textarea v-model.trim="paymentForm.description"></textarea></label><button class="btn-primary" :disabled="busy">Record Payment</button></form></div><div class="card table-wrap"><div class="card-head"><div><h4>Payment Ledger</h4><div class="sub">{{ payments.length }} transactions</div></div></div><table><thead><tr><th>ID</th><th>User</th><th>Amount</th><th>Method</th><th>Status</th><th>Date</th><th></th></tr></thead><tbody><tr v-for="p in payments" :key="p.id"><td>#{{ p.id }}</td><td>{{ p.username }}</td><td>{{ formatMoney(p.amount) }}</td><td>{{ p.method }}</td><td><span class="pill" :class="p.status==='approved'?'ok':p.status==='rejected'?'bad':'warn'">{{ p.status }}</span></td><td style="color:var(--muted)">{{ formatDate(p.created_at) }}</td><td><button v-if="p.status==='pending'" class="btn-primary" style="padding:4px 8px;font-size:11px;margin-right:4px" @click="approvePayment(p,'approve')">Approve</button><button v-if="p.status==='pending'" class="btn-danger" style="padding:4px 8px;font-size:11px" @click="approvePayment(p,'reject')">Reject</button></td></tr></tbody></table></div></div></div>
+
+      <!-- BILLING -->
+      <div v-else-if="section === 'plans'" class="page-content"><div style="margin-bottom:18px"><button class="btn-primary" @click="openNewPlan">+ New Plan</button></div><div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(320px,1fr))"><div v-for="plan in plans" :key="plan.id" class="card" :style="!plan.is_active?'opacity:.6':''"><div class="card-head"><div><h4>{{ plan.name }}</h4><div class="sub"><span class="pill" :class="plan.is_active?'ok':'bad'">{{ plan.is_active?'active':'inactive' }}</span></div></div></div><div class="grid" style="grid-template-columns:repeat(4,1fr);gap:8px;margin:12px 0"><div style="text-align:center"><b>{{ plan.data_gb||'∞' }}</b><br><small style="color:var(--muted)">GB</small></div><div style="text-align:center"><b>{{ plan.speed_mbps||'∞' }}</b><br><small style="color:var(--muted)">Mbps</small></div><div style="text-align:center"><b>{{ plan.duration_days }}</b><br><small style="color:var(--muted)">Days</small></div><div style="text-align:center"><b>{{ formatMoney(plan.price) }}</b><br><small style="color:var(--muted)">Price</small></div></div><div class="action-row"><button class="btn-ghost" style="padding:6px 12px;font-size:12px" @click="editPlan(plan)">Edit</button><button class="btn-danger" style="padding:6px 12px;font-size:12px" :disabled="!plan.is_active" @click="archivePlan(plan)">Deactivate</button></div></div></div></div>
+
+      <!-- SERVICES -->
+      <div v-else-if="section === 'nodes'" class="page-content"><div class="tabs" style="margin-bottom:18px"><button :class="{on:infraTab==='nodes'}" @click="infraTab='nodes'">Nodes Status</button><button :class="{on:infraTab==='vpn'}" @click="infraTab='vpn'">OpenVPN Settings</button></div><template v-if="infraTab==='nodes'"><div style="margin-bottom:18px"><button class="btn-primary" @click="nodeModalOpen=true;nodeForm={name:'',public_ip:'',domain:''};nodeToken=''">+ New Node</button></div><div class="node-grid"><div v-for="node in nodes" :key="node.id" class="node-card"><div style="display:flex;align-items:center;gap:10px;margin-bottom:8px"><span class="pill" :class="node.status==='online'?'ok':node.status==='disabled'?'bad':'warn'">{{ node.status }}</span><b>{{ node.name }}</b><small style="color:var(--muted);margin-left:auto">{{ node.public_ip }}</small></div><div class="node-metrics"><span><b>{{ Math.round(node.status_metrics?.cpu_percent||0) }}%</b><small>CPU</small></span><span><b>{{ Math.round(node.status_metrics?.ram_percent||0) }}%</b><small>RAM</small></span><span><b>{{ Math.round(node.status_metrics?.disk_percent||0) }}%</b><small>Disk</small></span><span><b>{{ formatBytes(node.status_metrics?.rx_bps||0) }}/s</b><small>RX</small></span><span><b>{{ formatBytes(node.status_metrics?.tx_bps||0) }}/s</b><small>TX</small></span></div><div class="action-row"><button class="btn-ghost" style="padding:5px 10px;font-size:11px" @click="createNodeTask(node,'service.restart',{service:'openvpn'})">Restart VPN</button><button class="btn-ghost" style="padding:5px 10px;font-size:11px" @click="rotateNodeToken(node)">Rotate Token</button><button v-if="node.status!=='disabled'" class="btn-danger" style="padding:5px 10px;font-size:11px" @click="setNodeEnabled(node,false)">Disable</button><button v-else class="btn-ghost" style="padding:5px 10px;font-size:11px" @click="setNodeEnabled(node,true)">Enable</button></div></div></div></template><template v-else><div class="card" style="max-width:600px"><div class="card-head"><h4>OpenVPN Core Settings</h4></div><form class="form-stack" @submit.prevent="saveVPNSettings(false)"><div class="two-col"><label>Port<input v-model.number="vpnForm.openvpn_port" type="number"/></label><label>Protocol<select v-model="vpnForm.openvpn_protocol"><option value="udp">udp</option><option value="tcp">tcp</option></select></label></div><label>Network<input v-model.trim="vpnForm.openvpn_network"/></label><div class="two-col"><label>DNS 1<input v-model.trim="vpnForm.dns_1"/></label><label>DNS 2<input v-model.trim="vpnForm.dns_2"/></label></div><label>IPSec PSK<input v-model.trim="vpnForm.ipsec_psk"/></label><div class="action-row"><button class="btn-primary" :disabled="busy">Save</button><button class="btn-danger" type="button" :disabled="busy" @click="saveVPNSettings(true)">Save & Restart</button></div></form></div></template></div>
+
+      <!-- TICKETS -->
+      <div v-else-if="section === 'tickets'" class="page-content"><div class="grid" style="grid-template-columns:360px 1fr"><div class="card"><div class="card-head"><h4>New Ticket</h4></div><form class="form-stack" @submit.prevent="createAdminTicket"><label>Username<input v-model.trim="adminTicketForm.username" required/></label><label>Subject<input v-model.trim="adminTicketForm.subject" required/></label><label>Priority<select v-model="adminTicketForm.priority"><option value="low">low</option><option value="normal">normal</option><option value="high">high</option></select></label><label>Message<textarea v-model.trim="adminTicketForm.message" required></textarea></label><button class="btn-primary" :disabled="busy">Create Ticket</button></form></div><div class="card table-wrap"><div class="card-head"><h4>Support Queue</h4></div><table><thead><tr><th>ID</th><th>User</th><th>Subject</th><th>Priority</th><th>Status</th><th></th></tr></thead><tbody><tr v-for="t in tickets" :key="t.id"><td>#{{ t.id }}</td><td>{{ t.username }}</td><td>{{ t.subject }}</td><td><span class="pill warn">{{ t.priority }}</span></td><td><span class="pill" :class="t.status==='open'?'ok':'idle'">{{ t.status }}</span></td><td><button class="btn-ghost" style="padding:4px 10px;font-size:11px" @click="loadTicket(t.id)">Open</button></td></tr></tbody></table></div></div><div v-if="selectedTicket" class="card" style="margin-top:18px"><div class="card-head"><div><h4>Ticket #{{ selectedTicket.id }}: {{ selectedTicket.subject }}</h4><div class="sub">{{ selectedTicket.username }}</div></div><button v-if="selectedTicket.status==='open'" class="btn-danger" style="padding:6px 12px;font-size:12px" @click="setTicketStatus(selectedTicket,'closed')">Close</button><button v-else class="btn-ghost" style="padding:6px 12px;font-size:12px" @click="setTicketStatus(selectedTicket,'open')">Reopen</button></div><div v-for="msg in selectedTicket.messages" :key="msg.id" style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:8px" :style="msg.sender_type==='admin'?'border-color:rgba(91,157,255,.3);background:rgba(91,157,255,.05)':''"><b>{{ msg.sender_name }}</b> <small style="color:var(--muted)">{{ msg.sender_type }} · {{ formatDate(msg.created_at) }}</small><p style="margin-top:6px;white-space:pre-wrap">{{ msg.message }}</p></div><form class="form-stack" style="border-top:1px solid var(--border);padding-top:12px" @submit.prevent="replyTicket"><label>Reply<textarea v-model.trim="ticketReply"></textarea></label><button class="btn-primary" :disabled="busy||!ticketReply.trim()">Send</button></form></div></div>
+
+      <!-- SETTINGS -->
+      <div v-else-if="section === 'system'" class="page-content"><div class="tabs" style="margin-bottom:18px"><button :class="{on:systemTab==='diagnostics'}" @click="systemTab='diagnostics'">Diagnostics</button><button :class="{on:systemTab==='audit'}" @click="systemTab='audit'">Audit Logs</button><button :class="{on:systemTab==='backups'}" @click="systemTab='backups'">CSV Backups</button></div><div v-if="systemTab==='diagnostics'" class="card"><div class="card-head"><div><h4>System Diagnostics</h4></div><button class="btn-ghost" :disabled="diagnosticsLoading" @click="loadDiagnostics">{{ diagnosticsLoading?'Checking...':'Run Check' }}</button></div><div v-if="diagnosticsData" style="display:flex;gap:18px;margin-bottom:14px"><span>Disk: <b>{{ diagnosticsData.disk }}</b></span><span>Memory: <b>{{ diagnosticsData.mem }}</b></span></div><table v-if="diagnosticsData?.checks"><thead><tr><th>Service</th><th>Status</th><th>Detail</th></tr></thead><tbody><tr v-for="c in diagnosticsData.checks" :key="c.name"><td><b>{{ c.name }}</b></td><td><span class="pill" :class="c.ok?'ok':'bad'">{{ c.ok?'OK':'Issue' }}</span></td><td style="color:var(--muted)">{{ c.detail }}</td></tr></tbody></table></div><div v-else-if="systemTab==='audit'" class="card table-wrap"><div class="card-head"><div><h4>Audit Logs</h4></div><div style="display:flex;gap:6px"><button class="btn-ghost" style="padding:5px 10px;font-size:11px" @click="auditOffset=Math.max(0,auditOffset-auditLimit);loadAuditLogs()">Prev</button><button class="btn-ghost" style="padding:5px 10px;font-size:11px" @click="auditOffset+=auditLimit;loadAuditLogs()">Next</button></div></div><table><thead><tr><th>Actor</th><th>Action</th><th>Entity</th><th>IP</th><th>Date</th></tr></thead><tbody><tr v-for="log in auditLogs" :key="log.id"><td>{{ log.actor }}</td><td><span class="pill warn">{{ log.action }}</span></td><td>{{ log.entity_type }} #{{ log.entity_id }}</td><td style="color:var(--muted)">{{ log.ip }}</td><td style="color:var(--muted)">{{ formatDate(log.created_at) }}</td></tr></tbody></table></div><div v-else class="card"><div class="card-head"><h4>CSV Exports</h4></div><p style="color:var(--muted);margin-bottom:14px;font-size:13px">Download data snapshots. Daily SQL backups run at 2 AM.</p><div class="action-row"><button class="btn-primary" @click="exportCSV('customers')">Customers</button><button class="btn-primary" @click="exportCSV('payments')">Payments</button><button class="btn-primary" @click="exportCSV('radacct')">RADIUS</button><button class="btn-primary" @click="exportCSV('wallet-transactions')">Wallet</button></div></div></div>
+
+      <!-- RESELLERS -->
+      <div v-else-if="section === 'resellers'" class="page-content"><div class="grid" style="grid-template-columns:360px 1fr"><div class="card"><div class="card-head"><h4>New Reseller</h4></div><form class="form-stack" @submit.prevent="createReseller"><label>Username<input v-model.trim="resellerForm.username" required/></label><label>Password<input v-model="resellerForm.password" type="password" required/></label><button class="btn-primary" :disabled="busy">Create</button></form></div><div class="card table-wrap"><div class="card-head"><h4>Reseller Fleet</h4></div><table><thead><tr><th>Username</th><th>Credit</th><th>Status</th><th>Adjust</th><th></th></tr></thead><tbody><tr v-for="r in resellersList" :key="r.id"><td><b>{{ r.username }}</b></td><td>{{ formatMoney(r.credit) }}</td><td><span class="pill" :class="r.is_active?'ok':'bad'">{{ r.is_active?'Active':'Inactive' }}</span></td><td style="display:flex;gap:4px;align-items:center"><input v-model.number="resellerCreditForm[r.id]" type="number" style="width:80px;min-height:30px"/><button class="btn-ghost" style="padding:4px 8px;font-size:11px" @click="adjustResellerCredit(r.id,true)">+</button><button class="btn-danger" style="padding:4px 8px;font-size:11px" @click="adjustResellerCredit(r.id,false)">-</button></td><td><button class="btn-danger" style="padding:4px 8px;font-size:11px" @click="deleteReseller(r.id)">Delete</button></td></tr></tbody></table></div></div></div>
+    </main>
+
+    <!-- MODALS -->
+    <div v-if="customerModalOpen" class="modal-backdrop" @click.self="customerModalOpen=false"><div class="modal-card"><div class="card-head"><h4>New Customer</h4><button class="icon-btn" style="width:32px;height:32px;border-radius:8px" @click="customerModalOpen=false">✕</button></div><form class="form-stack" @submit.prevent="createCustomer"><div class="two-col"><label>Username<input v-model.trim="createForm.username" required/></label><label>Password<input v-model="createForm.password" required/></label></div><label>Display Name<input v-model.trim="createForm.display_name"/></label><label>Plan<select v-model.number="createForm.plan_id" @change="applyCreatePlan"><option :value="0">No plan</option><option v-for="p in activePlans" :key="p.id" :value="p.id">{{ p.name }}</option></select></label><div class="two-col"><label>Data GB<input v-model.number="createForm.data_gb" type="number" min="0"/></label><label>Speed Mbps<input v-model.number="createForm.speed_mbps" type="number" min="0"/></label></div><label>Days<input v-model.number="createForm.days" type="number" min="0"/></label><div class="action-row"><button class="btn-primary" :disabled="busy">{{ busy?'Creating...':'Create' }}</button><button type="button" class="btn-ghost" @click="customerModalOpen=false">Cancel</button></div></form></div></div>
+    <div v-if="nodeModalOpen" class="modal-backdrop" @click.self="nodeModalOpen=false"><div class="modal-card"><div class="card-head"><h4>New Node</h4><button class="icon-btn" style="width:32px;height:32px;border-radius:8px" @click="nodeModalOpen=false">✕</button></div><form class="form-stack" @submit.prevent="createNode"><div class="two-col"><label>Name<input v-model.trim="nodeForm.name" required/></label><label>Public IP<input v-model.trim="nodeForm.public_ip" required/></label></div><label>Domain<input v-model.trim="nodeForm.domain"/></label><button class="btn-primary" :disabled="busy">Create Node</button></form><div v-if="nodeToken" style="margin-top:16px;border:1px solid rgba(91,157,255,.3);border-radius:10px;padding:14px;background:rgba(91,157,255,.05)"><small style="color:var(--brand);font-weight:700">Token (copy now):</small><code style="display:block;margin-top:6px;word-break:break-all;background:var(--surface-2);padding:8px;border-radius:6px">{{ nodeToken }}</code><button class="btn-ghost" style="margin-top:8px;padding:6px 12px;font-size:12px" @click="copyToClipboard(nodeToken)">Copy</button></div></div></div>
+    <div v-if="planModalOpen" class="modal-backdrop" @click.self="planModalOpen=false"><div class="modal-card"><div class="card-head"><h4>{{ editingPlanId?'Edit Plan':'New Plan' }}</h4><button class="icon-btn" style="width:32px;height:32px;border-radius:8px" @click="planModalOpen=false">✕</button></div><form class="form-stack" @submit.prevent="savePlan"><label>Name<input v-model.trim="planForm.name" required/></label><div class="two-col"><label>Data GB<input v-model.number="planForm.data_gb" type="number" min="0"/></label><label>Speed Mbps<input v-model.number="planForm.speed_mbps" type="number" min="0"/></label></div><div class="two-col"><label>Days<input v-model.number="planForm.duration_days" type="number" min="0"/></label><label>Price<input v-model.number="planForm.price" type="number" min="0"/></label></div><label>Sort<input v-model.number="planForm.sort_order" type="number"/></label><label style="display:flex;align-items:center;gap:8px;flex-direction:row"><input v-model="planForm.is_active" type="checkbox" style="width:18px;min-height:18px"/>Active</label><div class="action-row"><button class="btn-primary" :disabled="busy">{{ editingPlanId?'Update':'Create' }}</button><button type="button" class="btn-ghost" @click="planModalOpen=false">Cancel</button></div></form></div></div>
+  </template>
 </template>
