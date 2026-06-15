@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 
 type Screen = 'loading' | 'setup' | 'login' | 'app'
-type Section = 'overview' | 'analytics' | 'customers' | 'customer-detail' | 'plans' | 'payments' | 'tickets' | 'resellers' | 'nodes' | 'system'
+type Section = 'overview' | 'customers' | 'customer-detail' | 'plans' | 'payments' | 'tickets' | 'resellers' | 'nodes' | 'system'
 
 interface SetupStatus { ok: boolean; needs_setup: boolean; setup_key_required: boolean }
 interface AuthResponse { ok: boolean; authenticated?: boolean; username?: string; role?: string; credit?: number }
@@ -63,6 +63,7 @@ const certificatesList = ref<any[]>([])
 const certForm = ref({ name: '', type: 'ca', content: '', node_id: 0, is_default: false })
 const nodeVPNConfigs = ref<Record<number, any[]>>({})
 const selectedNodeVPN = ref<number>(0)
+const editingProtocol = ref<{nodeId: number, protocol: string} | null>(null)
 const vpnConfigForm = ref({ protocol: 'openvpn', enabled: true, port: 1194, network: '10.8.0.0/24', extra_json: '{}' })
 const usageTimeFilter = ref<'day' | 'week' | 'month'>('day')
 const paymentMethodTab = ref<'list' | 'form'>('list')
@@ -97,6 +98,7 @@ const planModalOpen = ref(false)
 const nodeModalOpen = ref(false)
 const customerModalOpen = ref(false)
 const realtimeConnected = ref(false)
+const isDark = ref(true)
 const liveSessions = ref<any[]>([])
 let realtimeSocket: WebSocket | null = null
 let realtimeRetry: ReturnType<typeof setTimeout> | null = null
@@ -115,8 +117,8 @@ const filteredCustomers = computed(() => {
   } else if (customerView.value === 'active') {
     list = customers.value
   } else if (customerView.value === 'online') {
-    // Filter by users who have active sessions (approximation: status=active for now)
-    list = customers.value.filter(c => c.status === 'active')
+    const onlineUsernames = new Set(liveSessions.value.map((s: any) => s.username))
+    list = customers.value.filter(c => onlineUsernames.has(c.username))
   } else {
     list = customers.value.filter(c => c.status === customerView.value)
   }
@@ -173,6 +175,12 @@ function disconnectRealtime() {
     realtimeSocket.close()
   }
   realtimeSocket = null
+}
+
+function toggleTheme() {
+  isDark.value = !isDark.value
+  document.documentElement.setAttribute('data-theme', isDark.value ? 'dark' : 'light')
+  localStorage.setItem('koris-theme', isDark.value ? 'dark' : 'light')
 }
 
 async function boot() {
@@ -883,9 +891,11 @@ onMounted(() => {
     window.history.replaceState(null, '', '/dashboard/' + window.location.hash)
   }
   const hash = window.location.hash.replace('#/', '').replace('#', '')
-  if (hash && ['overview', 'analytics', 'customers', 'plans', 'payments', 'tickets', 'resellers', 'nodes', 'system', 'customer-detail'].includes(hash)) {
+  if (hash && ['overview', 'customers', 'plans', 'payments', 'tickets', 'resellers', 'nodes', 'system', 'customer-detail'].includes(hash)) {
     section.value = hash as Section
   }
+  const savedTheme = localStorage.getItem('koris-theme')
+  if (savedTheme === 'light') { isDark.value = false; document.documentElement.setAttribute('data-theme', 'light') }
   window.addEventListener('keydown', handleEscape)
   boot()
 })
@@ -934,9 +944,6 @@ onUnmounted(() => {
       <button class="nav-item" :class="{active:section==='overview'}" @click="section='overview'">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>Dashboard
       </button>
-      <button class="nav-item" :class="{active:section==='analytics'}" @click="section='analytics'">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>Analytics
-      </button>
       <button class="nav-item" :class="{active:section==='payments'}" @click="section='payments'">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>Transactions
       </button>
@@ -961,7 +968,11 @@ onUnmounted(() => {
       <div class="sidebar-foot">
         <div class="avatar" :style="{background:'linear-gradient(135deg,var(--brand),var(--brand-2))'}">{{ initials }}</div>
         <div class="meta">{{ user.username }}<small>{{ user.role }}</small></div>
-        <button class="icon-btn" style="width:28px;height:28px;margin-left:auto;border-radius:7px" @click="logout" title="Logout">
+        <button class="icon-btn" style="width:28px;height:28px;border-radius:7px" @click="toggleTheme" :title="isDark?'Light mode':'Dark mode'">
+          <svg v-if="isDark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+          <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+        </button>
+        <button class="icon-btn" style="width:28px;height:28px;border-radius:7px" @click="logout" title="Logout">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
         </button>
       </div>
@@ -983,8 +994,8 @@ onUnmounted(() => {
       <!-- Topbar -->
       <div class="topbar">
         <div class="topbar-left">
-          <h2>{{ section==='overview'?'Dashboard':section==='analytics'?'Analytics':section==='customers'||section==='resellers'||section==='tickets'?'Users':section==='customer-detail'?'User Detail':section==='payments'?'Transactions':section==='plans'?'Plans':section==='nodes'?'Services':section==='system'?'Settings':'Panel' }}</h2>
-          <p>{{ section==='overview'?`Welcome back, ${user.username}`:section==='analytics'?'Revenue, bandwidth and session insights':section==='customers'||section==='tickets'||section==='resellers'?'Manage accounts, tickets and resellers':section==='payments'?'Payments and wallet operations':section==='plans'?'Subscription plans and pricing':section==='nodes'?'Nodes and VPN cores':section==='system'?'Panel configuration':'Details' }}</p>
+          <h2>{{ section==='overview'?'Dashboard':section==='customers'||section==='resellers'||section==='tickets'?'Users':section==='customer-detail'?'User Detail':section==='payments'?'Transactions':section==='plans'?'Plans':section==='nodes'?'Services':section==='system'?'Settings':'Panel' }}</h2>
+          <p>{{ section==='overview'?`Welcome back, ${user.username}`:section==='customers'||section==='tickets'||section==='resellers'?'Manage accounts, tickets and resellers':section==='payments'?'Payments and wallet operations':section==='plans'?'Subscription plans and pricing':section==='nodes'?'Nodes and VPN cores':section==='system'?'Panel configuration':'Details' }}</p>
         </div>
         <div class="topbar-right">
           <div class="search-box">
@@ -1107,99 +1118,27 @@ onUnmounted(() => {
             </table>
           </div>
         </div>
-        </template>
-      </div>
-
-      <!-- ===== ANALYTICS ===== -->
-      <div v-else-if="section==='analytics'" class="page">
-        <div class="grid g4">
-          <div class="card stat-card">
-            <div class="ic" style="background:rgba(91,157,255,.12);color:var(--brand)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg></div>
-            <div class="lbl">Total Revenue</div>
-            <h3>{{ formatMoney(stats.approved_payments) }}</h3>
-            <div class="trend"><b>{{ stats.pending_payments }}</b> pending approval</div>
-          </div>
-          <div class="card stat-card">
-            <div class="ic" style="background:rgba(124,92,255,.12);color:var(--brand-2)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0113 0"/></svg></div>
-            <div class="lbl">Active Users</div>
-            <h3>{{ stats.active_customers }}</h3>
-            <div class="trend"><b>{{ activePercent }}%</b> of {{ stats.customers }} total</div>
-          </div>
-          <div class="card stat-card">
-            <div class="ic" style="background:rgba(52,211,153,.12);color:var(--green)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="6" rx="1"/><rect x="3" y="14" width="18" height="6" rx="1"/></svg></div>
-            <div class="lbl">Nodes Online</div>
-            <h3>{{ stats.nodes }}</h3>
-            <div class="trend"><b>{{ liveSessions.length }}</b> active sessions</div>
-          </div>
-          <div class="card stat-card">
-            <div class="ic" style="background:rgba(248,113,113,.12);color:var(--red)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg></div>
-            <div class="lbl">Plans Active</div>
-            <h3>{{ stats.plans }}</h3>
-            <div class="trend">{{ activePlans.length }} sellable</div>
-          </div>
-        </div>
-
-        <div class="grid g2" style="margin-top:16px">
-          <div class="card">
-            <div class="card-head">
-              <div><h4>Bandwidth</h4><div class="sub">Real-time throughput</div></div>
-              <div class="tabs">
-                <button :class="{on:usageTimeFilter==='day'}" @click="usageTimeFilter='day'">Day</button>
-                <button :class="{on:usageTimeFilter==='week'}" @click="usageTimeFilter='week'">Week</button>
-                <button :class="{on:usageTimeFilter==='month'}" @click="usageTimeFilter='month'">Month</button>
-              </div>
-            </div>
-            <div class="chart-wrap">
-              <svg viewBox="0 0 360 60" preserveAspectRatio="none" style="width:100%;height:100%">
-                <polyline fill="none" stroke="var(--brand)" stroke-width="2" :points="rxPoints"/>
-                <polyline fill="none" stroke="var(--brand-2)" stroke-width="2" :points="txPoints"/>
-              </svg>
-            </div>
-            <div class="legend">
-              <span><i style="background:var(--brand)"></i>&#8595; {{ formatBytes((stats.total_rx_bps||0)/8) }}/s</span>
-              <span><i style="background:var(--brand-2)"></i>&#8593; {{ formatBytes((stats.total_tx_bps||0)/8) }}/s</span>
-            </div>
-          </div>
-          <div class="card">
-            <div class="card-head"><div><h4>User Distribution</h4><div class="sub">Status breakdown</div></div></div>
-            <div class="donut-wrap">
-              <div class="donut">
-                <svg width="150" height="150" viewBox="0 0 190 190" style="transform:rotate(-90deg)">
-                  <circle r="65" cx="95" cy="95" fill="none" stroke="var(--brand)" stroke-width="20" :stroke-dasharray="`${(statusSummary.active/Math.max(stats.customers,1))*408} 408`"/>
-                  <circle r="65" cx="95" cy="95" fill="none" stroke="var(--amber)" stroke-width="20" :stroke-dasharray="`${((statusSummary.limited||0)/Math.max(stats.customers,1))*408} 408`" :stroke-dashoffset="`${-(statusSummary.active/Math.max(stats.customers,1))*408}`"/>
-                  <circle r="65" cx="95" cy="95" fill="none" stroke="var(--red)" stroke-width="20" :stroke-dasharray="`${((statusSummary.expired||0)/Math.max(stats.customers,1))*408} 408`" :stroke-dashoffset="`${-((statusSummary.active+(statusSummary.limited||0))/Math.max(stats.customers,1))*408}`"/>
-                </svg>
-                <div class="center"><b>{{ stats.customers }}</b><small>Total</small></div>
-              </div>
-              <div class="dlist">
-                <div class="row"><i style="background:var(--brand)"></i>Active<span class="v">{{ statusSummary.active }}</span></div>
-                <div class="row"><i style="background:var(--amber)"></i>Limited<span class="v">{{ statusSummary.limited||0 }}</span></div>
-                <div class="row"><i style="background:var(--red)"></i>Expired<span class="v">{{ statusSummary.expired||0 }}</span></div>
-                <div class="row"><i style="background:var(--muted)"></i>Disabled<span class="v">{{ statusSummary.disabled||0 }}</span></div>
-              </div>
-            </div>
-          </div>
-        </div>
 
         <!-- Live Sessions -->
         <div class="card" style="margin-top:16px">
-          <div class="card-head"><div><h4>Live Sessions</h4><div class="sub">{{ liveSessions.length }} active connections</div></div></div>
+          <div class="card-head"><div><h4>Live Sessions</h4><div class="sub">{{ liveSessions.length }} active</div></div></div>
           <div class="table-wrap">
             <table>
               <thead><tr><th>User</th><th>IP</th><th>Node</th><th>Duration</th><th></th></tr></thead>
               <tbody>
-                <tr v-for="s in liveSessions.slice(0,15)" :key="s.id">
-                  <td style="font-weight:500">{{ s.username||'&#8212;' }}</td>
-                  <td style="color:var(--muted)">{{ s.framed_ip||s.calling_station_id||'&#8212;' }}</td>
-                  <td>{{ s.node_name||'&#8212;' }}</td>
+                <tr v-for="s in liveSessions.slice(0,10)" :key="s.id">
+                  <td style="font-weight:500">{{ s.username||'—' }}</td>
+                  <td style="color:var(--muted)">{{ s.framed_ip||s.calling_station_id||'—' }}</td>
+                  <td>{{ s.node_name||'—' }}</td>
                   <td>{{ formatDuration(s.session_seconds) }}</td>
                   <td><button class="btn-danger btn-sm" @click="killSession(s.id)">Kill</button></td>
                 </tr>
-                <tr v-if="!liveSessions.length"><td colspan="5" class="empty-state"><p>No active sessions right now</p></td></tr>
+                <tr v-if="!liveSessions.length"><td colspan="5" class="empty-state"><p>No active sessions</p></td></tr>
               </tbody>
             </table>
           </div>
         </div>
+        </template>
       </div>
 
       <!-- ===== USERS (Accounts | Tickets | Resellers) with status filters ===== -->
@@ -1497,7 +1436,7 @@ onUnmounted(() => {
                   <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;color:var(--brand)"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
                     <b style="font-size:13px">OpenVPN</b>
-                    <span class="pill btn-sm" :class="serviceLabel(node,'openvpn')==='running'?'ok':'bad'" style="margin-left:auto;font-size:9px">{{ serviceLabel(node,'openvpn') }}</span>
+                    <span class="pill btn-sm" :class="serviceLabel(node,'openvpn')==='running'?'ok':serviceLabel(node,'openvpn')==='stopped'?'idle':'bad'" style="margin-left:auto;font-size:9px">{{ serviceLabel(node,'openvpn') }}</span>
                   </div>
                   <div style="font-size:11.5px;color:var(--muted);line-height:1.6">
                     Port: {{ vpnSettings?.openvpn_port || 1194 }}/{{ vpnSettings?.openvpn_protocol || 'udp' }}<br>
@@ -1505,6 +1444,19 @@ onUnmounted(() => {
                   </div>
                   <div class="action-row" style="margin-top:8px">
                     <button class="btn-ghost btn-sm" @click="createNodeTask(node,'service.restart',{service:'openvpn'})">Restart</button>
+                    <button class="btn-ghost btn-sm" @click="editingProtocol={nodeId:node.id,protocol:'openvpn'};vpnConfigForm.protocol='openvpn';vpnConfigForm.port=vpnSettings?.openvpn_port||1194;vpnConfigForm.network=vpnSettings?.openvpn_network||'10.8.0.0/24';vpnConfigForm.enabled=true">Edit</button>
+                  </div>
+                  <div v-if="editingProtocol?.nodeId===node.id&&editingProtocol?.protocol==='openvpn'" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+                    <form class="form-stack" @submit.prevent="saveNodeVPNConfig(node.id);editingProtocol=null">
+                      <div class="two-col">
+                        <label>Port<input v-model.number="vpnConfigForm.port" type="number" min="1" max="65535"/></label>
+                        <label>Network<input v-model.trim="vpnConfigForm.network"/></label>
+                      </div>
+                      <div class="action-row">
+                        <button class="btn-primary btn-sm" :disabled="busy">Save</button>
+                        <button type="button" class="btn-ghost btn-sm" @click="editingProtocol=null">Cancel</button>
+                      </div>
+                    </form>
                   </div>
                 </div>
 
@@ -1513,7 +1465,7 @@ onUnmounted(() => {
                   <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;color:var(--amber)"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
                     <b style="font-size:13px">L2TP/IPSec</b>
-                    <span class="pill btn-sm" :class="serviceLabel(node,'l2tp')==='running'?'ok':'bad'" style="margin-left:auto;font-size:9px">{{ serviceLabel(node,'l2tp') }}</span>
+                    <span class="pill btn-sm" :class="serviceLabel(node,'l2tp')==='running'?'ok':serviceLabel(node,'l2tp')==='stopped'?'idle':'bad'" style="margin-left:auto;font-size:9px">{{ serviceLabel(node,'l2tp') }}</span>
                   </div>
                   <div style="font-size:11.5px;color:var(--muted);line-height:1.6">
                     Network: {{ vpnSettings?.l2tp_network || '10.9.0.0/24' }}<br>
@@ -1521,6 +1473,19 @@ onUnmounted(() => {
                   </div>
                   <div class="action-row" style="margin-top:8px">
                     <button class="btn-ghost btn-sm" @click="createNodeTask(node,'service.restart',{service:'l2tp'})">Restart</button>
+                    <button class="btn-ghost btn-sm" @click="editingProtocol={nodeId:node.id,protocol:'l2tp'};vpnConfigForm.protocol='l2tp';vpnConfigForm.port=1701;vpnConfigForm.network=vpnSettings?.l2tp_network||'10.9.0.0/24';vpnConfigForm.enabled=true">Edit</button>
+                  </div>
+                  <div v-if="editingProtocol?.nodeId===node.id&&editingProtocol?.protocol==='l2tp'" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+                    <form class="form-stack" @submit.prevent="saveNodeVPNConfig(node.id);editingProtocol=null">
+                      <div class="two-col">
+                        <label>Port<input v-model.number="vpnConfigForm.port" type="number" min="1" max="65535"/></label>
+                        <label>Network<input v-model.trim="vpnConfigForm.network"/></label>
+                      </div>
+                      <div class="action-row">
+                        <button class="btn-primary btn-sm" :disabled="busy">Save</button>
+                        <button type="button" class="btn-ghost btn-sm" @click="editingProtocol=null">Cancel</button>
+                      </div>
+                    </form>
                   </div>
                 </div>
 
@@ -1529,7 +1494,7 @@ onUnmounted(() => {
                   <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;color:var(--green)"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
                     <b style="font-size:13px">IKEv2</b>
-                    <span class="pill btn-sm" :class="serviceLabel(node,'ikev2')==='running'?'ok':'bad'" style="margin-left:auto;font-size:9px">{{ serviceLabel(node,'ikev2') }}</span>
+                    <span class="pill btn-sm" :class="serviceLabel(node,'ikev2')==='running'?'ok':serviceLabel(node,'ikev2')==='stopped'?'idle':'bad'" style="margin-left:auto;font-size:9px">{{ serviceLabel(node,'ikev2') }}</span>
                   </div>
                   <div style="font-size:11.5px;color:var(--muted);line-height:1.6">
                     Network: {{ vpnSettings?.ikev2_network || '10.10.0.0/24' }}<br>
@@ -1537,6 +1502,19 @@ onUnmounted(() => {
                   </div>
                   <div class="action-row" style="margin-top:8px">
                     <button class="btn-ghost btn-sm" @click="createNodeTask(node,'service.restart',{service:'ikev2'})">Restart</button>
+                    <button class="btn-ghost btn-sm" @click="editingProtocol={nodeId:node.id,protocol:'ikev2'};vpnConfigForm.protocol='ikev2';vpnConfigForm.port=500;vpnConfigForm.network=vpnSettings?.ikev2_network||'10.10.0.0/24';vpnConfigForm.enabled=true">Edit</button>
+                  </div>
+                  <div v-if="editingProtocol?.nodeId===node.id&&editingProtocol?.protocol==='ikev2'" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+                    <form class="form-stack" @submit.prevent="saveNodeVPNConfig(node.id);editingProtocol=null">
+                      <div class="two-col">
+                        <label>Port<input v-model.number="vpnConfigForm.port" type="number" min="1" max="65535"/></label>
+                        <label>Network<input v-model.trim="vpnConfigForm.network"/></label>
+                      </div>
+                      <div class="action-row">
+                        <button class="btn-primary btn-sm" :disabled="busy">Save</button>
+                        <button type="button" class="btn-ghost btn-sm" @click="editingProtocol=null">Cancel</button>
+                      </div>
+                    </form>
                   </div>
                 </div>
 
@@ -1545,7 +1523,7 @@ onUnmounted(() => {
                   <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;color:var(--brand-2)"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
                     <b style="font-size:13px">SSH Tunnel</b>
-                    <span class="pill btn-sm idle" style="margin-left:auto;font-size:9px">{{ serviceLabel(node,'ssh') }}</span>
+                    <span class="pill btn-sm" :class="serviceLabel(node,'ssh')==='running'?'ok':serviceLabel(node,'ssh')==='stopped'?'idle':'bad'" style="margin-left:auto;font-size:9px">{{ serviceLabel(node,'ssh') }}</span>
                   </div>
                   <div style="font-size:11.5px;color:var(--muted);line-height:1.6">
                     Tunnel-based proxy<br>
@@ -1553,49 +1531,23 @@ onUnmounted(() => {
                   </div>
                   <div class="action-row" style="margin-top:8px">
                     <button class="btn-ghost btn-sm" @click="createNodeTask(node,'service.restart',{service:'ssh'})">Restart</button>
+                    <button class="btn-ghost btn-sm" @click="editingProtocol={nodeId:node.id,protocol:'ssh'};vpnConfigForm.protocol='ssh';vpnConfigForm.port=22;vpnConfigForm.network='';vpnConfigForm.enabled=true">Edit</button>
+                  </div>
+                  <div v-if="editingProtocol?.nodeId===node.id&&editingProtocol?.protocol==='ssh'" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+                    <form class="form-stack" @submit.prevent="saveNodeVPNConfig(node.id);editingProtocol=null">
+                      <div class="two-col">
+                        <label>Port<input v-model.number="vpnConfigForm.port" type="number" min="1" max="65535"/></label>
+                        <label>Network<input v-model.trim="vpnConfigForm.network" placeholder="Optional"/></label>
+                      </div>
+                      <div class="action-row">
+                        <button class="btn-primary btn-sm" :disabled="busy">Save</button>
+                        <button type="button" class="btn-ghost btn-sm" @click="editingProtocol=null">Cancel</button>
+                      </div>
+                    </form>
                   </div>
                 </div>
               </div>
 
-              <!-- Per-node VPN config detail (expanded if selected) -->
-              <div v-if="selectedNodeVPN===node.id" style="margin-top:14px;border-top:1px solid var(--border);padding-top:14px">
-                <div v-if="nodeVPNConfigs[node.id]?.length" class="table-wrap" style="margin-bottom:14px">
-                  <table>
-                    <thead><tr><th>Protocol</th><th>Port</th><th>Network</th><th>Status</th></tr></thead>
-                    <tbody>
-                      <tr v-for="cfg in nodeVPNConfigs[node.id]" :key="cfg.id">
-                        <td><b>{{ cfg.protocol.toUpperCase() }}</b></td>
-                        <td>{{ cfg.port }}</td>
-                        <td>{{ cfg.network||'&#8212;' }}</td>
-                        <td><span class="pill" :class="cfg.enabled?'ok':'bad'">{{ cfg.enabled?'Enabled':'Disabled' }}</span></td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-                <h4 style="font-size:13px;margin-bottom:10px">Add / Update Protocol</h4>
-                <form class="form-stack" @submit.prevent="saveNodeVPNConfig(node.id)">
-                  <div class="two-col">
-                    <label>Protocol
-                      <select v-model="vpnConfigForm.protocol">
-                        <option value="openvpn">OpenVPN</option>
-                        <option value="l2tp">L2TP/IPSec</option>
-                        <option value="ikev2">IKEv2</option>
-                        <option value="ssh">SSH Tunnel</option>
-                      </select>
-                    </label>
-                    <label>Port<input v-model.number="vpnConfigForm.port" type="number" min="1" max="65535"/></label>
-                  </div>
-                  <label>Network (CIDR)<input v-model.trim="vpnConfigForm.network" placeholder="10.8.0.0/24"/></label>
-                  <label style="display:flex;align-items:center;gap:8px;flex-direction:row"><input v-model="vpnConfigForm.enabled" type="checkbox" style="width:16px;min-height:16px"/>Enabled</label>
-                  <div class="action-row">
-                    <button class="btn-primary btn-sm" :disabled="busy">Save Config</button>
-                    <button type="button" class="btn-ghost btn-sm" @click="selectedNodeVPN=0">Close</button>
-                  </div>
-                </form>
-              </div>
-              <div v-else class="action-row" style="margin-top:10px">
-                <button class="btn-ghost btn-sm" @click="loadNodeVPNConfig(node.id)">Manage Configs</button>
-              </div>
             </div>
           </div>
         </template>
