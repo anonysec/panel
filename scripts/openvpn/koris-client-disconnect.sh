@@ -4,6 +4,10 @@ DB="${KORIS_RADIUS_DB:-radius_next}"
 LOG="${KORIS_ACCT_LOG:-/var/log/openvpn/koris-acct.log}"
 TC_LOG="${KORIS_TC_LOG:-/var/log/openvpn/koris-tc.log}"
 U="${username:-${common_name:-}}"
+
+# Validate username
+[[ "$U" =~ ^[A-Za-z0-9_.-]{1,64}$ ]] || { echo "$(date -Is) REJECT invalid username: $U" >> "$LOG"; exit 1; }
+
 IP="${ifconfig_pool_remote_ip:-}"
 TUN="${dev:-tun0}"
 IN="${bytes_received:-0}"

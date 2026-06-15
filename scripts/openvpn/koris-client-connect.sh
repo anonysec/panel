@@ -4,22 +4,40 @@ DB="${KORIS_RADIUS_DB:-radius_next}"
 LOG="${KORIS_ACCT_LOG:-/var/log/openvpn/koris-acct.log}"
 TC_LOG="${KORIS_TC_LOG:-/var/log/openvpn/koris-tc.log}"
 U="${username:-${common_name:-}}"
+
+# Validate username: strict alphanumeric pattern
+[[ "$U" =~ ^[A-Za-z0-9_.-]{1,64}$ ]] || { echo "$(date -Is) REJECT invalid username: $U" >> "$LOG"; exit 1; }
+
 IP="${ifconfig_pool_remote_ip:-}"
 TRUSTED_IP="${trusted_ip:-}"
 TRUSTED_PORT="${trusted_port:-}"
 TUN="${dev:-tun0}"
-SESSION_ID="${U}-${IP}-${trusted_ip:-local}-${trusted_port:-0}-${time_unix:-$(date +%s)}"
-UNIQUE_ID="$(printf '%s' "$SESSION_ID" | sha1sum | awk '{print $1}' | cut -c1-32)"
-[ -z "$U" ] && exit 0
-
-sql_escape() { printf "%s" "$1" | sed "s/'/''/g"; }
-SQL_USER="$(sql_escape "$U")"
 
 # --- Input validation to prevent SQL injection ---
 # Validate IP addresses (allow only digits and dots for IPv4)
 [[ "$IP" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || IP=""
 [[ "$TRUSTED_IP" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || TRUSTED_IP="0.0.0.0"
 [[ "$TRUSTED_PORT" =~ ^[0-9]+$ ]] || TRUSTED_PORT="0"
+
+# Validate time_unix
+T_UNIX="${time_unix:-$(date +%s)}"
+[[ "$T_UNIX" =~ ^[0-9]+$ ]] || T_UNIX="$(date +%s)"
+
+# Auto-detect NAS IP if not set
+NAS_IP="${KORIS_NAS_IP:-$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1); exit}')}"
+[ -z "$NAS_IP" ] && { echo "$(date -Is) FATAL: Cannot determine NAS_IP. Set KORIS_NAS_IP." >> "$LOG"; exit 1; }
+
+# Build SESSION_ID from validated components only
+SESSION_ID="${U}-${IP}-${TRUSTED_IP}-${TRUSTED_PORT}-${T_UNIX}"
+UNIQUE_ID="$(printf '%s' "$SESSION_ID" | sha1sum | awk '{print $1}' | cut -c1-32)"
+[ -z "$U" ] && exit 0
+
+sql_escape() { printf "%s" "$1" | sed "s/'/''/g"; }
+SQL_USER="$(sql_escape "$U")"
+
+# Escape for SQL
+SQL_SESSION="$(sql_escape "$SESSION_ID")"
+SQL_UNIQUE="$(sql_escape "$UNIQUE_ID")"
 
 normalize_rate() {
   local raw="$(printf '%s' "${1:-}" | tr -d ' ' | tr '[:upper:]' '[:lower:]')"
@@ -86,7 +104,7 @@ apply_tc_limit || true
 
 mysql -u root "$DB" <<SQL
 INSERT INTO radacct(acctsessionid,acctuniqueid,username,nasipaddress,nasporttype,acctstarttime,acctupdatetime,acctauthentic,connectinfo_start,calledstationid,callingstationid,servicetype,framedprotocol,framedipaddress)
-VALUES('${SESSION_ID}','${UNIQUE_ID}','${SQL_USER}','${KORIS_NAS_IP:-91.107.168.34}','Virtual',NOW(),NOW(),'RADIUS','OpenVPN','${KORIS_NAS_IP:-91.107.168.34}','${TRUSTED_IP}:${TRUSTED_PORT}','Login-User','PPP','${IP}')
+VALUES('${SQL_SESSION}','${SQL_UNIQUE}','${SQL_USER}','${NAS_IP}','Virtual',NOW(),NOW(),'RADIUS','OpenVPN','${NAS_IP}','${TRUSTED_IP}:${TRUSTED_PORT}','Login-User','PPP','${IP}')
 ON DUPLICATE KEY UPDATE acctupdatetime=NOW(), acctstoptime=NULL, framedipaddress=VALUES(framedipaddress), callingstationid=VALUES(callingstationid);
 SQL
 echo "$(date -Is) START user=$U ip=$IP session=$SESSION_ID" >> "$LOG"

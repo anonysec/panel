@@ -78,12 +78,20 @@ go mod tidy >/dev/null 2>&1
 go build -ldflags="-s -w" -o /usr/local/bin/panel-node ./node/cmd/node
 chmod +x /usr/local/bin/panel-node
 
+# Detect node public IP
+NODE_IP=$(curl -fsS4 --max-time 3 https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}')
+
+# Generate a unique RADIUS secret for this node
+RADIUS_SECRET="$(openssl rand -hex 16)"
+
 # Config
 mkdir -p /etc/panel-node
 cat > /etc/panel-node/node.env <<ENV
 PANEL_URL='${PANEL_URL}'
 NODE_TOKEN='${NODE_TOKEN}'
 NODE_NAME='${NODE_NAME}'
+KORIS_RADIUS_SECRET='${RADIUS_SECRET}'
+KORIS_NAS_IP='${NODE_IP}'
 ENV
 chmod 600 /etc/panel-node/node.env
 
@@ -105,7 +113,6 @@ sleep 2
 cp "$INSTALL_DIR/koris.sh" /usr/local/bin/koris 2>/dev/null || true
 chmod +x /usr/local/bin/koris 2>/dev/null || true
 
-NODE_IP=$(curl -fsS4 --max-time 3 https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}')
 echo ""
 echo -e "${bold}${green}═══════════════════════════════════════════════${plain}"
 echo -e "${bold}${green}     Node Agent Installed!${plain}"

@@ -4,8 +4,9 @@ AUTH_FILE="${1:-}"
 LOG="${KORIS_AUTH_LOG:-/var/log/openvpn/koris-auth.log}"
 DB="${KORIS_RADIUS_DB:-radius_next}"
 RADIUS_HOST="${KORIS_RADIUS_HOST:-127.0.0.1}"
-RADIUS_SECRET="${KORIS_RADIUS_SECRET:-OvpnRad2026}"
-NAS_IP="${KORIS_NAS_IP:-91.107.168.34}"
+RADIUS_SECRET="${KORIS_RADIUS_SECRET:?FATAL: KORIS_RADIUS_SECRET must be set in /etc/panel-node/node.env}"
+NAS_IP="${KORIS_NAS_IP:-$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1); exit}')}"
+[ -z "$NAS_IP" ] && { echo "$(date -Is) FATAL: Cannot determine NAS_IP. Set KORIS_NAS_IP." >> "$LOG"; exit 1; }
 
 reject() {
   local user="${1:-unknown}"
