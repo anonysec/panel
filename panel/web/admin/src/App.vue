@@ -64,7 +64,7 @@ const certForm = ref({ name: '', type: 'ca', content: '', node_id: 0, is_default
 const nodeVPNConfigs = ref<Record<number, any[]>>({})
 const selectedNodeVPN = ref<number>(0)
 const vpnConfigForm = ref({ protocol: 'openvpn', enabled: true, port: 1194, network: '10.8.0.0/24', extra_json: '{}' })
-const customerView = ref<'active' | 'archived'>('active')
+const customerView = ref<'active' | 'archived' | 'online' | 'limited' | 'disabled' | 'expired'>('active')
 const selectedUsage = ref<UsageSummary | null>(null)
 const search = ref('')
 const busy = ref(false)
@@ -107,7 +107,17 @@ const nodeInstallCommand = computed(() => `cd koris-next && sudo PANEL_URL=${shQ
 const activePercent = computed(() => stats.value.customers ? Math.round((stats.value.active_customers / stats.value.customers) * 100) : 0)
 const filteredCustomers = computed(() => {
   const q = search.value.trim().toLowerCase()
-  const list = customerView.value === 'active' ? customers.value : deletedCustomers.value
+  let list: any[] = []
+  if (customerView.value === 'archived') {
+    list = deletedCustomers.value
+  } else if (customerView.value === 'active') {
+    list = customers.value
+  } else if (customerView.value === 'online') {
+    // Filter by users who have active sessions (approximation: status=active for now)
+    list = customers.value.filter(c => c.status === 'active')
+  } else {
+    list = customers.value.filter(c => c.status === customerView.value)
+  }
   if (!q) return list
   return list.filter((customer) => `${customer.username} ${customer.display_name} ${customer.status} ${customer.plan}`.toLowerCase().includes(q))
 })
@@ -890,12 +900,12 @@ onMounted(() => {
       <div class="nav-group">Overview</div>
       <button class="nav-item" :class="{active:section==='overview'}" @click="section='overview'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>Dashboard</button>
       <button class="nav-item" :class="{active:section==='payments'}" @click="section='payments'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>Analytics</button>
-      <button class="nav-item" :class="{active:section==='tickets'}" @click="section='tickets'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h18M3 12h18M3 17h12"/></svg>Transactions<span v-if="stats.pending_payments" class="badge">{{ stats.pending_payments }}</span></button>
+      <button class="nav-item" :class="{active:section==='tickets'}" @click="section='tickets'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>Transactions<span v-if="stats.pending_payments" class="badge">{{ stats.pending_payments }}</span></button>
 
       <div class="nav-group">Manage</div>
-      <button class="nav-item" :class="{active:section==='customers'||section==='customer-detail'||section==='resellers'}" @click="section='customers'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0113 0"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.5A5 5 0 0121.5 20"/></svg>Users<span v-if="stats.customers" class="badge">{{ stats.customers }}</span></button>
+      <button class="nav-item" :class="{active:section==='customers'||section==='customer-detail'||section==='resellers'||section==='tickets'}" @click="section='customers'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0113 0"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.5A5 5 0 0121.5 20"/></svg>Users<span v-if="stats.open_tickets" class="badge">{{ stats.open_tickets }}</span></button>
       <button class="nav-item" :class="{active:section==='nodes'}" @click="section='nodes'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="6" rx="1"/><rect x="3" y="14" width="18" height="6" rx="1"/><circle cx="7" cy="7" r="1" fill="currentColor"/><circle cx="7" cy="17" r="1" fill="currentColor"/></svg>Services</button>
-      <button class="nav-item" :class="{active:section==='plans'}" @click="section='plans'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>Billing</button>
+      <button class="nav-item" :class="{active:section==='plans'}" @click="section='plans'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>Plans</button>
 
       <div class="nav-group">System</div>
       <button class="nav-item" :class="{active:section==='system'}" @click="section='system';loadDiagnostics();loadAuditLogs()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.9l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.9-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.9.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.9 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.9l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.9.3H10a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.9-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.9V10a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg>Settings</button>
@@ -918,8 +928,8 @@ onMounted(() => {
       <!-- Topbar -->
       <div class="topbar">
         <div class="topbar-left">
-          <h2>{{ section==='overview'?'Dashboard':section==='customers'||section==='resellers'?'Users':section==='customer-detail'?'User Detail':section==='payments'?'Analytics':section==='plans'?'Billing':section==='nodes'?'Services':section==='tickets'?'Transactions':section==='system'?'Settings':'Panel' }}</h2>
-          <p>{{ section==='overview'?`Welcome back, ${user.username}`:section==='customers'?'Manage accounts and access':section==='payments'?'Revenue and payment analytics':section==='plans'?'Subscription plans':section==='nodes'?'Servers and VPN configuration':section==='tickets'?'Payments and wallet operations':section==='system'?'Panel configuration':'Details' }}</p>
+          <h2>{{ section==='overview'?'Dashboard':section==='customers'||section==='resellers'||section==='tickets'?'Users':section==='customer-detail'?'User Detail':section==='payments'?'Transactions':section==='plans'?'Plans':section==='nodes'?'Services':section==='system'?'Settings':'Panel' }}</h2>
+          <p>{{ section==='overview'?`Welcome back, ${user.username}`:section==='customers'||section==='tickets'?'Manage accounts, tickets and access':section==='payments'?'Payments and wallet operations':section==='plans'?'Subscription plans and pricing':section==='nodes'?'Nodes and VPN cores':section==='system'?'Panel configuration':'Details' }}</p>
         </div>
         <div class="topbar-right">
           <div class="search-box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg><input v-model="search" @keyup.enter="loadDashboard" placeholder="Search..."></div>
@@ -948,9 +958,18 @@ onMounted(() => {
       </div>
 
       <!-- ===== USERS ===== -->
-      <div v-else-if="section==='customers'||section==='resellers'" class="page">
+      <div v-else-if="section==='customers'||section==='resellers'||section==='tickets'" class="page">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
-          <div class="tabs"><button :class="{on:section==='customers'&&customerView==='active'}" @click="section='customers';customerView='active'">Active</button><button :class="{on:section==='customers'&&customerView==='archived'}" @click="section='customers';customerView='archived'">Archived</button><button v-if="user.role==='owner'||user.role==='admin'" :class="{on:section==='resellers'}" @click="section='resellers';loadResellers()">Resellers</button></div>
+          <div class="tabs">
+            <button :class="{on:section==='customers'&&customerView==='active'}" @click="section='customers';customerView='active'">All</button>
+            <button :class="{on:section==='customers'&&customerView==='online'}" @click="section='customers';customerView='online'">Online</button>
+            <button :class="{on:section==='customers'&&customerView==='limited'}" @click="section='customers';customerView='limited'">Limited</button>
+            <button :class="{on:section==='customers'&&customerView==='disabled'}" @click="section='customers';customerView='disabled'">Disabled</button>
+            <button :class="{on:section==='customers'&&customerView==='expired'}" @click="section='customers';customerView='expired'">Expired</button>
+            <button :class="{on:section==='customers'&&customerView==='archived'}" @click="section='customers';customerView='archived'">Archived</button>
+            <button :class="{on:section==='tickets'}" @click="section='tickets'">Tickets</button>
+            <button v-if="user.role==='owner'||user.role==='admin'" :class="{on:section==='resellers'}" @click="section='resellers';loadResellers()">Resellers</button>
+          </div>
           <button v-if="section==='customers'" class="btn-primary btn-sm" style="margin-left:auto" @click="customerModalOpen=true">+ New User</button>
         </div>
         <template v-if="section==='customers'">
@@ -978,9 +997,9 @@ onMounted(() => {
         <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(280px,1fr))"><div v-for="plan in plans" :key="plan.id" class="card" :style="!plan.is_active?'opacity:.5':''"><div class="card-head"><div><h4>{{ plan.name }}</h4><span class="pill" :class="plan.is_active?'ok':'bad'" style="margin-top:4px">{{ plan.is_active?'Active':'Off' }}</span></div></div><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:10px 0"><div style="text-align:center"><b style="font-size:15px">{{ plan.data_gb||'∞' }}</b><br><small style="color:var(--muted);font-size:10px">GB</small></div><div style="text-align:center"><b style="font-size:15px">{{ plan.speed_mbps||'∞' }}</b><br><small style="color:var(--muted);font-size:10px">Mbps</small></div><div style="text-align:center"><b style="font-size:15px">{{ plan.duration_days }}</b><br><small style="color:var(--muted);font-size:10px">Days</small></div><div style="text-align:center"><b style="font-size:15px">{{ formatMoney(plan.price) }}</b><br><small style="color:var(--muted);font-size:10px">Price</small></div></div><div class="action-row"><button class="btn-ghost btn-sm" @click="editPlan(plan)">Edit</button><button class="btn-danger btn-sm" :disabled="!plan.is_active" @click="archivePlan(plan)">Deactivate</button></div></div></div>
       </div>
 
-      <!-- ===== SERVICES (Nodes) ===== -->
+      <!-- ===== SERVICES (Nodes + Cores) ===== -->
       <div v-else-if="section==='nodes'" class="page">
-        <div class="tabs" style="margin-bottom:16px"><button :class="{on:infraTab==='nodes'}" @click="infraTab='nodes'">Nodes</button><button :class="{on:infraTab==='vpn'}" @click="infraTab='vpn'">Per-Node Config</button></div>
+        <div class="tabs" style="margin-bottom:16px"><button :class="{on:infraTab==='nodes'}" @click="infraTab='nodes'">Nodes</button><button :class="{on:infraTab==='vpn'}" @click="infraTab='vpn'">Cores</button></div>
         <template v-if="infraTab==='nodes'">
           <div style="margin-bottom:16px"><button class="btn-primary btn-sm" @click="nodeModalOpen=true;nodeForm={name:'',public_ip:'',domain:''};nodeToken=''">+ New Node</button></div>
           <div class="node-grid"><div v-for="node in nodes" :key="node.id" class="node-card"><div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><span class="pill" :class="node.status==='online'?'ok':node.status==='disabled'?'bad':'warn'">{{ node.status }}</span><b style="font-size:14px">{{ node.name }}</b><small style="color:var(--muted);margin-left:auto;font-size:11px">{{ node.public_ip }}</small></div><div class="node-metrics"><span><b>{{ Math.round(node.status_metrics?.cpu_percent||0) }}%</b><small>CPU</small></span><span><b>{{ Math.round(node.status_metrics?.ram_percent||0) }}%</b><small>RAM</small></span><span><b>{{ Math.round(node.status_metrics?.disk_percent||0) }}%</b><small>Disk</small></span><span><b>{{ formatBytes(node.status_metrics?.rx_bps||0) }}/s</b><small>RX</small></span><span><b>{{ formatBytes(node.status_metrics?.tx_bps||0) }}/s</b><small>TX</small></span></div><div class="action-row"><button class="btn-ghost btn-sm" @click="createNodeTask(node,'service.restart',{service:'openvpn'})">Restart VPN</button><button class="btn-ghost btn-sm" @click="loadNodeVPNConfig(node.id)">Config</button><button class="btn-ghost btn-sm" @click="rotateNodeToken(node)">Token</button><button v-if="node.status!=='disabled'" class="btn-danger btn-sm" @click="setNodeEnabled(node,false)">Disable</button><button v-else class="btn-ghost btn-sm" @click="setNodeEnabled(node,true)">Enable</button></div></div></div>
