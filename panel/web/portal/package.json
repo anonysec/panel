@@ -7,12 +7,15 @@
     "build": "vue-tsc --noEmit && vite build"
   },
   "dependencies": {
-    "@vitejs/plugin-vue": "latest",
-    "vite": "latest",
-    "vue": "latest"
+    "@vitejs/plugin-vue": "^5.2.3",
+    "vite": "^5.4.19",
+    "vue": "^3.5.13"
   },
   "devDependencies": {
-    "typescript": "latest",
-    "vue-tsc": "latest"
+    "typescript": "^5.7.3",
+    "vue-tsc": "^2.2.10"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
