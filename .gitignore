@@ -10,8 +10,8 @@ package-lock.json
 
 # Go build artifacts
 dist/
-/panel
-/node
+/panel-binary
+/node-binary
 
 # OS files
 .DS_Store
