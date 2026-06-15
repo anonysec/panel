@@ -1,11 +1,9 @@
 # Dependencies
 node_modules/
 
-# Build output (regenerated during deploy by npm run build)
-panel/web/admin/www/
-panel/web/portal/www/
-panel/web/admin/www/assets/
-panel/web/portal/www/assets/
+# Build output - TRACKED in git so deploys work without npm
+# panel/web/admin/www/
+# panel/web/portal/www/
 
 # Lock files (regenerated on npm install)
 panel/web/admin/package-lock.json
