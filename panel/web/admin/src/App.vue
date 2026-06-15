@@ -53,8 +53,17 @@ const nodeTasks = ref<NodeTask[]>([])
 const vpnSettings = ref<VPNSettings | null>(null)
 const selectedCustomer = ref<CustomerDetail | null>(null)
 const detailTab = ref<'profile' | 'usage' | 'history'>('profile')
-const systemTab = ref<'audit' | 'backups' | 'diagnostics'>('diagnostics')
+const systemTab = ref<'audit' | 'backups' | 'diagnostics' | 'telegram' | 'certificates' | 'panel'>('diagnostics')
 const infraTab = ref<'nodes' | 'vpn'>('nodes')
+
+// Phase 2/3 state
+const panelSettingsData = ref<Record<string, string>>({})
+const panelSettingsLoading = ref(false)
+const certificatesList = ref<any[]>([])
+const certForm = ref({ name: '', type: 'ca', content: '', node_id: 0, is_default: false })
+const nodeVPNConfigs = ref<Record<number, any[]>>({})
+const selectedNodeVPN = ref<number>(0)
+const vpnConfigForm = ref({ protocol: 'openvpn', enabled: true, port: 1194, network: '10.8.0.0/24', extra_json: '{}' })
 const customerView = ref<'active' | 'archived'>('active')
 const selectedUsage = ref<UsageSummary | null>(null)
 const search = ref('')
@@ -767,6 +776,70 @@ watch(section, (newSec) => {
   window.location.hash = '/' + newSec
 })
 
+async function loadPanelSettings() {
+  panelSettingsLoading.value = true
+  try {
+    const res = await api<any>('/api/panel-settings')
+    panelSettingsData.value = res.settings || {}
+  } catch (err) { error.value = friendlyError(err) }
+  finally { panelSettingsLoading.value = false }
+}
+
+async function savePanelSettings() {
+  busy.value = true; error.value = ''
+  try {
+    await api<any>('/api/panel-settings', { method: 'PATCH', body: JSON.stringify(panelSettingsData.value) })
+    notice.value = 'Settings saved.'
+  } catch (err) { error.value = friendlyError(err) }
+  finally { busy.value = false }
+}
+
+async function loadCertificates() {
+  try {
+    const res = await api<any>('/api/certificates')
+    certificatesList.value = res.certificates || []
+  } catch (err) { error.value = friendlyError(err) }
+}
+
+async function uploadCertificate() {
+  busy.value = true; error.value = ''
+  try {
+    await api<any>('/api/certificates', { method: 'POST', body: JSON.stringify(certForm.value) })
+    notice.value = 'Certificate uploaded.'
+    certForm.value = { name: '', type: 'ca', content: '', node_id: 0, is_default: false }
+    await loadCertificates()
+  } catch (err) { error.value = friendlyError(err) }
+  finally { busy.value = false }
+}
+
+async function deleteCertificate(id: number) {
+  if (!confirm('Delete this certificate?')) return
+  try {
+    await api<any>(`/api/certificates/${id}`, { method: 'DELETE' })
+    notice.value = 'Certificate deleted.'
+    await loadCertificates()
+  } catch (err) { error.value = friendlyError(err) }
+}
+
+async function loadNodeVPNConfig(nodeId: number) {
+  selectedNodeVPN.value = nodeId
+  try {
+    const res = await api<any>(`/api/nodes/vpn-config/${nodeId}`)
+    nodeVPNConfigs.value[nodeId] = res.configs || []
+  } catch (err) { error.value = friendlyError(err) }
+}
+
+async function saveNodeVPNConfig(nodeId: number) {
+  busy.value = true; error.value = ''
+  try {
+    const payload = { ...vpnConfigForm.value, extra_json: vpnConfigForm.value.extra_json ? JSON.parse(vpnConfigForm.value.extra_json) : {} }
+    await api<any>(`/api/nodes/vpn-config/${nodeId}`, { method: 'POST', body: JSON.stringify(payload) })
+    notice.value = 'VPN config saved.'
+    await loadNodeVPNConfig(nodeId)
+  } catch (err) { error.value = friendlyError(err) }
+  finally { busy.value = false }
+}
+
 onMounted(() => {
   if (window.location.pathname !== '/dashboard/' && window.location.pathname !== '/dashboard') {
     window.history.replaceState(null, '', '/dashboard/' + window.location.hash)
@@ -907,13 +980,21 @@ onMounted(() => {
 
       <!-- ===== SERVICES (Nodes) ===== -->
       <div v-else-if="section==='nodes'" class="page">
-        <div class="tabs" style="margin-bottom:16px"><button :class="{on:infraTab==='nodes'}" @click="infraTab='nodes'">Nodes</button><button :class="{on:infraTab==='vpn'}" @click="infraTab='vpn'">VPN Config</button></div>
+        <div class="tabs" style="margin-bottom:16px"><button :class="{on:infraTab==='nodes'}" @click="infraTab='nodes'">Nodes</button><button :class="{on:infraTab==='vpn'}" @click="infraTab='vpn'">Per-Node Config</button></div>
         <template v-if="infraTab==='nodes'">
           <div style="margin-bottom:16px"><button class="btn-primary btn-sm" @click="nodeModalOpen=true;nodeForm={name:'',public_ip:'',domain:''};nodeToken=''">+ New Node</button></div>
-          <div class="node-grid"><div v-for="node in nodes" :key="node.id" class="node-card"><div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><span class="pill" :class="node.status==='online'?'ok':node.status==='disabled'?'bad':'warn'">{{ node.status }}</span><b style="font-size:14px">{{ node.name }}</b><small style="color:var(--muted);margin-left:auto;font-size:11px">{{ node.public_ip }}</small></div><div class="node-metrics"><span><b>{{ Math.round(node.status_metrics?.cpu_percent||0) }}%</b><small>CPU</small></span><span><b>{{ Math.round(node.status_metrics?.ram_percent||0) }}%</b><small>RAM</small></span><span><b>{{ Math.round(node.status_metrics?.disk_percent||0) }}%</b><small>Disk</small></span><span><b>{{ formatBytes(node.status_metrics?.rx_bps||0) }}/s</b><small>RX</small></span><span><b>{{ formatBytes(node.status_metrics?.tx_bps||0) }}/s</b><small>TX</small></span></div><div class="action-row"><button class="btn-ghost btn-sm" @click="createNodeTask(node,'service.restart',{service:'openvpn'})">Restart</button><button class="btn-ghost btn-sm" @click="rotateNodeToken(node)">Token</button><button v-if="node.status!=='disabled'" class="btn-danger btn-sm" @click="setNodeEnabled(node,false)">Disable</button><button v-else class="btn-ghost btn-sm" @click="setNodeEnabled(node,true)">Enable</button></div></div></div>
+          <div class="node-grid"><div v-for="node in nodes" :key="node.id" class="node-card"><div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><span class="pill" :class="node.status==='online'?'ok':node.status==='disabled'?'bad':'warn'">{{ node.status }}</span><b style="font-size:14px">{{ node.name }}</b><small style="color:var(--muted);margin-left:auto;font-size:11px">{{ node.public_ip }}</small></div><div class="node-metrics"><span><b>{{ Math.round(node.status_metrics?.cpu_percent||0) }}%</b><small>CPU</small></span><span><b>{{ Math.round(node.status_metrics?.ram_percent||0) }}%</b><small>RAM</small></span><span><b>{{ Math.round(node.status_metrics?.disk_percent||0) }}%</b><small>Disk</small></span><span><b>{{ formatBytes(node.status_metrics?.rx_bps||0) }}/s</b><small>RX</small></span><span><b>{{ formatBytes(node.status_metrics?.tx_bps||0) }}/s</b><small>TX</small></span></div><div class="action-row"><button class="btn-ghost btn-sm" @click="createNodeTask(node,'service.restart',{service:'openvpn'})">Restart VPN</button><button class="btn-ghost btn-sm" @click="loadNodeVPNConfig(node.id)">Config</button><button class="btn-ghost btn-sm" @click="rotateNodeToken(node)">Token</button><button v-if="node.status!=='disabled'" class="btn-danger btn-sm" @click="setNodeEnabled(node,false)">Disable</button><button v-else class="btn-ghost btn-sm" @click="setNodeEnabled(node,true)">Enable</button></div></div></div>
         </template>
         <template v-else>
-          <div class="card" style="max-width:560px"><div class="card-head"><h4>VPN Configuration</h4></div><form class="form-stack" @submit.prevent="saveVPNSettings(false)"><div class="two-col"><label>Port<input v-model.number="vpnForm.openvpn_port" type="number"/></label><label>Protocol<select v-model="vpnForm.openvpn_protocol"><option value="udp">UDP</option><option value="tcp">TCP</option></select></label></div><label>Network<input v-model.trim="vpnForm.openvpn_network"/></label><div class="two-col"><label>DNS 1<input v-model.trim="vpnForm.dns_1"/></label><label>DNS 2<input v-model.trim="vpnForm.dns_2"/></label></div><label>IPSec PSK<input v-model.trim="vpnForm.ipsec_psk" type="password" placeholder="Shared secret"/></label><div class="action-row"><button class="btn-primary" :disabled="busy">Save</button><button class="btn-danger" type="button" :disabled="busy" @click="saveVPNSettings(true)">Save & Apply</button></div></form></div>
+          <!-- Per-Node VPN Configuration -->
+          <div v-if="!selectedNodeVPN" class="card"><div class="card-head"><h4>Select a Node</h4></div><p style="color:var(--muted);font-size:13px">Click "Config" on a node card above, or select below:</p><div class="action-row" style="margin-top:12px"><button v-for="node in nodes" :key="node.id" class="btn-ghost btn-sm" @click="loadNodeVPNConfig(node.id)">{{ node.name }}</button></div></div>
+          <div v-else class="card">
+            <div class="card-head"><div><h4>VPN Config — {{ nodes.find(n=>n.id===selectedNodeVPN)?.name || 'Node' }}</h4><div class="sub">Per-protocol settings for this node</div></div><button class="btn-ghost btn-sm" @click="selectedNodeVPN=0">← Back</button></div>
+            <!-- Show existing configs -->
+            <div v-if="nodeVPNConfigs[selectedNodeVPN]?.length" class="table-wrap" style="margin-bottom:16px"><table><thead><tr><th>Protocol</th><th>Port</th><th>Network</th><th>Status</th></tr></thead><tbody><tr v-for="cfg in nodeVPNConfigs[selectedNodeVPN]" :key="cfg.id"><td><b>{{ cfg.protocol.toUpperCase() }}</b></td><td>{{ cfg.port }}</td><td>{{ cfg.network||'—' }}</td><td><span class="pill" :class="cfg.enabled?'ok':'bad'">{{ cfg.enabled?'Enabled':'Disabled' }}</span></td></tr></tbody></table></div>
+            <!-- Add/Update config form -->
+            <div style="border-top:1px solid var(--border);padding-top:14px"><h4 style="font-size:13px;margin-bottom:12px">Add / Update Protocol</h4><form class="form-stack" @submit.prevent="saveNodeVPNConfig(selectedNodeVPN)"><div class="two-col"><label>Protocol<select v-model="vpnConfigForm.protocol"><option value="openvpn">OpenVPN</option><option value="l2tp">L2TP/IPSec</option><option value="ikev2">IKEv2</option><option value="ssh">SSH Tunnel</option></select></label><label>Port<input v-model.number="vpnConfigForm.port" type="number" min="1" max="65535"/></label></div><label>Network (CIDR)<input v-model.trim="vpnConfigForm.network" placeholder="10.8.0.0/24 (optional for SSH)"/></label><label style="display:flex;align-items:center;gap:8px;flex-direction:row"><input v-model="vpnConfigForm.enabled" type="checkbox" style="width:16px;min-height:16px"/>Enabled</label><button class="btn-primary btn-sm" :disabled="busy">Save Config</button></form></div>
+          </div>
         </template>
       </div>
 
@@ -922,10 +1003,23 @@ onMounted(() => {
         <div class="settings-layout">
           <div class="settings-nav card" style="padding:12px">
             <button :class="{on:systemTab==='diagnostics'}" @click="systemTab='diagnostics'">Panel Status</button>
+            <button :class="{on:systemTab==='panel'}" @click="systemTab='panel';loadPanelSettings()">Panel Settings</button>
+            <button :class="{on:systemTab==='telegram'}" @click="systemTab='telegram';loadPanelSettings()">Telegram Bot</button>
+            <button :class="{on:systemTab==='certificates'}" @click="systemTab='certificates';loadCertificates()">Certificates</button>
             <button :class="{on:systemTab==='audit'}" @click="systemTab='audit'">Audit Logs</button>
             <button :class="{on:systemTab==='backups'}" @click="systemTab='backups'">Backup & Export</button>
           </div>
           <div v-if="systemTab==='diagnostics'" class="card"><div class="card-head"><div><h4>Panel Status</h4><div class="sub">System health</div></div><button class="btn-ghost btn-sm" :disabled="diagnosticsLoading" @click="loadDiagnostics">{{ diagnosticsLoading?'...':'Refresh' }}</button></div><div v-if="diagnosticsData"><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px"><div style="padding:10px;border:1px solid var(--border);border-radius:8px"><div style="color:var(--muted);font-size:10px;text-transform:uppercase">Disk</div><b style="font-size:14px">{{ diagnosticsData.disk }}</b></div><div style="padding:10px;border:1px solid var(--border);border-radius:8px"><div style="color:var(--muted);font-size:10px;text-transform:uppercase">Memory</div><b style="font-size:14px">{{ diagnosticsData.mem }}</b></div></div><div class="table-wrap"><table><thead><tr><th>Service</th><th>Status</th></tr></thead><tbody><tr v-for="c in diagnosticsData.checks" :key="c.name"><td>{{ c.name }}</td><td><span class="pill" :class="c.ok?'ok':'bad'">{{ c.ok?'OK':'Issue' }}</span></td></tr></tbody></table></div></div><div v-else class="empty-state"><p>Click Refresh to check</p></div></div>
+
+          <!-- Panel Settings -->
+          <div v-else-if="systemTab==='panel'" class="card"><div class="card-head"><h4>Panel Settings</h4></div><form class="form-stack" @submit.prevent="savePanelSettings"><label>Panel Name<input v-model="panelSettingsData.panel_name" placeholder="KorisPanel"/></label><label>Description<input v-model="panelSettingsData.panel_description" placeholder="VPN Management Panel"/></label><label>Theme<select v-model="panelSettingsData.theme"><option value="dark">Dark</option><option value="light">Light</option></select></label><label>SSH Enabled<select v-model="panelSettingsData.ssh_enabled"><option value="true">Yes</option><option value="false">No</option></select></label><label>SSH Default Port<input v-model="panelSettingsData.ssh_default_port" type="number"/></label><button class="btn-primary" :disabled="busy">Save Settings</button></form></div>
+
+          <!-- Telegram Bot -->
+          <div v-else-if="systemTab==='telegram'" class="card"><div class="card-head"><h4>Telegram Bot</h4></div><form class="form-stack" @submit.prevent="savePanelSettings"><label>Enabled<select v-model="panelSettingsData.telegram_enabled"><option value="true">Yes</option><option value="false">No</option></select></label><label>Bot Token<input v-model="panelSettingsData.telegram_bot_token" placeholder="123456:ABC-DEF from @BotFather"/></label><label>Admin Chat ID<input v-model="panelSettingsData.telegram_chat_id" placeholder="Your Telegram chat ID"/></label><div style="border:1px solid var(--border);border-radius:8px;padding:12px;margin-top:8px"><h4 style="font-size:13px;margin-bottom:8px">Bot Commands</h4><div style="color:var(--muted);font-size:12px;line-height:1.8"><code>/stats</code> — Panel statistics<br><code>/users</code> — Recent users list<br><code>/find username</code> — User details<br><code>/create user pass</code> — Create user<br><code>/enable username</code> — Enable user<br><code>/disable username</code> — Disable user<br><code>/traffic username</code> — Reset traffic</div></div><p style="color:var(--muted);font-size:12px;margin-top:10px">Changes require panel restart. Set PANEL_TG_ENABLED=true in panel.env for the bot to start.</p><button class="btn-primary" :disabled="busy">Save</button></form></div>
+
+          <!-- Certificates -->
+          <div v-else-if="systemTab==='certificates'" class="card"><div class="card-head"><h4>VPN Certificates</h4></div><form class="form-stack" @submit.prevent="uploadCertificate" style="margin-bottom:18px"><div class="two-col"><label>Name<input v-model.trim="certForm.name" required placeholder="My CA cert"/></label><label>Type<select v-model="certForm.type"><option value="ca">CA Certificate</option><option value="tls_crypt">TLS-Crypt Key</option><option value="client_cert">Client Certificate</option><option value="client_key">Client Key</option></select></label></div><label>Content (PEM)<textarea v-model.trim="certForm.content" required placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----" style="min-height:120px;font-family:monospace;font-size:11px"></textarea></label><label style="display:flex;align-items:center;gap:8px;flex-direction:row"><input v-model="certForm.is_default" type="checkbox" style="width:16px;min-height:16px"/>Set as default</label><button class="btn-primary btn-sm" :disabled="busy">Upload Certificate</button></form><div class="table-wrap"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Created</th><th></th></tr></thead><tbody><tr v-for="c in certificatesList" :key="c.id"><td><b>{{ c.name }}</b></td><td><span class="pill idle">{{ c.type }}</span></td><td>{{ c.is_default?'Yes':'—' }}</td><td style="color:var(--muted)">{{ formatDate(c.created_at) }}</td><td><button class="btn-danger btn-sm" @click="deleteCertificate(c.id)">Delete</button></td></tr><tr v-if="!certificatesList.length"><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">No certificates uploaded</td></tr></tbody></table></div></div>
+
           <div v-else-if="systemTab==='audit'" class="card"><div class="card-head"><h4>Audit Logs</h4><div style="display:flex;gap:4px"><button class="btn-ghost btn-sm" @click="auditOffset=Math.max(0,auditOffset-auditLimit);loadAuditLogs()">←</button><button class="btn-ghost btn-sm" @click="auditOffset+=auditLimit;loadAuditLogs()">→</button></div></div><div class="table-wrap"><table><thead><tr><th>Actor</th><th>Action</th><th>Entity</th><th>IP</th><th>Date</th></tr></thead><tbody><tr v-for="log in auditLogs" :key="log.id"><td>{{ log.actor }}</td><td><span class="pill warn">{{ log.action }}</span></td><td>{{ log.entity_type }}#{{ log.entity_id }}</td><td style="color:var(--muted)">{{ log.ip }}</td><td style="color:var(--muted)">{{ formatDate(log.created_at) }}</td></tr></tbody></table></div></div>
           <div v-else class="card"><div class="card-head"><h4>Backup & Export</h4></div><p style="color:var(--muted);margin-bottom:12px;font-size:12.5px">Download CSV snapshots. Automated backups run daily at 2 AM.</p><div class="action-row"><button class="btn-primary btn-sm" @click="exportCSV('customers')">Users</button><button class="btn-primary btn-sm" @click="exportCSV('payments')">Payments</button><button class="btn-primary btn-sm" @click="exportCSV('radacct')">Sessions</button><button class="btn-primary btn-sm" @click="exportCSV('wallet-transactions')">Wallet</button></div></div>
         </div>
