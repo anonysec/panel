@@ -84,6 +84,11 @@ const messages: Record<Locale, Record<string, string>> = {
     'label.user_status': 'User Status',
     'label.connected': 'Connected',
     'label.disconnected': 'Disconnected',
+    'label.pending': 'pending',
+    'label.connections': 'connections',
+    'label.welcome_back': 'Welcome back',
+    'label.all_clear': 'All clear',
+    'label.needs_attention': 'Needs attention',
   },
   fa: {
     // Navigation
@@ -165,6 +170,11 @@ const messages: Record<Locale, Record<string, string>> = {
     'label.user_status': 'وضعیت کاربران',
     'label.connected': 'متصل',
     'label.disconnected': 'قطع شده',
+    'label.pending': 'در انتظار',
+    'label.connections': 'اتصالات',
+    'label.welcome_back': 'خوش آمدید',
+    'label.all_clear': 'همه چیز مرتب است',
+    'label.needs_attention': 'نیاز به بررسی',
   },
   zh: {
     // Navigation
@@ -246,6 +256,11 @@ const messages: Record<Locale, Record<string, string>> = {
     'label.user_status': '用户状态',
     'label.connected': '已连接',
     'label.disconnected': '已断开',
+    'label.pending': '待处理',
+    'label.connections': '连接数',
+    'label.welcome_back': '欢迎回来',
+    'label.all_clear': '一切正常',
+    'label.needs_attention': '需要关注',
   }
 }
 

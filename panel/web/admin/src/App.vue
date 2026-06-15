@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { t, locale, setLocale, type Locale } from './i18n'
 
 type Screen = 'loading' | 'setup' | 'login' | 'app'
 type Section = 'overview' | 'customers' | 'customer-detail' | 'plans' | 'payments' | 'tickets' | 'resellers' | 'nodes' | 'system'
@@ -195,6 +196,12 @@ function toggleTheme() {
   isDark.value = !isDark.value
   document.documentElement.setAttribute('data-theme', isDark.value ? 'dark' : 'light')
   localStorage.setItem('koris-theme', isDark.value ? 'dark' : 'light')
+}
+
+function changeLang(lang: Locale) {
+  setLocale(lang)
+  document.documentElement.setAttribute('dir', lang === 'fa' ? 'rtl' : 'ltr')
+  localStorage.setItem('koris-lang', lang)
 }
 
 async function boot() {
@@ -922,6 +929,8 @@ onMounted(() => {
   }
   const savedTheme = localStorage.getItem('koris-theme')
   if (savedTheme === 'light') { isDark.value = false; document.documentElement.setAttribute('data-theme', 'light') }
+  const savedLang = localStorage.getItem('koris-lang') as Locale | null
+  if (savedLang && ['en', 'fa', 'zh'].includes(savedLang)) { setLocale(savedLang); document.documentElement.setAttribute('dir', savedLang === 'fa' ? 'rtl' : 'ltr') }
   window.addEventListener('keydown', handleEscape)
   boot()
 })
@@ -968,32 +977,37 @@ onUnmounted(() => {
 
       <div class="nav-group">Overview</div>
       <button class="nav-item" :class="{active:section==='overview'}" @click="section='overview'">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>Dashboard
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>{{ t('nav.dashboard') }}
       </button>
       <button class="nav-item" :class="{active:section==='payments'}" @click="section='payments'">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>Transactions
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>{{ t('nav.transactions') }}
       </button>
 
       <div class="nav-group">Manage</div>
       <button class="nav-item" :class="{active:section==='customers'||section==='customer-detail'||section==='resellers'||section==='tickets'}" @click="section='customers'">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0113 0"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.5A5 5 0 0121.5 20"/></svg>Users
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0113 0"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.5A5 5 0 0121.5 20"/></svg>{{ t('nav.users') }}
         <span v-if="stats.open_tickets" class="badge">{{ stats.open_tickets }}</span>
       </button>
       <button class="nav-item" :class="{active:section==='nodes'}" @click="section='nodes'">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="6" rx="1"/><rect x="3" y="14" width="18" height="6" rx="1"/><circle cx="7" cy="7" r="1" fill="currentColor"/><circle cx="7" cy="17" r="1" fill="currentColor"/></svg>Services
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="6" rx="1"/><rect x="3" y="14" width="18" height="6" rx="1"/><circle cx="7" cy="7" r="1" fill="currentColor"/><circle cx="7" cy="17" r="1" fill="currentColor"/></svg>{{ t('nav.services') }}
       </button>
       <button class="nav-item" :class="{active:section==='plans'}" @click="section='plans'">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>Plans
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>{{ t('nav.plans') }}
       </button>
 
       <div class="nav-group">System</div>
       <button class="nav-item" :class="{active:section==='system'}" @click="section='system';loadDiagnostics();loadAuditLogs()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.9l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.9-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.9.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.9 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.9l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.9.3H10a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.9-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.9V10a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg>Settings
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.9l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.9-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.9.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.9 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.9l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.9.3H10a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.9-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.9V10a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg>{{ t('nav.settings') }}
       </button>
 
       <div class="sidebar-foot">
         <div class="avatar" :style="{background:'linear-gradient(135deg,var(--brand),var(--brand-2))'}">{{ initials }}</div>
         <div class="meta">{{ user.username }}<small>{{ user.role }}</small></div>
+        <select class="lang-select" :value="locale" @change="changeLang(($event.target as HTMLSelectElement).value as Locale)" title="Language">
+          <option value="en">EN</option>
+          <option value="fa">FA</option>
+          <option value="zh">ZH</option>
+        </select>
         <button class="icon-btn" style="width:28px;height:28px;border-radius:7px" @click="toggleTheme" :title="isDark?'Light mode':'Dark mode'">
           <svg v-if="isDark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
           <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
@@ -1020,13 +1034,13 @@ onUnmounted(() => {
       <!-- Topbar -->
       <div class="topbar">
         <div class="topbar-left">
-          <h2>{{ section==='overview'?'Dashboard':section==='customers'||section==='resellers'||section==='tickets'?'Users':section==='customer-detail'?'User Detail':section==='payments'?'Transactions':section==='plans'?'Plans':section==='nodes'?'Services':section==='system'?'Settings':'Panel' }}</h2>
-          <p>{{ section==='overview'?`Welcome back, ${user.username}`:section==='customers'||section==='tickets'||section==='resellers'?'Manage accounts, tickets and resellers':section==='payments'?'Payments and wallet operations':section==='plans'?'Subscription plans and pricing':section==='nodes'?'Nodes and VPN cores':section==='system'?'Panel configuration':'Details' }}</p>
+          <h2>{{ section==='overview'?t('nav.dashboard'):section==='customers'||section==='resellers'||section==='tickets'?t('nav.users'):section==='customer-detail'?t('page.user_detail'):section==='payments'?t('nav.transactions'):section==='plans'?t('nav.plans'):section==='nodes'?t('nav.services'):section==='system'?t('nav.settings'):'Panel' }}</h2>
+          <p>{{ section==='overview'?`${t('label.welcome_back')}, ${user.username}`:section==='customers'||section==='tickets'||section==='resellers'?'Manage accounts, tickets and resellers':section==='payments'?'Payments and wallet operations':section==='plans'?'Subscription plans and pricing':section==='nodes'?'Nodes and VPN cores':section==='system'?'Panel configuration':'Details' }}</p>
         </div>
         <div class="topbar-right">
           <div class="search-box">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
-            <input v-model="search" @keyup.enter="loadDashboard" placeholder="Search...">
+            <input v-model="search" @keyup.enter="loadDashboard" :placeholder="t('label.search')">
           </div>
           <div :class="['status-dot',{offline:!realtimeConnected}]" :title="realtimeConnected?'Connected':'Disconnected'"></div>
           <button class="icon-btn" title="Notifications">
@@ -1055,25 +1069,25 @@ onUnmounted(() => {
         <div class="grid g4">
           <div class="card stat-card" style="cursor:pointer" @click="section='payments'">
             <div class="ic" style="background:rgba(91,157,255,.12);color:var(--brand)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg></div>
-            <div class="lbl">Revenue</div>
+            <div class="lbl">{{ t('stat.revenue') }}</div>
             <h3>{{ formatMoney(stats.approved_payments) }}</h3>
             <div class="trend"><b>{{ stats.pending_payments }}</b> pending</div>
           </div>
           <div class="card stat-card" style="cursor:pointer" @click="section='customers'">
             <div class="ic" style="background:rgba(124,92,255,.12);color:var(--brand-2)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0113 0"/></svg></div>
-            <div class="lbl">Active Users</div>
+            <div class="lbl">{{ t('stat.active_users') }}</div>
             <h3>{{ stats.active_customers }}</h3>
             <div class="trend"><b>{{ activePercent }}%</b> of {{ stats.customers }}</div>
           </div>
           <div class="card stat-card" style="cursor:pointer" @click="section='nodes'">
             <div class="ic" style="background:rgba(52,211,153,.12);color:var(--green)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="6" rx="1"/><rect x="3" y="14" width="18" height="6" rx="1"/></svg></div>
-            <div class="lbl">Nodes Online</div>
+            <div class="lbl">{{ t('stat.nodes_online') }}</div>
             <h3>{{ stats.nodes }}</h3>
             <div class="trend"><b>{{ liveSessions.length }}</b> connections</div>
           </div>
           <div class="card stat-card" style="cursor:pointer" @click="section='tickets'">
             <div class="ic" style="background:rgba(248,113,113,.12);color:var(--red)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg></div>
-            <div class="lbl">Open Tickets</div>
+            <div class="lbl">{{ t('stat.open_tickets') }}</div>
             <h3>{{ stats.open_tickets }}</h3>
             <div class="trend">{{ stats.open_tickets?'Needs attention':'All clear' }}</div>
           </div>
@@ -1083,7 +1097,7 @@ onUnmounted(() => {
         <div class="grid g2" style="margin-top:16px">
           <div class="card">
             <div class="card-head">
-              <div><h4>Usage Monitor</h4><div class="sub">Network traffic over time</div></div>
+              <div><h4>{{ t('label.usage_monitor') }}</h4><div class="sub">Network traffic over time</div></div>
               <div class="tabs">
                 <button :class="{on:usageTimeFilter==='day'}" @click="usageTimeFilter='day'">Day</button>
                 <button :class="{on:usageTimeFilter==='week'}" @click="usageTimeFilter='week'">Week</button>
@@ -1104,7 +1118,7 @@ onUnmounted(() => {
           </div>
 
           <div class="card">
-            <div class="card-head"><div><h4>User Status</h4><div class="sub">Account distribution</div></div></div>
+            <div class="card-head"><div><h4>{{ t('label.user_status') }}</h4><div class="sub">Account distribution</div></div></div>
             <div class="donut-wrap">
               <div class="donut">
                 <svg width="150" height="150" viewBox="0 0 190 190" style="transform:rotate(-90deg)">
@@ -1127,8 +1141,8 @@ onUnmounted(() => {
         <!-- Recent Users -->
         <div class="card" style="margin-top:16px">
           <div class="card-head">
-            <div><h4>Recent Users</h4><div class="sub">Latest accounts</div></div>
-            <button class="btn-ghost btn-sm" @click="section='customers'">View All</button>
+            <div><h4>{{ t('label.recent_users') }}</h4><div class="sub">{{ t('label.latest_accounts') }}</div></div>
+            <button class="btn-ghost btn-sm" @click="section='customers'">{{ t('btn.view_all') }}</button>
           </div>
           <div class="table-wrap">
             <table>
@@ -1148,7 +1162,7 @@ onUnmounted(() => {
 
         <!-- Live Sessions -->
         <div class="card" style="margin-top:16px">
-          <div class="card-head"><div><h4>Live Sessions</h4><div class="sub">{{ liveSessions.length }} active</div></div></div>
+          <div class="card-head"><div><h4>{{ t('label.live_sessions') }}</h4><div class="sub">{{ liveSessions.length }} active</div></div></div>
           <div class="table-wrap">
             <table>
               <thead><tr><th>User</th><th>IP</th><th>Node</th><th>Duration</th><th></th></tr></thead>
@@ -1177,8 +1191,8 @@ onUnmounted(() => {
             <button :class="{on:section==='tickets'}" @click="section='tickets'">Tickets</button>
             <button v-if="user.role==='owner'||user.role==='admin'" :class="{on:section==='resellers'}" @click="section='resellers';loadResellers()">Resellers</button>
           </div>
-          <button v-if="section==='customers'" class="btn-primary btn-sm" style="margin-left:auto" @click="customerModalOpen=true">+ New User</button>
-          <button v-if="section==='tickets'" class="btn-primary btn-sm" style="margin-left:auto" @click="adminTicketForm={username:'',subject:'',priority:'normal',message:''}">+ New Ticket</button>
+          <button v-if="section==='customers'" class="btn-primary btn-sm" style="margin-left:auto" @click="customerModalOpen=true">{{ t('btn.new_user') }}</button>
+          <button v-if="section==='tickets'" class="btn-primary btn-sm" style="margin-left:auto" @click="adminTicketForm={username:'',subject:'',priority:'normal',message:''}">{{ t('btn.new_ticket') }}</button>
         </div>
 
         <!-- Accounts sub-view -->
