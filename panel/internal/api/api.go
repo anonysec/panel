@@ -26,6 +26,7 @@ import (
 	"koris-next/panel/internal/auth"
 	"koris-next/panel/internal/config"
 	"koris-next/panel/internal/notify"
+	"koris-next/panel/internal/templates"
 
 	"github.com/gorilla/websocket"
 )
@@ -1839,6 +1840,36 @@ func (s *Server) vpnSettings(w http.ResponseWriter, r *http.Request) {
 			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "missing_required_settings"})
 			return
 		}
+		// Validate network CIDRs are private RFC1918 ranges
+		if err := templates.ValidatePrivateNetwork(in.OpenVPNNetwork, false); err != nil {
+			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid openvpn_network: " + err.Error()})
+			return
+		}
+		if err := templates.ValidatePrivateNetwork(in.L2TPNetwork, false); err != nil {
+			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid l2tp_network: " + err.Error()})
+			return
+		}
+		if err := templates.ValidatePrivateNetwork(in.IKEv2Network, false); err != nil {
+			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid ikev2_network: " + err.Error()})
+			return
+		}
+		// Validate port, protocol, and DNS
+		if err := templates.ValidatePort(in.OpenVPNPort); err != nil {
+			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": err.Error()})
+			return
+		}
+		if err := templates.ValidateProtocol(in.OpenVPNProtocol); err != nil {
+			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": err.Error()})
+			return
+		}
+		if err := templates.ValidateDNS(in.DNS1); err != nil {
+			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid dns_1: " + err.Error()})
+			return
+		}
+		if err := templates.ValidateDNS(in.DNS2); err != nil {
+			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid dns_2: " + err.Error()})
+			return
+		}
 		_, err := s.DB.Exec(`INSERT INTO vpn_core_settings(id,openvpn_port,openvpn_protocol,openvpn_network,l2tp_network,ikev2_network,ipsec_psk,dns_1,dns_2)
 			VALUES(1,?,?,?,?,?,?,?,?)
 			ON DUPLICATE KEY UPDATE openvpn_port=VALUES(openvpn_port),openvpn_protocol=VALUES(openvpn_protocol),openvpn_network=VALUES(openvpn_network),l2tp_network=VALUES(l2tp_network),ikev2_network=VALUES(ikev2_network),ipsec_psk=VALUES(ipsec_psk),dns_1=VALUES(dns_1),dns_2=VALUES(dns_2)`, in.OpenVPNPort, in.OpenVPNProtocol, in.OpenVPNNetwork, in.L2TPNetwork, in.IKEv2Network, nullString(in.IPSecPSK), in.DNS1, in.DNS2)
@@ -1899,6 +1930,17 @@ func fileExists(path string) (os.FileInfo, bool) {
 }
 
 func applyOpenVPNServerConfig(v VPNSettings) error {
+	// Validate before any file operations
+	if err := templates.ValidatePrivateNetwork(v.OpenVPNNetwork, false); err != nil {
+		return fmt.Errorf("network validation failed: %w", err)
+	}
+	if err := templates.ValidatePort(v.OpenVPNPort); err != nil {
+		return fmt.Errorf("port validation failed: %w", err)
+	}
+	if err := templates.ValidateProtocol(v.OpenVPNProtocol); err != nil {
+		return fmt.Errorf("protocol validation failed: %w", err)
+	}
+
 	conf := strings.TrimSpace(os.Getenv("PANEL_OPENVPN_SERVER_CONF"))
 	if conf == "" {
 		conf = "/etc/openvpn/server/server.conf"

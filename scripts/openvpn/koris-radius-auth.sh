@@ -59,6 +59,21 @@ if [[ "$MAX_DATA" =~ ^[0-9]+$ ]] && [ "$MAX_DATA" -gt 0 ] && [[ "$USED_BYTES" =~
   reject "$USER_NAME" "data limit reached used=${USED_BYTES} max=${MAX_DATA}"
 fi
 
+# Connection limit double-enforcement (in addition to FreeRADIUS Simultaneous-Use)
+MAX_SESSIONS="$(mysql -N -B -u root "$DB" -e "SELECT CAST(value AS UNSIGNED) FROM radcheck WHERE username='${SQL_USER}' AND attribute='Simultaneous-Use' ORDER BY id DESC LIMIT 1" 2>>"$LOG" || echo "")"
+if [[ "${MAX_SESSIONS:-}" =~ ^[0-9]+$ ]] && [ "${MAX_SESSIONS}" -gt 0 ]; then
+  ACTIVE_SESSIONS="$(mysql -N -B -u root "$DB" -e "SELECT COUNT(*) FROM radacct WHERE username='${SQL_USER}' AND acctstoptime IS NULL" 2>>"$LOG" || echo "")"
+  if [[ "${ACTIVE_SESSIONS:-}" =~ ^[0-9]+$ ]]; then
+    echo "$(date -Is) CONN_LIMIT user=$USER_NAME active=$ACTIVE_SESSIONS max=$MAX_SESSIONS" >> "$LOG"
+    if [ "$ACTIVE_SESSIONS" -ge "$MAX_SESSIONS" ]; then
+      reject "$USER_NAME" "connection limit reached: active=$ACTIVE_SESSIONS max=$MAX_SESSIONS"
+    fi
+  else
+    # DB query failed - fail open, let RADIUS handle it
+    echo "$(date -Is) CONN_LIMIT_ERROR user=$USER_NAME query_failed (fail-open)" >> "$LOG"
+  fi
+fi
+
 # First-connection activation: if there's a pending subscription with activate_on_connect=1,
 # set first_connect_at and calculate expires_at based on plan duration_days.
 PENDING_SUB="$(mysql -N -B -u root "$DB" -e "SELECT s.id, COALESCE(p.duration_days,0) FROM subscriptions s LEFT JOIN plans p ON p.id=s.plan_id WHERE s.username='${SQL_USER}' AND s.activate_on_connect=1 AND s.first_connect_at IS NULL ORDER BY s.id DESC LIMIT 1" 2>>"$LOG" || true)"
