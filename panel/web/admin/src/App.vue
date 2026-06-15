@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 
 type Screen = 'loading' | 'setup' | 'login' | 'app'
-type Section = 'overview' | 'customers' | 'customer-detail' | 'plans' | 'payments' | 'tickets' | 'resellers' | 'nodes' | 'system'
+type Section = 'overview' | 'analytics' | 'customers' | 'customer-detail' | 'plans' | 'payments' | 'tickets' | 'resellers' | 'nodes' | 'system'
 
 interface SetupStatus { ok: boolean; needs_setup: boolean; setup_key_required: boolean }
 interface AuthResponse { ok: boolean; authenticated?: boolean; username?: string; role?: string; credit?: number }
@@ -53,7 +53,7 @@ const nodeTasks = ref<NodeTask[]>([])
 const vpnSettings = ref<VPNSettings | null>(null)
 const selectedCustomer = ref<CustomerDetail | null>(null)
 const detailTab = ref<'profile' | 'usage' | 'history'>('profile')
-const systemTab = ref<'audit' | 'backups' | 'diagnostics' | 'telegram' | 'certificates' | 'panel'>('diagnostics')
+const systemTab = ref<'audit' | 'backups' | 'diagnostics' | 'telegram' | 'certificates' | 'panel' | 'vpn'>('diagnostics')
 const infraTab = ref<'nodes' | 'vpn'>('nodes')
 
 // Phase 2/3 state
@@ -64,6 +64,8 @@ const certForm = ref({ name: '', type: 'ca', content: '', node_id: 0, is_default
 const nodeVPNConfigs = ref<Record<number, any[]>>({})
 const selectedNodeVPN = ref<number>(0)
 const vpnConfigForm = ref({ protocol: 'openvpn', enabled: true, port: 1194, network: '10.8.0.0/24', extra_json: '{}' })
+const usageTimeFilter = ref<'day' | 'week' | 'month'>('day')
+const paymentMethodTab = ref<'list' | 'form'>('list')
 const customerView = ref<'active' | 'archived' | 'online' | 'limited' | 'disabled' | 'expired'>('active')
 const selectedUsage = ref<UsageSummary | null>(null)
 const search = ref('')
@@ -782,9 +784,35 @@ watch(notice, (message) => {
   }, 4000)
 })
 
+watch(error, (message) => {
+  if (!message) return
+  window.setTimeout(() => {
+    if (error.value === message) error.value = ''
+  }, 6000)
+})
+
 watch(section, (newSec) => {
   window.location.hash = '/' + newSec
 })
+
+// Keyboard: Escape closes modals
+function handleEscape(e: KeyboardEvent) {
+  if (e.key !== 'Escape') return
+  if (selectedTicket.value) { selectedTicket.value = null; return }
+  if (planModalOpen.value) { planModalOpen.value = false; return }
+  if (nodeModalOpen.value) { nodeModalOpen.value = false; return }
+  if (customerModalOpen.value) { customerModalOpen.value = false; return }
+  if (section.value === 'customer-detail' && selectedCustomer.value) { section.value = 'customers'; selectedCustomer.value = null; return }
+}
+
+// Pagination for payments
+const paymentsPage = ref(1)
+const paymentsPerPage = 20
+const paginatedPayments = computed(() => {
+  const start = (paymentsPage.value - 1) * paymentsPerPage
+  return payments.value.slice(start, start + paymentsPerPage)
+})
+const paymentsTotalPages = computed(() => Math.max(1, Math.ceil(payments.value.length / paymentsPerPage)))
 
 async function loadPanelSettings() {
   panelSettingsLoading.value = true
@@ -850,18 +878,20 @@ async function saveNodeVPNConfig(nodeId: number) {
   finally { busy.value = false }
 }
 
-// Usage monitor time filter
-const usageTimeFilter = ref<'day' | 'week' | 'month'>('day')
-
 onMounted(() => {
   if (window.location.pathname !== '/dashboard/' && window.location.pathname !== '/dashboard') {
     window.history.replaceState(null, '', '/dashboard/' + window.location.hash)
   }
   const hash = window.location.hash.replace('#/', '').replace('#', '')
-  if (hash && ['overview', 'customers', 'plans', 'payments', 'tickets', 'resellers', 'nodes', 'system', 'customer-detail'].includes(hash)) {
+  if (hash && ['overview', 'analytics', 'customers', 'plans', 'payments', 'tickets', 'resellers', 'nodes', 'system', 'customer-detail'].includes(hash)) {
     section.value = hash as Section
   }
+  window.addEventListener('keydown', handleEscape)
   boot()
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleEscape)
 })
 </script>
 
@@ -904,10 +934,10 @@ onMounted(() => {
       <button class="nav-item" :class="{active:section==='overview'}" @click="section='overview'">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>Dashboard
       </button>
-      <button class="nav-item" :class="{active:section==='payments'&&!search}" @click="section='payments'">
+      <button class="nav-item" :class="{active:section==='analytics'}" @click="section='analytics'">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>Analytics
       </button>
-      <button class="nav-item" :class="{active:section==='payments'&&!!search}" @click="section='payments'">
+      <button class="nav-item" :class="{active:section==='payments'}" @click="section='payments'">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>Transactions
       </button>
 
@@ -938,18 +968,23 @@ onMounted(() => {
     </aside>
 
     <main class="main">
-      <!-- Toast -->
+      <!-- Toast (success/error) -->
       <div v-if="notice" class="toast success" @click="notice=''">
         <svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
         {{ notice }}
         <span class="toast-close" @click.stop="notice=''">&#x2715;</span>
       </div>
+      <div v-if="error" class="toast error" @click="error=''">
+        <svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+        {{ error }}
+        <span class="toast-close" @click.stop="error=''">&#x2715;</span>
+      </div>
 
       <!-- Topbar -->
       <div class="topbar">
         <div class="topbar-left">
-          <h2>{{ section==='overview'?'Dashboard':section==='customers'||section==='resellers'||section==='tickets'?'Users':section==='customer-detail'?'User Detail':section==='payments'?'Transactions':section==='plans'?'Plans':section==='nodes'?'Services':section==='system'?'Settings':'Panel' }}</h2>
-          <p>{{ section==='overview'?`Welcome back, ${user.username}`:section==='customers'||section==='tickets'||section==='resellers'?'Manage accounts, tickets and resellers':section==='payments'?'Payments and wallet operations':section==='plans'?'Subscription plans and pricing':section==='nodes'?'Nodes and VPN cores':section==='system'?'Panel configuration':'Details' }}</p>
+          <h2>{{ section==='overview'?'Dashboard':section==='analytics'?'Analytics':section==='customers'||section==='resellers'||section==='tickets'?'Users':section==='customer-detail'?'User Detail':section==='payments'?'Transactions':section==='plans'?'Plans':section==='nodes'?'Services':section==='system'?'Settings':'Panel' }}</h2>
+          <p>{{ section==='overview'?`Welcome back, ${user.username}`:section==='analytics'?'Revenue, bandwidth and session insights':section==='customers'||section==='tickets'||section==='resellers'?'Manage accounts, tickets and resellers':section==='payments'?'Payments and wallet operations':section==='plans'?'Subscription plans and pricing':section==='nodes'?'Nodes and VPN cores':section==='system'?'Panel configuration':'Details' }}</p>
         </div>
         <div class="topbar-right">
           <div class="search-box">
@@ -963,10 +998,23 @@ onMounted(() => {
           </button>
         </div>
       </div>
-      <p v-if="error" class="alert danger">{{ error }}</p>
 
       <!-- ===== DASHBOARD ===== -->
       <div v-if="section==='overview'" class="page">
+        <!-- Skeleton loading state -->
+        <template v-if="appLoading&&!stats.customers">
+          <div class="grid g4">
+            <div class="card skeleton skeleton-card"></div>
+            <div class="card skeleton skeleton-card"></div>
+            <div class="card skeleton skeleton-card"></div>
+            <div class="card skeleton skeleton-card"></div>
+          </div>
+          <div class="grid g2" style="margin-top:16px">
+            <div class="card skeleton" style="height:240px"></div>
+            <div class="card skeleton" style="height:240px"></div>
+          </div>
+        </template>
+        <template v-else>
         <div class="grid g4">
           <div class="card stat-card">
             <div class="ic" style="background:rgba(91,157,255,.12);color:var(--brand)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg></div>
@@ -1059,6 +1107,99 @@ onMounted(() => {
             </table>
           </div>
         </div>
+        </template>
+      </div>
+
+      <!-- ===== ANALYTICS ===== -->
+      <div v-else-if="section==='analytics'" class="page">
+        <div class="grid g4">
+          <div class="card stat-card">
+            <div class="ic" style="background:rgba(91,157,255,.12);color:var(--brand)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg></div>
+            <div class="lbl">Total Revenue</div>
+            <h3>{{ formatMoney(stats.approved_payments) }}</h3>
+            <div class="trend"><b>{{ stats.pending_payments }}</b> pending approval</div>
+          </div>
+          <div class="card stat-card">
+            <div class="ic" style="background:rgba(124,92,255,.12);color:var(--brand-2)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0113 0"/></svg></div>
+            <div class="lbl">Active Users</div>
+            <h3>{{ stats.active_customers }}</h3>
+            <div class="trend"><b>{{ activePercent }}%</b> of {{ stats.customers }} total</div>
+          </div>
+          <div class="card stat-card">
+            <div class="ic" style="background:rgba(52,211,153,.12);color:var(--green)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="6" rx="1"/><rect x="3" y="14" width="18" height="6" rx="1"/></svg></div>
+            <div class="lbl">Nodes Online</div>
+            <h3>{{ stats.nodes }}</h3>
+            <div class="trend"><b>{{ liveSessions.length }}</b> active sessions</div>
+          </div>
+          <div class="card stat-card">
+            <div class="ic" style="background:rgba(248,113,113,.12);color:var(--red)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg></div>
+            <div class="lbl">Plans Active</div>
+            <h3>{{ stats.plans }}</h3>
+            <div class="trend">{{ activePlans.length }} sellable</div>
+          </div>
+        </div>
+
+        <div class="grid g2" style="margin-top:16px">
+          <div class="card">
+            <div class="card-head">
+              <div><h4>Bandwidth</h4><div class="sub">Real-time throughput</div></div>
+              <div class="tabs">
+                <button :class="{on:usageTimeFilter==='day'}" @click="usageTimeFilter='day'">Day</button>
+                <button :class="{on:usageTimeFilter==='week'}" @click="usageTimeFilter='week'">Week</button>
+                <button :class="{on:usageTimeFilter==='month'}" @click="usageTimeFilter='month'">Month</button>
+              </div>
+            </div>
+            <div class="chart-wrap">
+              <svg viewBox="0 0 360 60" preserveAspectRatio="none" style="width:100%;height:100%">
+                <polyline fill="none" stroke="var(--brand)" stroke-width="2" :points="rxPoints"/>
+                <polyline fill="none" stroke="var(--brand-2)" stroke-width="2" :points="txPoints"/>
+              </svg>
+            </div>
+            <div class="legend">
+              <span><i style="background:var(--brand)"></i>&#8595; {{ formatBytes((stats.total_rx_bps||0)/8) }}/s</span>
+              <span><i style="background:var(--brand-2)"></i>&#8593; {{ formatBytes((stats.total_tx_bps||0)/8) }}/s</span>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-head"><div><h4>User Distribution</h4><div class="sub">Status breakdown</div></div></div>
+            <div class="donut-wrap">
+              <div class="donut">
+                <svg width="150" height="150" viewBox="0 0 190 190" style="transform:rotate(-90deg)">
+                  <circle r="65" cx="95" cy="95" fill="none" stroke="var(--brand)" stroke-width="20" :stroke-dasharray="`${(statusSummary.active/Math.max(stats.customers,1))*408} 408`"/>
+                  <circle r="65" cx="95" cy="95" fill="none" stroke="var(--amber)" stroke-width="20" :stroke-dasharray="`${((statusSummary.limited||0)/Math.max(stats.customers,1))*408} 408`" :stroke-dashoffset="`${-(statusSummary.active/Math.max(stats.customers,1))*408}`"/>
+                  <circle r="65" cx="95" cy="95" fill="none" stroke="var(--red)" stroke-width="20" :stroke-dasharray="`${((statusSummary.expired||0)/Math.max(stats.customers,1))*408} 408`" :stroke-dashoffset="`${-((statusSummary.active+(statusSummary.limited||0))/Math.max(stats.customers,1))*408}`"/>
+                </svg>
+                <div class="center"><b>{{ stats.customers }}</b><small>Total</small></div>
+              </div>
+              <div class="dlist">
+                <div class="row"><i style="background:var(--brand)"></i>Active<span class="v">{{ statusSummary.active }}</span></div>
+                <div class="row"><i style="background:var(--amber)"></i>Limited<span class="v">{{ statusSummary.limited||0 }}</span></div>
+                <div class="row"><i style="background:var(--red)"></i>Expired<span class="v">{{ statusSummary.expired||0 }}</span></div>
+                <div class="row"><i style="background:var(--muted)"></i>Disabled<span class="v">{{ statusSummary.disabled||0 }}</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Live Sessions -->
+        <div class="card" style="margin-top:16px">
+          <div class="card-head"><div><h4>Live Sessions</h4><div class="sub">{{ liveSessions.length }} active connections</div></div></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>User</th><th>IP</th><th>Node</th><th>Duration</th><th></th></tr></thead>
+              <tbody>
+                <tr v-for="s in liveSessions.slice(0,15)" :key="s.id">
+                  <td style="font-weight:500">{{ s.username||'&#8212;' }}</td>
+                  <td style="color:var(--muted)">{{ s.framed_ip||s.calling_station_id||'&#8212;' }}</td>
+                  <td>{{ s.node_name||'&#8212;' }}</td>
+                  <td>{{ formatDuration(s.session_seconds) }}</td>
+                  <td><button class="btn-danger btn-sm" @click="killSession(s.id)">Kill</button></td>
+                </tr>
+                <tr v-if="!liveSessions.length"><td colspan="5" class="empty-state"><p>No active sessions right now</p></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
       <!-- ===== USERS (Accounts | Tickets | Resellers) with status filters ===== -->
@@ -1103,7 +1244,7 @@ onMounted(() => {
                       <button v-else class="btn-primary btn-sm" @click="restoreDeletedCustomer(c as any)">Restore</button>
                     </td>
                   </tr>
-                  <tr v-if="!filteredCustomers.length"><td colspan="6" class="empty-state"><p>No users found</p></td></tr>
+                  <tr v-if="!filteredCustomers.length"><td colspan="6" class="empty-state"><p>No users found</p><div class="action"><button class="btn-primary btn-sm" @click="customerModalOpen=true">+ Create User</button></div></td></tr>
                 </tbody>
               </table>
             </div>
@@ -1126,7 +1267,7 @@ onMounted(() => {
                       <td style="color:var(--muted)">{{ formatDate(t.created_at) }}</td>
                       <td><button class="btn-ghost btn-sm" @click.stop="loadTicket(t.id)">View</button></td>
                     </tr>
-                    <tr v-if="!tickets.filter(t=>t.status==='open').length"><td colspan="5" class="empty-state"><p>No open tickets</p></td></tr>
+                    <tr v-if="!tickets.filter(t=>t.status==='open').length"><td colspan="5" class="empty-state"><p>No open tickets — all clear</p></td></tr>
                   </tbody>
                 </table>
               </div>
@@ -1177,7 +1318,7 @@ onMounted(() => {
                       </td>
                       <td><button class="btn-danger btn-sm" @click="deleteReseller(r.id)">Delete</button></td>
                     </tr>
-                    <tr v-if="!resellersList.length"><td colspan="4" class="empty-state"><p>No resellers</p></td></tr>
+                    <tr v-if="!resellersList.length"><td colspan="4" class="empty-state"><p>No resellers yet. Create one using the form.</p></td></tr>
                   </tbody>
                 </table>
               </div>
@@ -1187,22 +1328,60 @@ onMounted(() => {
       </div>
 
       <!-- ===== TRANSACTIONS (Analytics/Payments) ===== -->
+      <!-- ===== TRANSACTIONS ===== -->
       <div v-else-if="section==='payments'" class="page">
         <div class="grid" style="grid-template-columns:340px 1fr;gap:16px">
-          <div class="card">
-            <div class="card-head"><h4>Record Payment</h4></div>
-            <form class="form-stack" @submit.prevent="createManualPayment">
-              <label>Username<input v-model.trim="paymentForm.username" required/></label>
-              <label>Amount<input v-model.number="paymentForm.amount" type="number" min="0" required/></label>
-              <label>Method
-                <select v-model="paymentForm.method">
-                  <option value="manual">Manual</option>
-                  <option v-for="m in paymentMethods.filter(m=>m.is_active)" :key="m.id" :value="m.name">{{ m.name }}</option>
-                </select>
-              </label>
-              <label>Note<textarea v-model.trim="paymentForm.description" placeholder="Optional note"></textarea></label>
-              <button class="btn-primary" :disabled="busy">Record</button>
-            </form>
+          <div>
+            <div class="card" style="margin-bottom:16px">
+              <div class="card-head"><h4>Record Payment</h4></div>
+              <form class="form-stack" @submit.prevent="createManualPayment">
+                <label>Username<input v-model.trim="paymentForm.username" required/></label>
+                <label>Amount<input v-model.number="paymentForm.amount" type="number" min="0" required/></label>
+                <label>Method
+                  <select v-model="paymentForm.method">
+                    <option value="manual">Manual</option>
+                    <option v-for="m in paymentMethods.filter(m=>m.is_active)" :key="m.id" :value="m.name">{{ m.name }}</option>
+                  </select>
+                </label>
+                <label>Note<textarea v-model.trim="paymentForm.description" placeholder="Optional note"></textarea></label>
+                <button class="btn-primary" :disabled="busy">Record</button>
+              </form>
+            </div>
+
+            <!-- Payment Methods -->
+            <div class="card">
+              <div class="card-head">
+                <h4>Payment Methods</h4>
+                <button class="btn-ghost btn-sm" @click="paymentMethodTab=paymentMethodTab==='list'?'form':'list'">{{ paymentMethodTab==='list'?'+ Add':'Back' }}</button>
+              </div>
+              <template v-if="paymentMethodTab==='form'">
+                <form class="form-stack" @submit.prevent="savePaymentMethod">
+                  <label>Name<input v-model.trim="methodForm.name" required placeholder="e.g. Card Transfer"/></label>
+                  <label>Type
+                    <select v-model="methodForm.type">
+                      <option value="manual">Manual</option>
+                      <option value="gateway">Gateway</option>
+                      <option value="crypto">Crypto</option>
+                    </select>
+                  </label>
+                  <label>Instructions<textarea v-model.trim="methodForm.instructions" placeholder="Payment instructions shown to user"></textarea></label>
+                  <label style="display:flex;align-items:center;gap:8px;flex-direction:row"><input v-model="methodForm.is_active" type="checkbox" style="width:16px;min-height:16px"/>Active</label>
+                  <div class="action-row">
+                    <button class="btn-primary btn-sm" :disabled="busy">{{ editingMethodId?'Update':'Create' }}</button>
+                    <button v-if="editingMethodId" type="button" class="btn-ghost btn-sm" @click="resetMethodForm()">Cancel</button>
+                  </div>
+                </form>
+              </template>
+              <template v-else>
+                <div v-for="m in paymentMethods" :key="m.id" style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)">
+                  <div style="flex:1"><b style="font-size:12.5px">{{ m.name }}</b><div style="font-size:11px;color:var(--muted)">{{ m.type }}</div></div>
+                  <span class="pill" :class="m.is_active?'ok':'bad'" style="font-size:9px">{{ m.is_active?'On':'Off' }}</span>
+                  <button class="btn-ghost btn-sm" @click="editPaymentMethod(m);paymentMethodTab='form'">Edit</button>
+                  <button v-if="m.is_active" class="btn-danger btn-sm" @click="deactivatePaymentMethod(m)">Off</button>
+                </div>
+                <div v-if="!paymentMethods.length" class="empty-state" style="padding:16px 0"><p>No payment methods. Click + Add to create one.</p></div>
+              </template>
+            </div>
           </div>
           <div class="card">
             <div class="card-head"><div><h4>Payment History</h4><div class="sub">{{ payments.length }} records</div></div></div>
@@ -1210,7 +1389,7 @@ onMounted(() => {
               <table>
                 <thead><tr><th>User</th><th>Amount</th><th>Method</th><th>Status</th><th>Date</th><th></th></tr></thead>
                 <tbody>
-                  <tr v-for="p in payments" :key="p.id">
+                  <tr v-for="p in paginatedPayments" :key="p.id">
                     <td><div class="user-cell"><div class="av" :style="{background:`linear-gradient(135deg,hsl(${p.id*53%360},65%,50%),hsl(${p.id*89%360},65%,40%))`}">{{ (p.username||'?')[0].toUpperCase() }}</div>{{ p.username }}</div></td>
                     <td style="font-weight:600">{{ formatMoney(p.amount) }}</td>
                     <td>{{ p.method }}</td>
@@ -1225,6 +1404,11 @@ onMounted(() => {
                   </tr>
                 </tbody>
               </table>
+            </div>
+            <div v-if="paymentsTotalPages>1" class="pagination">
+              <button :disabled="paymentsPage<=1" @click="paymentsPage--">&laquo;</button>
+              <span class="page-info">Page {{ paymentsPage }} of {{ paymentsTotalPages }}</span>
+              <button :disabled="paymentsPage>=paymentsTotalPages" @click="paymentsPage++">&raquo;</button>
             </div>
           </div>
         </div>
@@ -1425,6 +1609,7 @@ onMounted(() => {
             <button :class="{on:systemTab==='panel'}" @click="systemTab='panel';loadPanelSettings()">Panel Settings</button>
             <button :class="{on:systemTab==='telegram'}" @click="systemTab='telegram';loadPanelSettings()">Telegram Bot</button>
             <button :class="{on:systemTab==='certificates'}" @click="systemTab='certificates';loadCertificates()">Certificates</button>
+            <button :class="{on:systemTab==='vpn'}" @click="systemTab='vpn'">VPN Settings</button>
             <button :class="{on:systemTab==='audit'}" @click="systemTab='audit'">Audit Logs</button>
             <button :class="{on:systemTab==='backups'}" @click="systemTab='backups'">Backup &amp; Export</button>
           </div>
@@ -1546,6 +1731,54 @@ onMounted(() => {
                   <tr v-if="!certificatesList.length"><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">No certificates uploaded</td></tr>
                 </tbody>
               </table>
+            </div>
+          </div>
+
+          <!-- VPN Settings -->
+          <div v-else-if="systemTab==='vpn'" class="card">
+            <div class="card-head"><h4>VPN Global Settings</h4></div>
+            <form class="form-stack" @submit.prevent="saveVPNSettings(false)">
+              <div class="two-col">
+                <label>OpenVPN Port<input v-model.number="vpnForm.openvpn_port" type="number" min="1" max="65535"/></label>
+                <label>OpenVPN Protocol
+                  <select v-model="vpnForm.openvpn_protocol">
+                    <option value="udp">UDP</option>
+                    <option value="tcp">TCP</option>
+                  </select>
+                </label>
+              </div>
+              <div class="two-col">
+                <label>OpenVPN Network<input v-model.trim="vpnForm.openvpn_network" placeholder="10.8.0.0/24"/></label>
+                <label>L2TP Network<input v-model.trim="vpnForm.l2tp_network" placeholder="10.9.0.0/24"/></label>
+              </div>
+              <div class="two-col">
+                <label>IKEv2 Network<input v-model.trim="vpnForm.ikev2_network" placeholder="10.10.0.0/24"/></label>
+                <label>IPSec PSK<input v-model.trim="vpnForm.ipsec_psk" placeholder="Pre-shared key"/></label>
+              </div>
+              <div class="two-col">
+                <label>DNS 1<input v-model.trim="vpnForm.dns_1" placeholder="1.1.1.1"/></label>
+                <label>DNS 2<input v-model.trim="vpnForm.dns_2" placeholder="8.8.8.8"/></label>
+              </div>
+              <div class="action-row">
+                <button class="btn-primary" :disabled="busy">Save Settings</button>
+                <button type="button" class="btn-ghost" :disabled="busy" @click="saveVPNSettings(true)">Save &amp; Apply</button>
+              </div>
+            </form>
+            <div v-if="vpnSettings" style="margin-top:16px;border-top:1px solid var(--border);padding-top:12px">
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+                <div style="text-align:center;padding:8px;border:1px solid var(--border);border-radius:8px">
+                  <div style="color:var(--muted);font-size:10px;text-transform:uppercase">OpenVPN</div>
+                  <span class="pill" :class="vpnSettings.openvpn_service_status==='running'?'ok':'bad'" style="margin-top:4px">{{ vpnSettings.openvpn_service_status||'unknown' }}</span>
+                </div>
+                <div style="text-align:center;padding:8px;border:1px solid var(--border);border-radius:8px">
+                  <div style="color:var(--muted);font-size:10px;text-transform:uppercase">CA Cert</div>
+                  <span class="pill" :class="vpnSettings.ca_exists?'ok':'bad'" style="margin-top:4px">{{ vpnSettings.ca_exists?'Installed':'Missing' }}</span>
+                </div>
+                <div style="text-align:center;padding:8px;border:1px solid var(--border);border-radius:8px">
+                  <div style="color:var(--muted);font-size:10px;text-transform:uppercase">TLS-Crypt</div>
+                  <span class="pill" :class="vpnSettings.tls_crypt_exists?'ok':'bad'" style="margin-top:4px">{{ vpnSettings.tls_crypt_exists?'Installed':'Missing' }}</span>
+                </div>
+              </div>
             </div>
           </div>
 
