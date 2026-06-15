@@ -314,191 +314,268 @@ function formatDate(value?: string) {
 onMounted(boot)
 </script>
 
-<template>
-  <main v-if="screen === 'loading'" class="portal loading"><span class="loader"></span><p>Opening portal…</p></main>
 
-  <main v-else-if="screen === 'login'" class="portal auth">
-    <section class="hero-card">
-      <span class="brand">K</span>
-      <h1>Customer portal</h1>
-      <p>Access subscription status, wallet, VPN profile and support from a clean compact dashboard.</p>
-      <div class="chips"><span>OpenVPN</span><span>L2TP</span><span>IKEv2</span></div>
-      <div class="trust-stack">
-        <div><b>Secure login</b><small>Uses the same Radius credentials</small></div>
-        <div><b>Live account</b><small>Plan, wallet and status in one view</small></div>
+<template>
+  <!-- Loading -->
+  <div v-if="screen === 'loading'" class="loading">
+    <div class="spinner"></div>
+    <p>Opening portal...</p>
+  </div>
+
+  <!-- Login -->
+  <div v-else-if="screen === 'login'" class="auth-screen">
+    <div class="auth-hero">
+      <div class="logo-row">
+        <div class="logo">K</div>
+        <div>
+          <b style="font-size:17px">KorisPanel</b>
+          <small style="color:var(--muted);font-size:12px">Customer Portal</small>
+        </div>
       </div>
-    </section>
-    <section class="login-card">
-      <span class="eyebrow">Portal login</span>
+      <h1>Access your<br>VPN account</h1>
+      <p>View subscription status, download connection profiles, manage your wallet, and get support from one clean dashboard.</p>
+      <div class="chips">
+        <span>OpenVPN</span>
+        <span>L2TP/IPSec</span>
+        <span>IKEv2</span>
+      </div>
+    </div>
+    <div class="auth-card">
       <h2>Welcome back</h2>
-      <form @submit.prevent="login" class="form-stack">
+      <div class="sub">Sign in with your VPN credentials</div>
+      <form class="form-stack" @submit.prevent="login">
         <label>Username<input v-model.trim="loginForm.username" autocomplete="username" required placeholder="VPN username" /></label>
         <label>Password<input v-model="loginForm.password" type="password" autocomplete="current-password" required placeholder="VPN password" /></label>
-        <button :disabled="busy">{{ busy ? 'Checking…' : 'Enter portal' }}</button>
+        <button class="btn-primary" :disabled="busy">{{ busy ? 'Signing in...' : 'Enter Portal' }}</button>
       </form>
       <p v-if="error" class="alert danger">{{ error }}</p>
-      <p class="hint">Use the same username/password created in the admin dashboard.</p>
-    </section>
-  </main>
+    </div>
+  </div>
 
-  <main v-else class="portal shell">
-    <header class="topbar">
-      <div class="brand-row"><span class="brand small">K</span><div><b>KorisPanel</b><small>Customer portal</small></div></div>
-      <div class="top-actions"><div class="score-pill"><b>{{ accountScore }}%</b><small>account ready</small></div><button class="ghost" @click="logout">Logout</button></div>
-    </header>
+  <!-- Portal Shell -->
+  <div v-else class="portal-shell">
+    <!-- Topbar -->
+    <div class="portal-topbar">
+      <div class="logo-row">
+        <div class="logo" style="width:36px;height:36px;border-radius:10px;font-size:15px">K</div>
+        <div><b>KorisPanel</b><small style="color:var(--muted);font-size:11px">Customer Portal</small></div>
+      </div>
+      <div class="right">
+        <span class="pill" :class="status === 'active' ? 'ok' : 'warn'">{{ status }}</span>
+        <button class="btn-ghost" @click="logout">Logout</button>
+      </div>
+    </div>
 
-    <section class="welcome">
+    <!-- Welcome -->
+    <div class="welcome-card">
       <div>
-        <span class="eyebrow">{{ status }}</span>
+        <div class="eyebrow">{{ status }}</div>
         <h1>Hello, {{ titleName }}</h1>
         <p>Your VPN account is connected to KorisPanel Next.</p>
       </div>
-      <a v-if="openvpnProfile?.available" class="primary" :href="openvpnProfile.download" download>Download profile</a>
-      <button v-else class="primary" disabled>No node available</button>
-    </section>
-
-    <p v-if="notice" class="alert success">{{ notice }}</p>
-
-    <!-- Tabbed Portal Navigation (Prevents Long Page Scrolls) -->
-    <div class="secondary-tabs" style="display: flex; gap: 8px; border-bottom: 1px solid var(--line); padding-bottom: 8px; margin-bottom: 18px; width: 100%;">
-      <button class="tab-btn" @click="portalTab = 'overview'" style="background: none; border: 0; color: var(--muted); padding: 8px 16px; font-weight: 850; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s; font-size: 14px;" :style="portalTab === 'overview' ? 'color: var(--cyan); border-bottom-color: var(--cyan);' : ''">Dashboard Overview</button>
-      <button class="tab-btn" @click="portalTab = 'billing'" style="background: none; border: 0; color: var(--muted); padding: 8px 16px; font-weight: 850; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s; font-size: 14px;" :style="portalTab === 'billing' ? 'color: var(--cyan); border-bottom-color: var(--cyan);' : ''">Subscriptions & Billing</button>
-      <button class="tab-btn" @click="portalTab = 'support'" style="background: none; border: 0; color: var(--muted); padding: 8px 16px; font-weight: 850; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s; font-size: 14px;" :style="portalTab === 'support' ? 'color: var(--cyan); border-bottom-color: var(--cyan);' : ''">Support Tickets</button>
+      <a v-if="openvpnProfile?.available" class="btn-primary" :href="openvpnProfile.download" download>Download Profile</a>
+      <button v-else class="btn-primary" disabled>No node available</button>
     </div>
 
-    <section v-if="portalTab === 'overview'" class="grid">
-      <article class="metric main">
-        <small>Current plan</small>
-        <strong>{{ planName }}</strong>
-        <span>Expires: {{ formatDate(customer?.subscription?.expires_at) }}</span>
-      </article>
-      <article class="metric">
-        <small>Data limit</small>
-        <strong>{{ dataLimit }}</strong>
-        <span>{{ usage?.online ? `${usage.active_sessions} active session` : 'Offline now' }}</span>
-      </article>
-      <article class="metric">
-        <small>Wallet</small>
-        <strong>{{ formatMoney(customer?.credit) }}</strong>
-        <span>Manual payments ready</span>
-      </article>
-    </section>
+    <p v-if="notice" class="alert success">{{ notice }}</p>
+    <p v-if="error" class="alert danger">{{ error }}</p>
 
-    <section v-if="portalTab === 'overview' && usage" class="usage-card card">
-      <div class="section-head"><div><span class="eyebrow">Usage</span><h2>VPN sessions</h2></div><span :class="['pay-status', usage.online ? 'approved' : 'pending']">{{ usage.online ? 'online' : 'offline' }}</span></div>
-      <div class="portal-plan-summary usage-summary">
-        <span><b>{{ formatBytes(usage.total_usage_bytes) }}</b><small>total used</small></span>
-        <span><b>{{ formatBytes(usage.total_input_bytes) }}</b><small>download</small></span>
-        <span><b>{{ formatBytes(usage.total_output_bytes) }}</b><small>upload</small></span>
-        <span><b>{{ usage.remaining_bytes === undefined ? 'Unlimited' : formatBytes(usage.remaining_bytes) }}</b><small>remaining</small></span>
-      </div>
-      <div v-if="usage.max_data_bytes" class="usage-bar"><i :style="{ width: `${usagePercent}%` }"></i></div>
-      <div class="payment-list usage-list">
-        <div v-for="session in usage.sessions.slice(0, 4)" :key="session.id" class="payment-row">
-          <div><b>{{ session.online ? 'Online' : 'Closed' }} · {{ formatBytes(session.total_bytes) }}</b><small>{{ session.framed_ip || '—' }} · {{ formatDuration(session.session_seconds) }} · {{ formatDate(session.start_time) }}</small></div>
-          <span :class="['pay-status', session.online ? 'approved' : 'pending']">{{ session.online ? 'online' : 'closed' }}</span>
+    <!-- Tabs -->
+    <div class="tabs">
+      <button :class="{ on: portalTab === 'overview' }" @click="portalTab = 'overview'">Dashboard</button>
+      <button :class="{ on: portalTab === 'billing' }" @click="portalTab = 'billing'">Billing</button>
+      <button :class="{ on: portalTab === 'support' }" @click="portalTab = 'support'">Tickets</button>
+    </div>
+
+    <!-- ===== DASHBOARD TAB ===== -->
+    <div v-if="portalTab === 'overview'">
+      <!-- Stats -->
+      <div class="stats-row">
+        <div class="stat-card main">
+          <div class="lbl">Current Plan</div>
+          <h3>{{ planName }}</h3>
+          <div class="sub">Expires: {{ formatDate(customer?.subscription?.expires_at) }}</div>
         </div>
-        <p v-if="!usage.sessions.length" class="hint">No VPN sessions yet.</p>
+        <div class="stat-card">
+          <div class="lbl">Data Limit</div>
+          <h3>{{ dataLimit }}</h3>
+          <div class="sub">{{ usage?.online ? `${usage.active_sessions} active session` : 'Offline now' }}</div>
+        </div>
+        <div class="stat-card">
+          <div class="lbl">Wallet</div>
+          <h3>{{ formatMoney(customer?.credit) }}</h3>
+          <div class="sub">Available balance</div>
+        </div>
       </div>
-    </section>
 
-    <section v-if="portalTab === 'overview'" class="journey card">
-      <div class="section-head"><div><span class="eyebrow">Account journey</span><h2>What is ready</h2></div></div>
-      <div class="journey-steps">
-        <div class="done"><i></i><b>Credentials</b><small>Radius login confirmed</small></div>
-        <div :class="customer?.subscription ? 'done' : ''"><i></i><b>Subscription</b><small>{{ customer?.subscription ? 'Plan attached' : 'Awaiting plan' }}</small></div>
-        <div :class="customer?.max_data_bytes ? 'done' : ''"><i></i><b>Data policy</b><small>{{ dataLimit }}</small></div>
+      <!-- Usage -->
+      <div v-if="usage" class="card" style="margin-bottom:16px">
+        <div class="card-head">
+          <div><h4>Data Usage</h4><div class="sub">{{ formatBytes(usage.total_usage_bytes) }} of {{ usage.max_data_bytes ? formatBytes(usage.max_data_bytes) : 'Unlimited' }}</div></div>
+          <span class="pill" :class="usage.online ? 'ok' : 'idle'">{{ usage.online ? 'Online' : 'Offline' }}</span>
+        </div>
+        <div class="usage-bar"><i :style="{ width: usagePercent + '%' }"></i></div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted)">
+          <span>Download: {{ formatBytes(usage.total_input_bytes) }}</span>
+          <span>Upload: {{ formatBytes(usage.total_output_bytes) }}</span>
+          <span>{{ usagePercent }}% used</span>
+        </div>
       </div>
-    </section>
 
-    <section class="cards">
-      <article v-if="portalTab === 'overview'" class="card">
-        <div class="section-head"><div><span class="eyebrow">VPN access</span><h2>Connection profiles</h2></div></div>
-        <div v-if="customer?.sub_token" class="profile-row" style="flex-direction: column; align-items: stretch; gap: 8px; border-bottom: 1px solid var(--line); padding-bottom: 14px;">
-          <b style="color: var(--cyan); font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; display: block;">Unified Subscription Link</b>
-          <div style="display: flex; gap: 8px; align-items: center;">
-            <input readonly :value="windowOrigin + '/portal/sub/' + customer.sub_token" style="font-family: monospace; font-size: 12px; background: rgba(0,0,0,0.2); flex: 1; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); color: #fff;" id="sub-url-input" />
-            <button class="ghost" @click="copyToClipboard" style="white-space: nowrap; font-size: 12px; min-height: 32px; border-radius: 8px; padding: 0 12px;">Copy Link</button>
+      <!-- VPN Profiles -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-head"><h4>Connection Profiles</h4></div>
+        <div class="profile-grid">
+          <div v-for="p in profiles" :key="p.type" class="profile-card">
+            <div class="info">
+              <b>{{ p.name }}</b>
+              <span>{{ p.remote }}:{{ p.port }} ({{ p.protocol }})</span>
+            </div>
+            <a v-if="p.available" class="btn-primary" style="padding:7px 14px;font-size:12px" :href="p.download" download>Download</a>
+            <button v-else class="btn-ghost" style="padding:7px 14px;font-size:12px" disabled>N/A</button>
           </div>
         </div>
-        <div class="profile-row"><div><b>OpenVPN</b><span v-if="openvpnProfile">{{ openvpnProfile.remote }}:{{ openvpnProfile.port }} · {{ openvpnProfile.protocol }}</span><span v-else>Profile endpoint unavailable</span></div><a v-if="openvpnProfile?.available" class="ghost profile-download" :href="openvpnProfile.download" download>Download</a><span v-else>Unavailable</span></div>
-        <div class="profile-row"><div><b>L2TP/IPSec (Apple)</b><span v-if="l2tpProfile">{{ l2tpProfile.remote }}</span><span v-else>L2TP profile unavailable</span></div><a v-if="l2tpProfile?.available" class="ghost profile-download" :href="l2tpProfile.download" download>Download</a><span v-else>Unavailable</span></div>
-        <div class="profile-row"><div><b>IKEv2 (Apple)</b><span v-if="ikev2Profile">{{ ikev2Profile.remote }}</span><span v-else>IKEv2 profile unavailable</span></div><a v-if="ikev2Profile?.available" class="ghost profile-download" :href="ikev2Profile.download" download>Download</a><span v-else>Unavailable</span></div>
+      </div>
 
-        <!-- L2TP / IKEv2 Manual Connection Credentials -->
-        <div class="profile-row" style="flex-direction: column; align-items: stretch; gap: 8px; border-top: 1px solid var(--line); margin-top: 14px; padding-top: 14px;">
-          <b style="color: var(--cyan); font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; display: block;">L2TP / IKEv2 Manual Setup Credentials</b>
-          <div style="font-size: 13px; display: grid; gap: 6px; line-height: 1.5; color: var(--muted);">
-            <div>● Server Address: <code style="color: #fff; font-size: 12px; background: rgba(0,0,0,0.2); padding: 2px 6px; border-radius: 4px; font-family: monospace;">{{ l2tpProfile?.remote || 'luna.koris.space' }}</code></div>
-            <div>● IPSec PSK (Shared Secret): <code style="color: #fff; font-size: 12px; background: rgba(0,0,0,0.2); padding: 2px 6px; border-radius: 4px; font-family: monospace;">testing123</code></div>
-            <div>● Username: <code style="color: #fff; font-size: 12px; background: rgba(0,0,0,0.2); padding: 2px 6px; border-radius: 4px; font-family: monospace;">{{ customer?.username }}</code></div>
-            <div>● Password: <code style="color: #fff; font-size: 12px; background: rgba(0,0,0,0.2); padding: 2px 6px; border-radius: 4px; font-family: monospace;">(Your login password)</code></div>
-          </div>
+      <!-- Sessions -->
+      <div v-if="usage?.sessions?.length" class="card">
+        <div class="card-head"><h4>Recent Sessions</h4></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Status</th><th>IP</th><th>Duration</th><th>Down</th><th>Up</th><th>Started</th></tr></thead>
+            <tbody>
+              <tr v-for="s in usage.sessions.slice(0, 10)" :key="s.id">
+                <td><span class="pill" :class="s.online ? 'ok' : 'idle'">{{ s.online ? 'online' : 'closed' }}</span></td>
+                <td>{{ s.framed_ip || '—' }}</td>
+                <td>{{ formatDuration(s.session_seconds) }}</td>
+                <td>{{ formatBytes(s.input_bytes) }}</td>
+                <td>{{ formatBytes(s.output_bytes) }}</td>
+                <td style="color:var(--muted)">{{ formatDate(s.start_time) }}</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
-      </article>
-      <article v-if="portalTab === 'billing'" class="card plan-renew-card">
-        <div class="section-head"><div><span class="eyebrow">Plans</span><h2>Choose / renew</h2></div></div>
+      </div>
+    </div>
+
+    <!-- ===== BILLING TAB ===== -->
+    <div v-else-if="portalTab === 'billing'">
+      <!-- Renew Plan -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-head"><h4>Renew Plan</h4></div>
         <form class="form-stack" @submit.prevent="submitRenewal">
-          <label>Plan<select v-model.number="renewForm.plan_id"><option v-for="plan in plans" :key="plan.id" :value="plan.id">{{ plan.name }} · {{ formatMoney(plan.price) }}</option></select></label>
-          <div v-if="selectedPlan" class="portal-plan-summary">
-            <span><b>{{ formatGB(selectedPlan.data_gb) }}</b><small>data</small></span>
-            <span><b>{{ formatSpeed(selectedPlan.speed_mbps) }}</b><small>speed</small></span>
-            <span><b>{{ selectedPlan.duration_days }}d</b><small>duration</small></span>
-            <span><b>{{ formatMoney(selectedPlan.price) }}</b><small>price</small></span>
+          <label>Select Plan
+            <select v-model.number="renewForm.plan_id">
+              <option v-for="p in plans" :key="p.id" :value="p.id">{{ p.name }} — {{ formatGB(p.data_gb) }} · {{ formatSpeed(p.speed_mbps) }} · {{ p.duration_days }}d · {{ formatMoney(p.price) }}</option>
+            </select>
+          </label>
+          <div v-if="selectedPlan" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:8px 0">
+            <div style="text-align:center;border:1px solid var(--border);border-radius:8px;padding:8px"><b>{{ formatGB(selectedPlan.data_gb) }}</b><br><small style="color:var(--muted)">Data</small></div>
+            <div style="text-align:center;border:1px solid var(--border);border-radius:8px;padding:8px"><b>{{ formatSpeed(selectedPlan.speed_mbps) }}</b><br><small style="color:var(--muted)">Speed</small></div>
+            <div style="text-align:center;border:1px solid var(--border);border-radius:8px;padding:8px"><b>{{ selectedPlan.duration_days }}d</b><br><small style="color:var(--muted)">Duration</small></div>
+            <div style="text-align:center;border:1px solid var(--border);border-radius:8px;padding:8px"><b>{{ formatMoney(selectedPlan.price) }}</b><br><small style="color:var(--muted)">Price</small></div>
           </div>
-          <p v-if="selectedPlan" class="hint">Wallet: {{ formatMoney(walletCredit) }} · {{ requiredTopup > 0 ? `Needs ${formatMoney(requiredTopup)} top-up` : 'Enough wallet balance' }}</p>
-          <button :disabled="busy || !renewForm.plan_id">{{ busy ? 'Processing…' : requiredTopup > 0 ? 'Request payment for this plan' : 'Renew now' }}</button>
+          <div v-if="selectedPlan && selectedPlan.price > 0 && walletCredit < selectedPlan.price" style="font-size:13px;color:var(--amber)">
+            Insufficient wallet balance. A payment request will be created.
+          </div>
+          <button class="btn-primary" :disabled="busy || !renewForm.plan_id">{{ busy ? 'Processing...' : 'Renew / Activate Plan' }}</button>
         </form>
-      </article>
-      <article v-if="portalTab === 'billing'" class="card">
-        <div class="section-head"><div><span class="eyebrow">Payment</span><h2>Request top-up</h2></div></div>
+      </div>
+
+      <!-- Submit Payment -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-head"><h4>Top-up Wallet</h4></div>
         <form class="form-stack" @submit.prevent="submitPaymentRequest">
-          <label>Amount<input v-model.number="paymentForm.amount" type="number" min="1" step="1" required placeholder="Amount" /></label>
-          <label>Method<select v-model="paymentForm.method"><option value="manual">manual</option><option v-for="method in paymentMethods" :key="method.id" :value="method.name">{{ method.name }}</option></select></label>
-          <p v-if="selectedPaymentMethod?.instructions" class="method-instructions">{{ selectedPaymentMethod.instructions }}</p>
-          <label>Receipt / note<textarea v-model.trim="paymentForm.receipt" placeholder="Transaction id, card digits, or note for admin"></textarea></label>
-          <button :disabled="busy">{{ busy ? 'Sending…' : 'Submit payment request' }}</button>
+          <label>Amount<input v-model.number="paymentForm.amount" type="number" min="1" required /></label>
+          <label>Payment Method
+            <select v-model="paymentForm.method">
+              <option v-for="m in paymentMethods" :key="m.id" :value="m.name">{{ m.name }}</option>
+            </select>
+          </label>
+          <div v-if="selectedPaymentMethod?.instructions" style="border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--muted);font-size:13px;white-space:pre-wrap">{{ selectedPaymentMethod.instructions }}</div>
+          <label>Receipt / Reference<textarea v-model.trim="paymentForm.receipt" placeholder="Payment reference or receipt ID"></textarea></label>
+          <button class="btn-primary" :disabled="busy || paymentForm.amount <= 0">Submit Payment Request</button>
         </form>
-      </article>
-      <article v-if="portalTab === 'billing'" class="card">
-        <div class="section-head"><div><span class="eyebrow">Payment history</span><h2>Latest requests</h2></div></div>
-        <div class="payment-list">
-          <div v-for="payment in payments.slice(0, 6)" :key="payment.id" class="payment-row">
-            <div><b>#{{ payment.id }} · {{ formatMoney(payment.amount) }}</b><small>{{ payment.method }} · {{ payment.intent_type === 'plan_renewal' ? `Plan renewal: ${payment.intent_label || payment.intent_id}` : 'Wallet top-up' }} · {{ formatDate(payment.created_at) }}</small></div>
-            <span :class="['pay-status', payment.status]">{{ payment.status }}</span>
-          </div>
-          <p v-if="!payments.length" class="hint">No payment requests yet.</p>
+      </div>
+
+      <!-- Payment History -->
+      <div class="card">
+        <div class="card-head"><h4>Payment History</h4></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>ID</th><th>Amount</th><th>Method</th><th>Status</th><th>Date</th></tr></thead>
+            <tbody>
+              <tr v-for="p in payments" :key="p.id">
+                <td>#{{ p.id }}</td>
+                <td>{{ formatMoney(p.amount) }}</td>
+                <td>{{ p.method }}</td>
+                <td><span class="pill" :class="p.status">{{ p.status }}</span></td>
+                <td style="color:var(--muted)">{{ formatDate(p.created_at) }}</td>
+              </tr>
+              <tr v-if="!payments.length"><td colspan="5" style="text-align:center;color:var(--muted);padding:24px">No payments yet</td></tr>
+            </tbody>
+          </table>
         </div>
-      </article>
-      <article v-if="portalTab === 'support'" class="card support-card">
-        <div class="section-head"><div><span class="eyebrow">Support</span><h2>New ticket</h2></div></div>
+      </div>
+    </div>
+
+    <!-- ===== TICKETS TAB ===== -->
+    <div v-else-if="portalTab === 'support'">
+      <!-- New Ticket -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-head"><h4>New Ticket</h4></div>
         <form class="form-stack" @submit.prevent="createTicket">
-          <label>Subject<input v-model.trim="ticketForm.subject" required placeholder="How can we help?" /></label>
-          <label>Priority<select v-model="ticketForm.priority"><option value="low">low</option><option value="normal">normal</option><option value="high">high</option></select></label>
-          <label>Message<textarea v-model.trim="ticketForm.message" required placeholder="Describe the issue"></textarea></label>
-          <button :disabled="busy">{{ busy ? 'Sending…' : 'Create ticket' }}</button>
+          <label>Subject<input v-model.trim="ticketForm.subject" required placeholder="Issue subject" /></label>
+          <label>Priority
+            <select v-model="ticketForm.priority">
+              <option value="low">Low</option>
+              <option value="normal">Normal</option>
+              <option value="high">High</option>
+            </select>
+          </label>
+          <label>Message<textarea v-model.trim="ticketForm.message" required placeholder="Describe your issue"></textarea></label>
+          <button class="btn-primary" :disabled="busy">{{ busy ? 'Submitting...' : 'Create Ticket' }}</button>
         </form>
-      </article>
-      <article v-if="portalTab === 'support'" class="card support-card">
-        <div class="section-head"><div><span class="eyebrow">{{ tickets.length }} tickets</span><h2>Support history</h2></div></div>
-        <div class="payment-list ticket-list">
-          <div v-for="ticket in tickets.slice(0, 6)" :key="ticket.id" class="payment-row" @click="openTicket(ticket.id)">
-            <div><b>#{{ ticket.id }} · {{ ticket.subject }}</b><small>{{ ticket.priority }} · {{ formatDate(ticket.updated_at) }}</small></div>
-            <span :class="['pay-status', ticket.status === 'open' ? 'approved' : 'rejected']">{{ ticket.status }}</span>
+      </div>
+
+      <!-- Ticket List -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-head"><h4>My Tickets</h4></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>ID</th><th>Subject</th><th>Priority</th><th>Status</th><th>Updated</th><th></th></tr></thead>
+            <tbody>
+              <tr v-for="t in tickets" :key="t.id">
+                <td>#{{ t.id }}</td>
+                <td>{{ t.subject }}</td>
+                <td><span class="pill warn">{{ t.priority }}</span></td>
+                <td><span class="pill" :class="t.status === 'open' ? 'ok' : 'idle'">{{ t.status }}</span></td>
+                <td style="color:var(--muted)">{{ formatDate(t.updated_at) }}</td>
+                <td><button class="btn-ghost" style="padding:4px 10px;font-size:11px" @click="openTicket(t.id)">View</button></td>
+              </tr>
+              <tr v-if="!tickets.length"><td colspan="6" style="text-align:center;color:var(--muted);padding:24px">No tickets yet</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Selected Ticket -->
+      <div v-if="selectedTicket" class="card">
+        <div class="card-head">
+          <div><h4>Ticket #{{ selectedTicket.id }}: {{ selectedTicket.subject }}</h4><div class="sub">{{ selectedTicket.priority }} priority</div></div>
+          <button v-if="selectedTicket.status === 'open'" class="btn-ghost" style="padding:6px 12px;font-size:12px" @click="closeTicket">Close Ticket</button>
+        </div>
+        <div class="ticket-thread">
+          <div v-for="msg in selectedTicket.messages" :key="msg.id" class="ticket-msg" :class="msg.sender_type">
+            <b>{{ msg.sender_name }}</b><small>{{ msg.sender_type }} · {{ formatDate(msg.created_at) }}</small>
+            <p>{{ msg.message }}</p>
           </div>
-          <p v-if="!tickets.length" class="hint">No tickets yet.</p>
         </div>
-      </article>
-      <article v-if="selectedTicket && portalTab === 'support'" class="card support-card ticket-detail-card">
-        <div class="section-head"><div><span class="eyebrow">Ticket #{{ selectedTicket.id }}</span><h2>{{ selectedTicket.subject }}</h2></div><button v-if="selectedTicket.status === 'open'" class="ghost" @click="closeTicket">Close</button></div>
-        <div class="ticket-thread portal-thread">
-          <div v-for="message in selectedTicket.messages" :key="message.id" :class="['ticket-message', message.sender_type]"><b>{{ message.sender_name }} <small>{{ message.sender_type }} · {{ formatDate(message.created_at) }}</small></b><p>{{ message.message }}</p></div>
-        </div>
-        <form v-if="selectedTicket.status === 'open'" class="form-stack" @submit.prevent="replyTicket">
-          <label>Reply<textarea v-model.trim="ticketReply" placeholder="Write a reply"></textarea></label>
-          <button :disabled="busy || !ticketReply.trim()">Send reply</button>
+        <form class="form-stack" style="border-top:1px solid var(--border);padding-top:12px" @submit.prevent="replyTicket">
+          <label>Reply<textarea v-model.trim="ticketReply" placeholder="Write your reply..."></textarea></label>
+          <button class="btn-primary" :disabled="busy || !ticketReply.trim()">Send Reply</button>
         </form>
-      </article>
-    </section>
-  </main>
+      </div>
+    </div>
+  </div>
 </template>
