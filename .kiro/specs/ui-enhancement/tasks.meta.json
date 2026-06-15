@@ -1,5 +1,14 @@
 {
-  "pbtResults": {},
+  "pbtResults": {
+    "8.2 Write property tests for useFormValidation": {
+      "status": "passed",
+      "lastRunTimestamp": 1781557756999
+    },
+    "8.4 Write property tests for useCommandPalette": {
+      "status": "passed",
+      "lastRunTimestamp": 1781557760364
+    }
+  },
   "executionHistory": {
     "1.1 Create shared directory structure and base configuration files": [
       {
