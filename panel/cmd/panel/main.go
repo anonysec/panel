@@ -8,10 +8,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
 	"koris-next/panel/internal/api"
+	"koris-next/panel/internal/bot"
 	"koris-next/panel/internal/config"
 	"koris-next/panel/internal/db"
 	"koris-next/panel/internal/notify"
@@ -102,6 +104,33 @@ func main() {
 	}
 	startWorker(database)
 	srv := api.New(database, cfg)
+
+	// Start Telegram bot
+	botToken := os.Getenv("PANEL_TG_BOT_TOKEN")
+	botEnabled := strings.ToLower(os.Getenv("PANEL_TG_ENABLED")) == "true"
+	botWebhook := os.Getenv("PANEL_TG_WEBHOOK_URL")
+	var adminChats []int64
+	for _, s := range strings.Split(os.Getenv("PANEL_TG_CHAT_ID"), ",") {
+		s = strings.TrimSpace(s)
+		if id, err := strconv.ParseInt(s, 10, 64); err == nil && id != 0 {
+			adminChats = append(adminChats, id)
+		}
+	}
+	telegramBot := bot.New(bot.Config{
+		Token:      botToken,
+		AdminChats: adminChats,
+		WebhookURL: botWebhook,
+		Enabled:    botEnabled,
+	}, database)
+	telegramBot.Start()
+
+	mux := srv.Routes().(*http.ServeMux)
+	// Register webhook handler if in webhook mode
+	if botWebhook != "" && botEnabled {
+		mux.HandleFunc("/api/bot/webhook", telegramBot.WebhookHandler())
+		log.Printf("[bot] webhook endpoint registered at /api/bot/webhook")
+	}
+
 	log.Printf("panel listening on %s", cfg.Addr)
-	log.Fatal(http.ListenAndServe(cfg.Addr, srv.Routes()))
+	log.Fatal(http.ListenAndServe(cfg.Addr, mux))
 }

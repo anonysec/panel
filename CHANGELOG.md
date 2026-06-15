@@ -2,6 +2,51 @@
 
 All notable changes to the clean Go + Vue rewrite are tracked here.
 
+## 0.36.0 - 2026-06-15
+
+### Added
+- **Telegram Bot** — native Go implementation with full admin and customer commands
+  - Dual mode: webhook (`PANEL_TG_WEBHOOK_URL`) and long-polling (default)
+  - Admin commands: `/stats`, `/users`, `/find`, `/create`, `/enable`, `/disable`, `/traffic`
+  - Customer commands: `/me`, `/usage`, `/plans`
+  - Inline keyboards for quick user actions
+  - Auto-notifications to admin chats (payments, node status, expiry)
+  - Webhook endpoint at `/api/bot/webhook`
+- **Per-node VPN configuration** (migration 011)
+  - Separate OpenVPN/L2TP/IKEv2/SSH config per node
+  - API: `GET/POST /api/nodes/vpn-config/{node_id}`
+- **SSH VPN protocol** support
+  - SSH tunnel accounts table with per-node assignment
+  - Configurable port, max connections, expiry
+- **Static certificate management**
+  - Upload CA/tls-crypt/client certs for server-switching with same config
+  - API: `GET/POST /api/certificates`, `GET/DELETE /api/certificates/{id}`
+- **Panel settings** API (migration 012)
+  - Key-value settings: theme, branding, SSH toggle, Telegram config
+  - API: `GET/PATCH /api/panel-settings`
+- **Phase 1 Premium UX** — modal-first design, grouped sidebar nav (Overview/Manage/System)
+
+### Changed
+- `/api/health` version is now `0.36.0`
+- Sidebar nav restructured: OVERVIEW (Dashboard, Analytics, Transactions) / MANAGE (Users, Services, Billing) / SYSTEM (Settings)
+- All detail views open as modals (user detail, ticket detail)
+- "+ New User" button only on Users page
+- Toast notifications positioned top-right with auto-dismiss
+- Resellers moved inside Users as sub-tab
+
+### Fixed
+- Deploy script: excludes `panel/web/` from git dirty check
+- Build artifacts (www/assets/) removed from git tracking
+- Background no longer scrolls behind content
+- Portal ticket messages properly stacked in modal
+
+### Security
+- SQL injection fixed in OpenVPN connect/disconnect scripts
+- DB connection pool configured (50 max, 5min lifetime)
+- Security warnings logged when credentials not configured
+- Reseller self-checkout gated behind env flag
+- PSK removed from Clash YAML config comments
+
 ## 0.33.0 - 2026-06-14
 
 ### Added
