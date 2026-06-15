@@ -116,6 +116,7 @@ async function handleLogout() {
   display: grid;
   grid-template-columns: auto 1fr;
   min-height: 100vh;
+  width: 100%;
   background: var(--color-bg, #070a12);
 }
 

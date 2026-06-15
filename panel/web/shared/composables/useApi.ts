@@ -31,9 +31,12 @@ export interface UseApiReturn {
   error: Ref<string>
 }
 
+/** Module-level CSRF token storage (shared across all useApi instances) */
+let csrfToken: string = ''
+
 /**
  * Composable for making API requests with consistent loading state,
- * error handling, and authentication failure detection.
+ * error handling, CSRF token management, and authentication failure detection.
  *
  * @param options - Configuration options for the API composable
  * @returns UseApiReturn with typed HTTP methods, loading, and error refs
@@ -56,7 +59,7 @@ export function useApi(options: UseApiOptions = {}): UseApiReturn {
 
   /**
    * Core request method that all HTTP methods delegate to.
-   * Handles loading state, error handling, content-type, and auth failures.
+   * Handles loading state, error handling, content-type, CSRF tokens, and auth failures.
    */
   async function request<T>(
     url: string,
@@ -75,6 +78,11 @@ export function useApi(options: UseApiOptions = {}): UseApiReturn {
         headers.set('Content-Type', 'application/json')
       }
 
+      // Include CSRF token on state-changing requests
+      if (csrfToken && (method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE')) {
+        headers.set('X-CSRF-Token', csrfToken)
+      }
+
       const fetchOptions: RequestInit = {
         ...requestOptions,
         method,
@@ -88,6 +96,12 @@ export function useApi(options: UseApiOptions = {}): UseApiReturn {
       }
 
       const response = await fetch(`${baseUrl}${url}`, fetchOptions)
+
+      // Capture CSRF token from response
+      const newToken = response.headers.get('X-CSRF-Token')
+      if (newToken) {
+        csrfToken = newToken
+      }
 
       // Handle 401 Unauthorized
       if (response.status === 401) {
