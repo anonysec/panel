@@ -156,6 +156,8 @@ function connectRealtime() {
       const message = JSON.parse(event.data)
       if (message.type === 'stats' && message.data) stats.value = message.data as Stats
       if (message.type === 'sessions' && message.data) liveSessions.value = message.data
+      if (message.type === 'customers' && message.data) customers.value = message.data
+      if (message.type === 'nodes' && message.data) nodes.value = message.data
     } catch { /* ignore malformed realtime frame */ }
   }
   realtimeSocket.onclose = () => {
@@ -166,7 +168,19 @@ function connectRealtime() {
   realtimeSocket.onerror = () => realtimeSocket?.close()
 }
 
+let autoRefreshInterval: ReturnType<typeof setInterval> | null = null
+function startAutoRefresh() {
+  if (autoRefreshInterval) return
+  autoRefreshInterval = setInterval(() => {
+    if (screen.value === 'app' && !busy.value) loadDashboard()
+  }, 30000)
+}
+function stopAutoRefresh() {
+  if (autoRefreshInterval) { clearInterval(autoRefreshInterval); autoRefreshInterval = null }
+}
+
 function disconnectRealtime() {
+  stopAutoRefresh()
   if (realtimeRetry) clearTimeout(realtimeRetry)
   realtimeRetry = null
   realtimeConnected.value = false
@@ -246,6 +260,7 @@ async function loadDashboard() {
     health.value = healthRes; stats.value = statsRes; customers.value = customersRes.customers || []; deletedCustomers.value = deletedRes.customers || []; plans.value = plansRes.plans || []; payments.value = paymentsRes.payments || []; paymentMethods.value = paymentMethodsRes.methods || []; tickets.value = ticketsRes.tickets || []; nodes.value = nodesRes.nodes || []; nodeTasks.value = nodeTasksRes.tasks || []; vpnSettings.value = vpnRes.settings; vpnForm.value = { openvpn_port: vpnRes.settings.openvpn_port, openvpn_protocol: vpnRes.settings.openvpn_protocol, openvpn_network: vpnRes.settings.openvpn_network, l2tp_network: vpnRes.settings.l2tp_network, ikev2_network: vpnRes.settings.ikev2_network, ipsec_psk: vpnRes.settings.ipsec_psk || '', dns_1: vpnRes.settings.dns_1, dns_2: vpnRes.settings.dns_2 }
     defaultCreatePlanIfNeeded()
     connectRealtime()
+    startAutoRefresh()
     if (user.value.role === 'reseller') {
       await loadResellerPayments()
     }
@@ -367,6 +382,12 @@ watch(() => stats.value, (newStats: any) => {
 const maxBps = computed(() => {
   const maxVal = Math.max(...rxHistory.value, ...txHistory.value, 1024)
   return maxVal
+})
+
+const totalTraffic = computed(() => {
+  let rx = 0, tx = 0
+  for (const s of liveSessions.value) { rx += Number(s.input_bytes || 0); tx += Number(s.output_bytes || 0) }
+  return { rx, tx }
 })
 
 const rxPoints = computed(() => {
@@ -1073,6 +1094,7 @@ onUnmounted(() => {
             <div class="legend">
               <span><i style="background:var(--brand)"></i>&#8595; {{ formatBytes((stats.total_rx_bps||0)/8) }}/s</span>
               <span><i style="background:var(--brand-2)"></i>&#8593; {{ formatBytes((stats.total_tx_bps||0)/8) }}/s</span>
+              <span style="margin-left:auto;font-size:11px;color:var(--muted)">Total: {{ formatBytes(totalTraffic.rx) }} &#8595; / {{ formatBytes(totalTraffic.tx) }} &#8593;</span>
             </div>
           </div>
 
@@ -1172,7 +1194,7 @@ onUnmounted(() => {
               <table>
                 <thead><tr><th>User</th><th>Status</th><th>Plan</th><th>Balance</th><th>Created</th><th></th></tr></thead>
                 <tbody>
-                  <tr v-for="c in filteredCustomers" :key="c.id">
+                  <tr v-for="c in filteredCustomers" :key="c.id" style="cursor:pointer" @click="customerView!=='archived'?openCustomer(c):null">
                     <td><div class="user-cell"><div class="av" :style="{background:`linear-gradient(135deg,hsl(${c.id*37%360},65%,50%),hsl(${c.id*67%360},65%,40%))`}">{{ c.username.slice(0,2).toUpperCase() }}</div><div><div class="name">{{ c.username }}</div><div class="email">{{ c.display_name||'&#8212;' }}</div></div></div></td>
                     <td><span class="pill" :class="c.status==='active'?'ok':c.status==='disabled'?'bad':'warn'">{{ c.status }}</span></td>
                     <td>{{ c.plan||'&#8212;' }}</td>
@@ -1446,34 +1468,6 @@ onUnmounted(() => {
                     <button class="btn-ghost btn-sm" @click="createNodeTask(node,'service.restart',{service:'openvpn'})">Restart</button>
                     <button class="btn-ghost btn-sm" @click="editingProtocol={nodeId:node.id,protocol:'openvpn'};vpnConfigForm.protocol='openvpn';vpnConfigForm.port=vpnSettings?.openvpn_port||1194;vpnConfigForm.network=vpnSettings?.openvpn_network||'10.8.0.0/24';vpnConfigForm.enabled=true">Edit</button>
                   </div>
-                  <div v-if="editingProtocol?.nodeId===node.id&&editingProtocol?.protocol==='openvpn'" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
-                    <form class="form-stack" @submit.prevent="saveNodeVPNConfig(node.id);editingProtocol=null">
-                      <div class="two-col">
-                        <label>Port<input v-model.number="vpnConfigForm.port" type="number" min="1" max="65535"/></label>
-                        <label>Network<input v-model.trim="vpnConfigForm.network" placeholder="10.8.0.0/24"/></label>
-                      </div>
-                      <div class="two-col">
-                        <label>Encryption
-                          <select v-model="vpnConfigForm.encryption">
-                            <option value="AES-256-GCM">AES-256-GCM</option>
-                            <option value="AES-128-GCM">AES-128-GCM</option>
-                            <option value="CHACHA20-POLY1305">CHACHA20-POLY1305</option>
-                            <option value="AES-256-CBC">AES-256-CBC</option>
-                          </select>
-                        </label>
-                        <label>MTU<input v-model.number="vpnConfigForm.mtu" type="number" min="1200" max="1600"/></label>
-                      </div>
-                      <div class="two-col">
-                        <label>Max Clients (0=unlimited)<input v-model.number="vpnConfigForm.max_clients" type="number" min="0"/></label>
-                        <label>Conn Limit/User (0=unlimited)<input v-model.number="vpnConfigForm.conn_limit" type="number" min="0"/></label>
-                      </div>
-                      <label style="display:flex;align-items:center;gap:8px;flex-direction:row"><input v-model="vpnConfigForm.enable_logs" type="checkbox" style="width:16px;min-height:16px"/>Enable connection logs</label>
-                      <div class="action-row">
-                        <button class="btn-primary btn-sm" :disabled="busy">Save</button>
-                        <button type="button" class="btn-ghost btn-sm" @click="editingProtocol=null">Cancel</button>
-                      </div>
-                    </form>
-                  </div>
                 </div>
 
                 <!-- L2TP/IPSec -->
@@ -1490,33 +1484,6 @@ onUnmounted(() => {
                   <div class="action-row" style="margin-top:8px">
                     <button class="btn-ghost btn-sm" @click="createNodeTask(node,'service.restart',{service:'l2tp'})">Restart</button>
                     <button class="btn-ghost btn-sm" @click="editingProtocol={nodeId:node.id,protocol:'l2tp'};vpnConfigForm.protocol='l2tp';vpnConfigForm.port=1701;vpnConfigForm.network=vpnSettings?.l2tp_network||'10.9.0.0/24';vpnConfigForm.enabled=true">Edit</button>
-                  </div>
-                  <div v-if="editingProtocol?.nodeId===node.id&&editingProtocol?.protocol==='l2tp'" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
-                    <form class="form-stack" @submit.prevent="saveNodeVPNConfig(node.id);editingProtocol=null">
-                      <div class="two-col">
-                        <label>Port<input v-model.number="vpnConfigForm.port" type="number" min="1" max="65535"/></label>
-                        <label>Network<input v-model.trim="vpnConfigForm.network" placeholder="10.9.0.0/24"/></label>
-                      </div>
-                      <div class="two-col">
-                        <label>Encryption
-                          <select v-model="vpnConfigForm.encryption">
-                            <option value="AES-256-CBC">AES-256-CBC</option>
-                            <option value="AES-128-CBC">AES-128-CBC</option>
-                            <option value="3DES">3DES</option>
-                          </select>
-                        </label>
-                        <label>MTU<input v-model.number="vpnConfigForm.mtu" type="number" min="1200" max="1600"/></label>
-                      </div>
-                      <div class="two-col">
-                        <label>Max Clients (0=unlimited)<input v-model.number="vpnConfigForm.max_clients" type="number" min="0"/></label>
-                        <label>Conn Limit/User (0=unlimited)<input v-model.number="vpnConfigForm.conn_limit" type="number" min="0"/></label>
-                      </div>
-                      <label style="display:flex;align-items:center;gap:8px;flex-direction:row"><input v-model="vpnConfigForm.enable_logs" type="checkbox" style="width:16px;min-height:16px"/>Enable connection logs</label>
-                      <div class="action-row">
-                        <button class="btn-primary btn-sm" :disabled="busy">Save</button>
-                        <button type="button" class="btn-ghost btn-sm" @click="editingProtocol=null">Cancel</button>
-                      </div>
-                    </form>
                   </div>
                 </div>
 
@@ -1535,33 +1502,6 @@ onUnmounted(() => {
                     <button class="btn-ghost btn-sm" @click="createNodeTask(node,'service.restart',{service:'ikev2'})">Restart</button>
                     <button class="btn-ghost btn-sm" @click="editingProtocol={nodeId:node.id,protocol:'ikev2'};vpnConfigForm.protocol='ikev2';vpnConfigForm.port=500;vpnConfigForm.network=vpnSettings?.ikev2_network||'10.10.0.0/24';vpnConfigForm.enabled=true">Edit</button>
                   </div>
-                  <div v-if="editingProtocol?.nodeId===node.id&&editingProtocol?.protocol==='ikev2'" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
-                    <form class="form-stack" @submit.prevent="saveNodeVPNConfig(node.id);editingProtocol=null">
-                      <div class="two-col">
-                        <label>Port<input v-model.number="vpnConfigForm.port" type="number" min="1" max="65535"/></label>
-                        <label>Network<input v-model.trim="vpnConfigForm.network" placeholder="10.10.0.0/24"/></label>
-                      </div>
-                      <div class="two-col">
-                        <label>Encryption
-                          <select v-model="vpnConfigForm.encryption">
-                            <option value="AES-256-GCM">AES-256-GCM</option>
-                            <option value="AES-128-GCM">AES-128-GCM</option>
-                            <option value="CHACHA20-POLY1305">CHACHA20-POLY1305</option>
-                          </select>
-                        </label>
-                        <label>MTU<input v-model.number="vpnConfigForm.mtu" type="number" min="1200" max="1600"/></label>
-                      </div>
-                      <div class="two-col">
-                        <label>Max Clients (0=unlimited)<input v-model.number="vpnConfigForm.max_clients" type="number" min="0"/></label>
-                        <label>Conn Limit/User (0=unlimited)<input v-model.number="vpnConfigForm.conn_limit" type="number" min="0"/></label>
-                      </div>
-                      <label style="display:flex;align-items:center;gap:8px;flex-direction:row"><input v-model="vpnConfigForm.enable_logs" type="checkbox" style="width:16px;min-height:16px"/>Enable connection logs</label>
-                      <div class="action-row">
-                        <button class="btn-primary btn-sm" :disabled="busy">Save</button>
-                        <button type="button" class="btn-ghost btn-sm" @click="editingProtocol=null">Cancel</button>
-                      </div>
-                    </form>
-                  </div>
                 </div>
 
                 <!-- SSH Tunnel (if configured) -->
@@ -1579,31 +1519,42 @@ onUnmounted(() => {
                     <button class="btn-ghost btn-sm" @click="createNodeTask(node,'service.restart',{service:'ssh'})">Restart</button>
                     <button class="btn-ghost btn-sm" @click="editingProtocol={nodeId:node.id,protocol:'ssh'};vpnConfigForm.protocol='ssh';vpnConfigForm.port=22;vpnConfigForm.network='';vpnConfigForm.enabled=true;vpnConfigForm.encryption='CHACHA20-POLY1305';vpnConfigForm.max_clients=0;vpnConfigForm.conn_limit=0;vpnConfigForm.enable_logs=true">Edit</button>
                   </div>
-                  <div v-if="editingProtocol?.nodeId===node.id&&editingProtocol?.protocol==='ssh'" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
-                    <form class="form-stack" @submit.prevent="saveNodeVPNConfig(node.id);editingProtocol=null">
-                      <div class="two-col">
-                        <label>Port<input v-model.number="vpnConfigForm.port" type="number" min="1" max="65535"/></label>
-                        <label>Max Clients (0=unlimited)<input v-model.number="vpnConfigForm.max_clients" type="number" min="0"/></label>
-                      </div>
-                      <div class="two-col">
-                        <label>Conn Limit/User (0=unlimited)<input v-model.number="vpnConfigForm.conn_limit" type="number" min="0"/></label>
-                        <label>Encryption
-                          <select v-model="vpnConfigForm.encryption">
-                            <option value="CHACHA20-POLY1305">CHACHA20-POLY1305</option>
-                            <option value="AES-256-GCM">AES-256-GCM</option>
-                          </select>
-                        </label>
-                      </div>
-                      <label style="display:flex;align-items:center;gap:8px;flex-direction:row"><input v-model="vpnConfigForm.enable_logs" type="checkbox" style="width:16px;min-height:16px"/>Enable connection logs</label>
-                      <div class="action-row">
-                        <button class="btn-primary btn-sm" :disabled="busy">Save</button>
-                        <button type="button" class="btn-ghost btn-sm" @click="editingProtocol=null">Cancel</button>
-                      </div>
-                    </form>
-                  </div>
                 </div>
               </div>
 
+              <!-- Unified edit form (below grid, full width) -->
+              <div v-if="editingProtocol?.nodeId===node.id" style="margin-top:14px;border-top:1px solid var(--border);padding-top:14px">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+                  <b style="font-size:13px">Edit {{ editingProtocol.protocol.toUpperCase() }}</b>
+                  <button class="btn-ghost btn-sm" style="margin-left:auto" @click="editingProtocol=null">&#x2715; Close</button>
+                </div>
+                <form class="form-stack" @submit.prevent="saveNodeVPNConfig(node.id);editingProtocol=null">
+                  <div class="two-col">
+                    <label>Port<input v-model.number="vpnConfigForm.port" type="number" min="1" max="65535"/></label>
+                    <label>Network<input v-model.trim="vpnConfigForm.network" placeholder="10.8.0.0/24"/></label>
+                  </div>
+                  <div class="two-col">
+                    <label>Encryption
+                      <select v-model="vpnConfigForm.encryption">
+                        <option value="AES-256-GCM">AES-256-GCM</option>
+                        <option value="AES-128-GCM">AES-128-GCM</option>
+                        <option value="CHACHA20-POLY1305">CHACHA20-POLY1305</option>
+                        <option value="AES-256-CBC">AES-256-CBC</option>
+                      </select>
+                    </label>
+                    <label>MTU<input v-model.number="vpnConfigForm.mtu" type="number" min="1200" max="1600"/></label>
+                  </div>
+                  <div class="two-col">
+                    <label>Max Clients (0=&#8734;)<input v-model.number="vpnConfigForm.max_clients" type="number" min="0"/></label>
+                    <label>Conn Limit/User (0=&#8734;)<input v-model.number="vpnConfigForm.conn_limit" type="number" min="0"/></label>
+                  </div>
+                  <label style="display:flex;align-items:center;gap:8px;flex-direction:row"><input v-model="vpnConfigForm.enable_logs" type="checkbox" style="width:16px;min-height:16px"/>Enable connection logs</label>
+                  <div class="action-row">
+                    <button class="btn-primary btn-sm" :disabled="busy">Save</button>
+                    <button type="button" class="btn-ghost btn-sm" @click="editingProtocol=null">Cancel</button>
+                  </div>
+                </form>
+              </div>
             </div>
           </div>
         </template>
