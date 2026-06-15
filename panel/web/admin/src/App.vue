@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 
 type Screen = 'loading' | 'setup' | 'login' | 'app'
 type Section = 'overview' | 'analytics' | 'customers' | 'customer-detail' | 'plans' | 'payments' | 'tickets' | 'resellers' | 'nodes' | 'system'
@@ -784,9 +784,35 @@ watch(notice, (message) => {
   }, 4000)
 })
 
+watch(error, (message) => {
+  if (!message) return
+  window.setTimeout(() => {
+    if (error.value === message) error.value = ''
+  }, 6000)
+})
+
 watch(section, (newSec) => {
   window.location.hash = '/' + newSec
 })
+
+// Keyboard: Escape closes modals
+function handleEscape(e: KeyboardEvent) {
+  if (e.key !== 'Escape') return
+  if (selectedTicket.value) { selectedTicket.value = null; return }
+  if (planModalOpen.value) { planModalOpen.value = false; return }
+  if (nodeModalOpen.value) { nodeModalOpen.value = false; return }
+  if (customerModalOpen.value) { customerModalOpen.value = false; return }
+  if (section.value === 'customer-detail' && selectedCustomer.value) { section.value = 'customers'; selectedCustomer.value = null; return }
+}
+
+// Pagination for payments
+const paymentsPage = ref(1)
+const paymentsPerPage = 20
+const paginatedPayments = computed(() => {
+  const start = (paymentsPage.value - 1) * paymentsPerPage
+  return payments.value.slice(start, start + paymentsPerPage)
+})
+const paymentsTotalPages = computed(() => Math.max(1, Math.ceil(payments.value.length / paymentsPerPage)))
 
 async function loadPanelSettings() {
   panelSettingsLoading.value = true
@@ -860,7 +886,12 @@ onMounted(() => {
   if (hash && ['overview', 'analytics', 'customers', 'plans', 'payments', 'tickets', 'resellers', 'nodes', 'system', 'customer-detail'].includes(hash)) {
     section.value = hash as Section
   }
+  window.addEventListener('keydown', handleEscape)
   boot()
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleEscape)
 })
 </script>
 
@@ -937,11 +968,16 @@ onMounted(() => {
     </aside>
 
     <main class="main">
-      <!-- Toast -->
+      <!-- Toast (success/error) -->
       <div v-if="notice" class="toast success" @click="notice=''">
         <svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
         {{ notice }}
         <span class="toast-close" @click.stop="notice=''">&#x2715;</span>
+      </div>
+      <div v-if="error" class="toast error" @click="error=''">
+        <svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+        {{ error }}
+        <span class="toast-close" @click.stop="error=''">&#x2715;</span>
       </div>
 
       <!-- Topbar -->
@@ -962,10 +998,23 @@ onMounted(() => {
           </button>
         </div>
       </div>
-      <p v-if="error" class="alert danger">{{ error }}</p>
 
       <!-- ===== DASHBOARD ===== -->
       <div v-if="section==='overview'" class="page">
+        <!-- Skeleton loading state -->
+        <template v-if="appLoading&&!stats.customers">
+          <div class="grid g4">
+            <div class="card skeleton skeleton-card"></div>
+            <div class="card skeleton skeleton-card"></div>
+            <div class="card skeleton skeleton-card"></div>
+            <div class="card skeleton skeleton-card"></div>
+          </div>
+          <div class="grid g2" style="margin-top:16px">
+            <div class="card skeleton" style="height:240px"></div>
+            <div class="card skeleton" style="height:240px"></div>
+          </div>
+        </template>
+        <template v-else>
         <div class="grid g4">
           <div class="card stat-card">
             <div class="ic" style="background:rgba(91,157,255,.12);color:var(--brand)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg></div>
@@ -1058,6 +1107,7 @@ onMounted(() => {
             </table>
           </div>
         </div>
+        </template>
       </div>
 
       <!-- ===== ANALYTICS ===== -->
@@ -1145,7 +1195,7 @@ onMounted(() => {
                   <td>{{ formatDuration(s.session_seconds) }}</td>
                   <td><button class="btn-danger btn-sm" @click="killSession(s.id)">Kill</button></td>
                 </tr>
-                <tr v-if="!liveSessions.length"><td colspan="5" class="empty-state"><p>No active sessions</p></td></tr>
+                <tr v-if="!liveSessions.length"><td colspan="5" class="empty-state"><p>No active sessions right now</p></td></tr>
               </tbody>
             </table>
           </div>
@@ -1194,7 +1244,7 @@ onMounted(() => {
                       <button v-else class="btn-primary btn-sm" @click="restoreDeletedCustomer(c as any)">Restore</button>
                     </td>
                   </tr>
-                  <tr v-if="!filteredCustomers.length"><td colspan="6" class="empty-state"><p>No users found</p></td></tr>
+                  <tr v-if="!filteredCustomers.length"><td colspan="6" class="empty-state"><p>No users found</p><div class="action"><button class="btn-primary btn-sm" @click="customerModalOpen=true">+ Create User</button></div></td></tr>
                 </tbody>
               </table>
             </div>
@@ -1217,7 +1267,7 @@ onMounted(() => {
                       <td style="color:var(--muted)">{{ formatDate(t.created_at) }}</td>
                       <td><button class="btn-ghost btn-sm" @click.stop="loadTicket(t.id)">View</button></td>
                     </tr>
-                    <tr v-if="!tickets.filter(t=>t.status==='open').length"><td colspan="5" class="empty-state"><p>No open tickets</p></td></tr>
+                    <tr v-if="!tickets.filter(t=>t.status==='open').length"><td colspan="5" class="empty-state"><p>No open tickets — all clear</p></td></tr>
                   </tbody>
                 </table>
               </div>
@@ -1268,7 +1318,7 @@ onMounted(() => {
                       </td>
                       <td><button class="btn-danger btn-sm" @click="deleteReseller(r.id)">Delete</button></td>
                     </tr>
-                    <tr v-if="!resellersList.length"><td colspan="4" class="empty-state"><p>No resellers</p></td></tr>
+                    <tr v-if="!resellersList.length"><td colspan="4" class="empty-state"><p>No resellers yet. Create one using the form.</p></td></tr>
                   </tbody>
                 </table>
               </div>
@@ -1329,7 +1379,7 @@ onMounted(() => {
                   <button class="btn-ghost btn-sm" @click="editPaymentMethod(m);paymentMethodTab='form'">Edit</button>
                   <button v-if="m.is_active" class="btn-danger btn-sm" @click="deactivatePaymentMethod(m)">Off</button>
                 </div>
-                <div v-if="!paymentMethods.length" class="empty-state" style="padding:16px 0"><p>No payment methods</p></div>
+                <div v-if="!paymentMethods.length" class="empty-state" style="padding:16px 0"><p>No payment methods. Click + Add to create one.</p></div>
               </template>
             </div>
           </div>
@@ -1339,7 +1389,7 @@ onMounted(() => {
               <table>
                 <thead><tr><th>User</th><th>Amount</th><th>Method</th><th>Status</th><th>Date</th><th></th></tr></thead>
                 <tbody>
-                  <tr v-for="p in payments" :key="p.id">
+                  <tr v-for="p in paginatedPayments" :key="p.id">
                     <td><div class="user-cell"><div class="av" :style="{background:`linear-gradient(135deg,hsl(${p.id*53%360},65%,50%),hsl(${p.id*89%360},65%,40%))`}">{{ (p.username||'?')[0].toUpperCase() }}</div>{{ p.username }}</div></td>
                     <td style="font-weight:600">{{ formatMoney(p.amount) }}</td>
                     <td>{{ p.method }}</td>
@@ -1354,6 +1404,11 @@ onMounted(() => {
                   </tr>
                 </tbody>
               </table>
+            </div>
+            <div v-if="paymentsTotalPages>1" class="pagination">
+              <button :disabled="paymentsPage<=1" @click="paymentsPage--">&laquo;</button>
+              <span class="page-info">Page {{ paymentsPage }} of {{ paymentsTotalPages }}</span>
+              <button :disabled="paymentsPage>=paymentsTotalPages" @click="paymentsPage++">&raquo;</button>
             </div>
           </div>
         </div>
