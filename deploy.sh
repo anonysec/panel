@@ -7,11 +7,12 @@ VERSION="$(cat "$PROJECT_DIR/VERSION" 2>/dev/null || echo next-dev)"
 
 cd "$PROJECT_DIR"
 
-# Safety check: abort if there are uncommitted local changes
-if ! git diff --quiet || ! git diff --cached --quiet; then
+# Safety check: abort if there are uncommitted local changes (excluding build artifacts)
+if ! git diff --quiet -- ':!panel/web/*/www' ':!panel/web/*/node_modules' ':!panel/web/*/package-lock.json' || ! git diff --cached --quiet -- ':!panel/web/*/www' ':!panel/web/*/node_modules' ':!panel/web/*/package-lock.json'; then
   echo "[deploy] ERROR: uncommitted changes found in $PROJECT_DIR"
   echo "[deploy] Commit or stash them before deploying."
-  git status --short
+  git diff --name-only
+  git diff --cached --name-only
   exit 1
 fi
 
