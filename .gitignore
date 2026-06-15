@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# Build output (regenerated during deploy by npm run build)
+panel/web/admin/www/assets/
+panel/web/portal/www/assets/
+
+# Lock files (regenerated on npm install)
+package-lock.json
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
