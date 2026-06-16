@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { computed } from 'vue'
 import type { Breadcrumb } from '@koris/types/components'
 
 export interface Props {
@@ -10,7 +9,7 @@ export interface Props {
   notificationCount: number
 }
 
-const props = withDefaults(defineProps<Props>(), {
+withDefaults(defineProps<Props>(), {
   subtitle: '',
   breadcrumbs: () => [],
   realtimeConnected: false,
@@ -25,8 +24,6 @@ const emit = defineEmits<{
 }>()
 
 const searchQuery = defineModel<string>('searchQuery', { default: '' })
-
-const hasNotifications = computed(() => props.notificationCount > 0)
 
 function handleSearchKeyup(event: KeyboardEvent) {
   if (event.key === 'Enter') {
@@ -123,7 +120,6 @@ function handleSearchKeyup(event: KeyboardEvent) {
         aria-label="Notifications"
         @click="emit('open-notifications')"
       >
-        <span v-if="hasNotifications" class="notif-dot" aria-hidden="true" />
         <svg
           viewBox="0 0 24 24"
           fill="none"
@@ -134,9 +130,6 @@ function handleSearchKeyup(event: KeyboardEvent) {
           <path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
           <path d="M13.7 21a2 2 0 01-3.4 0" />
         </svg>
-        <span v-if="hasNotifications" class="notif-badge">
-          {{ notificationCount > 99 ? '99+' : notificationCount }}
-        </span>
       </button>
     </div>
   </div>
@@ -333,33 +326,4 @@ function handleSearchKeyup(event: KeyboardEvent) {
   height: 16px;
 }
 
-/* Notification indicators */
-.notif-dot {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 7px;
-  height: 7px;
-  border-radius: var(--radius-full, 9999px);
-  background: var(--color-danger, #ef4444);
-  border: 2px solid var(--color-surface, #0b1120);
-}
-
-.notif-badge {
-  position: absolute;
-  top: -4px;
-  right: -4px;
-  min-width: 18px;
-  height: 18px;
-  border-radius: var(--radius-full, 9999px);
-  background: var(--color-danger, #ef4444);
-  color: #fff;
-  font-size: 10px;
-  font-weight: var(--font-bold, 700);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 4px;
-  border: 2px solid var(--color-surface, #0b1120);
-}
 </style>
