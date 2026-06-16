@@ -234,6 +234,56 @@ func TestExemptPaths_BotWebhook(t *testing.T) {
 	}
 }
 
+func TestExemptPaths_AuthEndpoints(t *testing.T) {
+	handler := Middleware(testSecret, okHandler)
+
+	paths := []string{
+		"/api/auth/admin",
+		"/api/auth/customer",
+		"/api/setup/owner",
+	}
+
+	for _, path := range paths {
+		t.Run(path, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, path, nil)
+			// No CSRF token, no session cookie — login creates the session
+
+			rr := httptest.NewRecorder()
+			handler.ServeHTTP(rr, req)
+
+			if rr.Code != http.StatusOK {
+				t.Fatalf("expected 200 for exempt auth path %s, got %d", path, rr.Code)
+			}
+		})
+	}
+}
+
+func TestExemptPaths_AuthSubpathsNotExempt(t *testing.T) {
+	handler := Middleware(testSecret, okHandler)
+
+	// Sub-paths of auth endpoints should NOT be exempt
+	paths := []string{
+		"/api/auth/admin/extra",
+		"/api/auth/customer/logout",
+		"/api/setup/owner/something",
+	}
+
+	for _, path := range paths {
+		t.Run(path, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, path, nil)
+			req.AddCookie(&http.Cookie{Name: adminCookieName, Value: "session-val"})
+			// No CSRF token
+
+			rr := httptest.NewRecorder()
+			handler.ServeHTTP(rr, req)
+
+			if rr.Code != http.StatusForbidden {
+				t.Fatalf("expected 403 for non-exempt auth sub-path %s, got %d", path, rr.Code)
+			}
+		})
+	}
+}
+
 func TestExemptPaths_NonExempt(t *testing.T) {
 	handler := Middleware(testSecret, okHandler)
 
