@@ -9,7 +9,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"log"
 	"math"
 	"net"
 	"net/http"
@@ -5601,14 +5600,6 @@ func writeError(w http.ResponseWriter, status int, code, message string) {
 		Code:   code,
 		Status: status,
 	})
-}
-
-// logServerError logs 5xx errors with request context for debugging.
-func (s *Server) logServerError(r *http.Request, err error) {
-	username, _, _ := s.currentAdmin(r)
-	requestID := r.Header.Get("X-Request-ID")
-	log.Printf(`{"level":"error","path":"%s","method":"%s","user":"%s","request_id":"%s","error":"%s"}`,
-		r.URL.Path, r.Method, username, requestID, err.Error())
 }
 
 // ========== Null-Safety Scanning Helpers ==========
