@@ -8,6 +8,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"time"
@@ -98,6 +100,21 @@ func startWorker(db *sql.DB) {
 }
 
 func main() {
+	// Optimize for single-core servers
+	if os.Getenv("GOMAXPROCS") == "" {
+		runtime.GOMAXPROCS(1)
+	}
+
+	// Optimize GC for low-memory environments (1GB RAM)
+	// GOGC=50 means GC triggers at 50% heap growth (more frequent but lower peak memory)
+	if os.Getenv("GOGC") == "" {
+		debug.SetGCPercent(50)
+	}
+	// Set soft memory limit to 100MB for the Go process
+	if os.Getenv("GOMEMLIMIT") == "" {
+		debug.SetMemoryLimit(100 * 1024 * 1024) // 100MB
+	}
+
 	cfg := config.Load()
 	database, err := db.Open(cfg.DBDSN)
 	if err != nil {

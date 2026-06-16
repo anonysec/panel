@@ -18,9 +18,9 @@ func Open(dsn string) (*sql.DB, error) {
 		return nil, err
 	}
 
-	// Connection pool settings to prevent exhausting MariaDB connections under load
-	db.SetMaxOpenConns(50)
-	db.SetMaxIdleConns(10)
+	// Connection pool tuned for 1-core/1GB RAM servers
+	db.SetMaxOpenConns(10)
+	db.SetMaxIdleConns(5)
 	db.SetConnMaxLifetime(5 * time.Minute)
 	db.SetConnMaxIdleTime(2 * time.Minute)
 
