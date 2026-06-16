@@ -2,7 +2,8 @@
 import { ref, computed } from 'vue'
 import { usePortalAuthStore } from '@/stores/auth'
 import { useBillingStore } from '@/stores/billing'
-import { useFreshData } from '@/composables/useFreshData'
+import { useFreshData } from '@koris/composables/useFreshData'
+import { formatDate } from '@koris/composables/useFormatDate'
 import KButton from '@koris/ui/KButton.vue'
 import KDataTable from '@koris/ui/KDataTable.vue'
 import KFormField from '@koris/ui/KFormField.vue'
@@ -52,11 +53,6 @@ const paymentColumns = [
 
 function formatMoney(value: number): string {
   return `${new Intl.NumberFormat('en', { maximumFractionDigits: 0 }).format(value)} IRT`
-}
-
-function formatDate(value: string): string {
-  if (!value) return 'N/A'
-  return new Intl.DateTimeFormat('en', { year: 'numeric', month: 'short', day: '2-digit' }).format(new Date(value))
 }
 
 function formatGB(value: number): string {

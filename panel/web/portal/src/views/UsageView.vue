@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useUsageStore } from '@/stores/usage'
-import { useFreshData } from '@/composables/useFreshData'
+import { useFreshData } from '@koris/composables/useFreshData'
 import KChart from '@koris/ui/KChart.vue'
 import KStatusPill from '@koris/ui/KStatusPill.vue'
 import KSkeleton from '@koris/ui/KSkeleton.vue'

@@ -15,6 +15,8 @@ export default defineConfig({
       '@koris/composables/useFormValidation': resolve(__dirname, './composables/useFormValidation'),
       '@koris/composables/useWebSocket': resolve(__dirname, './composables/useWebSocket'),
       '@koris/composables/useApi': resolve(__dirname, './composables/useApi'),
+      '@koris/composables/useFreshData': resolve(__dirname, './composables/useFreshData'),
+      '@koris/composables/useFormatDate': resolve(__dirname, './composables/useFormatDate'),
       'vue': resolve(__dirname, './node_modules/vue'),
     },
   },

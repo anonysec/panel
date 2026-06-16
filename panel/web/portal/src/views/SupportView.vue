@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref, computed } from 'vue'
 import { usePortalTicketsStore } from '@/stores/tickets'
+import { formatDate } from '@koris/composables/useFormatDate'
 import KButton from '@koris/ui/KButton.vue'
 import KDataTable from '@koris/ui/KDataTable.vue'
 import KFormField from '@koris/ui/KFormField.vue'
@@ -36,11 +37,6 @@ const ticketColumns = [
   { key: 'created_at', label: 'Date', sortable: true },
   { key: 'actions', label: '' },
 ]
-
-function formatDate(value: string): string {
-  if (!value) return 'N/A'
-  return new Intl.DateTimeFormat('en', { year: 'numeric', month: 'short', day: '2-digit' }).format(new Date(value))
-}
 
 async function handleCreateTicket() {
   if (!ticketForm.value.subject || !ticketForm.value.message) return

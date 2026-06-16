@@ -1,22 +1,12 @@
 <script setup lang="ts">
 import type { TicketMessage } from '@/stores/tickets'
+import { formatDateTime } from '@koris/composables/useFormatDate'
 
 interface Props {
   messages: TicketMessage[]
 }
 
 defineProps<Props>()
-
-function formatDate(value: string): string {
-  if (!value) return ''
-  return new Intl.DateTimeFormat('en', {
-    year: 'numeric',
-    month: 'short',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(value))
-}
 </script>
 <template>
   <div class="ticket-thread">
@@ -29,7 +19,7 @@ function formatDate(value: string): string {
       <div class="ticket-thread__header">
         <span class="ticket-thread__sender">{{ msg.sender_name }}</span>
         <span class="ticket-thread__badge" v-if="msg.sender_type === 'admin'">Staff</span>
-        <span class="ticket-thread__time">{{ formatDate(msg.created_at) }}</span>
+        <span class="ticket-thread__time">{{ formatDateTime(msg.created_at) }}</span>
       </div>
       <p class="ticket-thread__body">{{ msg.message }}</p>
     </div>
