@@ -42,7 +42,7 @@ async function handleLogin() {
     <aside class="login-hero">
       <div class="login-hero__content">
         <div class="login-hero__logo">
-          <span class="login-hero__logo-icon">◆</span>
+          <span class="login-hero__logo-icon">K</span>
           <span class="login-hero__logo-text">KorisPanel</span>
         </div>
         <h1 class="login-hero__title">VPN Management<br>Made Simple</h1>
@@ -136,8 +136,16 @@ async function handleLogin() {
 }
 
 .login-hero__logo-icon {
-  font-size: var(--text-2xl);
-  color: var(--color-primary);
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, var(--color-primary), #22d3ee);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 800;
+  font-size: 16px;
 }
 
 .login-hero__logo-text {

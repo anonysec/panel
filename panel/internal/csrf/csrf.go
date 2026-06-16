@@ -59,14 +59,15 @@ func Middleware(secret string, next http.Handler) http.Handler {
 
 // isExempt returns true for paths that bypass CSRF validation.
 // Exempt: all paths starting with /api/node/, exact path /api/bot/webhook,
-// and authentication endpoints that create sessions (no session cookie exists yet).
+// all /api/auth/* paths (protected by credentials, not CSRF), and
+// all /api/setup/* paths (protected by setup key).
 func isExempt(path string) bool {
 	// Node API and bot webhook bypass CSRF entirely
 	if strings.HasPrefix(path, "/api/node/") || path == "/api/bot/webhook" {
 		return true
 	}
-	// Auth endpoints that create sessions are exempt (no session cookie exists yet)
-	if path == "/api/auth/admin" || path == "/api/auth/customer" || path == "/api/setup/owner" {
+	// ALL auth endpoints are exempt — they're protected by credentials, not CSRF
+	if strings.HasPrefix(path, "/api/auth/") || strings.HasPrefix(path, "/api/setup/") {
 		return true
 	}
 	return false
