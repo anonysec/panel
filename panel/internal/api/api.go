@@ -374,7 +374,7 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/portal", redirectTo("/portal/"))
 	mux.Handle("/portal/", spaHandler(s.Config.PortalWebDir, "/portal/"))
 	mux.HandleFunc("/", s.notFound)
-	return noCacheMiddleware(mux)
+	return mux
 }
 
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {
