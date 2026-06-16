@@ -93,3 +93,25 @@ else
 fi
 
 echo "[deploy] Done."
+
+# === Post-deploy diagnostics (auto-output for debugging) ===
+echo ""
+echo "=== [deploy] Post-Deploy Log Output ==="
+echo "[deploy] Last 20 panel logs:"
+journalctl -u panel -n 20 --no-pager -o short-iso 2>/dev/null || echo "  (journalctl not available)"
+
+echo ""
+echo "[deploy] Service status:"
+systemctl is-active panel 2>/dev/null || echo "  panel service status unknown"
+
+# Quick health check with timeout
+echo ""
+echo "[deploy] Health check response:"
+curl -s --max-time 5 http://127.0.0.1:${PANEL_PORT:-8088}/api/health 2>/dev/null || echo "  (health check failed or timed out)"
+
+echo ""
+echo "[deploy] Diagnostics endpoint:"
+curl -s --max-time 10 http://127.0.0.1:${PANEL_PORT:-8088}/api/diagnostics/status 2>/dev/null || echo "  (diagnostics not available - may need auth)"
+
+echo ""
+echo "=== [deploy] End of diagnostics ==="
