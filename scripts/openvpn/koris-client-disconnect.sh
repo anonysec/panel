@@ -47,11 +47,15 @@ cleanup_tc_limit() {
 
 cleanup_tc_limit || true
 
-mysql -u root "$DB" <<SQL
+DB_ERR="$(mysql -u root "$DB" 2>&1 <<SQL
 UPDATE radacct
 SET acctstoptime=NOW(), acctupdatetime=NOW(), acctsessiontime=${DUR}, acctinputoctets=${IN}, acctoutputoctets=${OUT}, acctterminatecause='${SQL_CAUSE}', connectinfo_stop='OpenVPN disconnect'
 WHERE username='${SQL_USER}' AND acctstoptime IS NULL
 ORDER BY radacctid DESC LIMIT 1;
 SQL
+)" || DB_RC=$?
+if [ "${DB_RC:-0}" -ne 0 ]; then
+  echo "$(date -Is) DB_ERROR user=$U rc=$DB_RC err=$(printf '%s' "$DB_ERR" | head -c 200)" >> "$LOG"
+fi
 echo "$(date -Is) STOP user=$U ip=$IP in=$IN out=$OUT duration=$DUR cause=$CAUSE" >> "$LOG"
 exit 0

@@ -72,6 +72,7 @@ rate_from_policy() {
     DOWN_RATE="$UP_RATE"
     return 0
   fi
+  echo "$(date -Is) RATE_QUERY_FAIL user=$U" >> "$TC_LOG"
   return 1
 }
 
@@ -102,6 +103,7 @@ apply_tc_limit() {
 
 apply_tc_limit || true
 
+# Requires UNIQUE INDEX on (acctsessionid, acctuniqueid) in radacct table
 mysql -u root "$DB" <<SQL
 INSERT INTO radacct(acctsessionid,acctuniqueid,username,nasipaddress,nasporttype,acctstarttime,acctupdatetime,acctauthentic,connectinfo_start,calledstationid,callingstationid,servicetype,framedprotocol,framedipaddress)
 VALUES('${SQL_SESSION}','${SQL_UNIQUE}','${SQL_USER}','${NAS_IP}','Virtual',NOW(),NOW(),'RADIUS','OpenVPN','${NAS_IP}','${TRUSTED_IP}:${TRUSTED_PORT}','Login-User','PPP','${IP}')
