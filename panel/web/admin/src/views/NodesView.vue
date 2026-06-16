@@ -34,10 +34,10 @@ const nodeForm = ref({
 
 // ─── Protocol Defaults & Config State ────────────────────────────────────────
 const PROTOCOL_DEFAULTS: Record<string, any> = {
-  openvpn: { port: 1194, network: '10.8.0.0/24', enabled: true, extra_json: { transport: 'udp', cipher: 'AES-256-GCM', tls_mode: 'tls-crypt', dns1: '8.8.8.8', dns2: '8.8.4.4' } },
-  l2tp: { port: 1701, network: '10.9.0.0/24', enabled: true, extra_json: { psk: '', auth_method: 'CHAP', dns1: '8.8.8.8', dns2: '8.8.4.4' } },
-  ikev2: { port: 500, network: '10.10.0.0/24', enabled: true, extra_json: { psk: '', cert_id: null, dns1: '8.8.8.8', dns2: '8.8.4.4' } },
-  ssh: { port: 2222, network: '', enabled: true, extra_json: { listen_address: '0.0.0.0', key_type: 'ed25519' } },
+  openvpn: { port: 1194, network: '10.8.0.0/24', enabled: true, mtu: 1500, max_clients: 0, enable_logs: true, conn_limit: 0, extra_json: { transport: 'udp', cipher: 'AES-256-GCM', tls_mode: 'tls-crypt', dns1: '8.8.8.8', dns2: '8.8.4.4' } },
+  l2tp: { port: 1701, network: '10.9.0.0/24', enabled: true, mtu: 1500, max_clients: 0, enable_logs: true, conn_limit: 0, extra_json: { ipsec_mode: 'ipsec', psk: '', auth_method: 'CHAP', dns1: '8.8.8.8', dns2: '8.8.4.4' } },
+  ikev2: { port: 500, network: '10.10.0.0/24', enabled: true, mtu: 1500, max_clients: 0, enable_logs: true, conn_limit: 0, extra_json: { auth_type: 'psk', psk: '', cert_id: '', dns1: '8.8.8.8', dns2: '8.8.4.4' } },
+  ssh: { port: 2222, network: '', enabled: true, max_clients: 0, enable_logs: true, conn_limit: 0, extra_json: { listen_address: '0.0.0.0', key_type: 'ed25519' } },
 }
 
 const protocolList = ['openvpn', 'l2tp', 'ikev2', 'ssh'] as const
@@ -125,21 +125,29 @@ async function handleDeleteNode(id: number, name: string) {
 // ─── Protocol Config Handlers ────────────────────────────────────────────────
 function startEdit(nodeId: number, protocol: string, currentConfig: any) {
   editingConfig.value = { nodeId, protocol }
+  const defaults = PROTOCOL_DEFAULTS[protocol]
   if (currentConfig) {
     configForm.value = {
       protocol: currentConfig.protocol,
       port: currentConfig.port,
       network: currentConfig.network,
       enabled: currentConfig.enabled,
-      extra_json: { ...(currentConfig.extra_json || {}) },
+      mtu: currentConfig.mtu ?? defaults.mtu ?? null,
+      max_clients: currentConfig.max_clients ?? defaults.max_clients ?? 0,
+      enable_logs: currentConfig.enable_logs ?? defaults.enable_logs ?? true,
+      conn_limit: currentConfig.conn_limit ?? defaults.conn_limit ?? 0,
+      extra_json: { ...defaults.extra_json, ...(currentConfig.extra_json || {}) },
     }
   } else {
-    const defaults = PROTOCOL_DEFAULTS[protocol]
     configForm.value = {
       protocol,
       port: defaults.port,
       network: defaults.network,
       enabled: defaults.enabled,
+      mtu: defaults.mtu ?? null,
+      max_clients: defaults.max_clients ?? 0,
+      enable_logs: defaults.enable_logs ?? true,
+      conn_limit: defaults.conn_limit ?? 0,
       extra_json: { ...defaults.extra_json },
     }
   }
@@ -154,7 +162,18 @@ async function saveConfig() {
   if (!editingConfig.value) return
   savingConfig.value = true
   const { nodeId } = editingConfig.value
-  await store.saveNodeVpnConfig(nodeId, configForm.value)
+  const payload = {
+    protocol: configForm.value.protocol,
+    port: configForm.value.port,
+    network: configForm.value.network,
+    enabled: configForm.value.enabled,
+    mtu: configForm.value.mtu ?? undefined,
+    max_clients: configForm.value.max_clients ?? 0,
+    enable_logs: configForm.value.enable_logs ?? true,
+    conn_limit: configForm.value.conn_limit ?? 0,
+    extra_json: configForm.value.extra_json,
+  }
+  await store.saveNodeVpnConfig(nodeId, payload)
   await store.loadNodeVpnConfigs(nodeId)
   editingConfig.value = null
   configForm.value = {}
@@ -387,7 +406,12 @@ onMounted(() => {
 
                       <!-- L2TP specific fields -->
                       <template v-if="proto === 'l2tp'">
-                        <KFormField :name="`${proto}-psk`" label="Pre-Shared Key">
+                        <KFormField :name="`${proto}-ipsec`" label="Mode">
+                          <template #default="{ fieldId }">
+                            <KSelect :id="fieldId" v-model="configForm.extra_json.ipsec_mode" :options="[{ label: 'L2TP/IPSec', value: 'ipsec' }, { label: 'Plain L2TP', value: 'plain' }]" />
+                          </template>
+                        </KFormField>
+                        <KFormField v-if="configForm.extra_json.ipsec_mode === 'ipsec'" :name="`${proto}-psk`" label="Pre-Shared Key">
                           <template #default="{ fieldId }">
                             <KInput :id="fieldId" v-model="configForm.extra_json.psk" type="password" placeholder="PSK" />
                           </template>
@@ -411,9 +435,19 @@ onMounted(() => {
 
                       <!-- IKEv2 specific fields -->
                       <template v-if="proto === 'ikev2'">
-                        <KFormField :name="`${proto}-psk`" label="Pre-Shared Key">
+                        <KFormField :name="`${proto}-authtype`" label="Auth Type">
+                          <template #default="{ fieldId }">
+                            <KSelect :id="fieldId" v-model="configForm.extra_json.auth_type" :options="[{ label: 'PSK', value: 'psk' }, { label: 'Certificate', value: 'certificate' }]" />
+                          </template>
+                        </KFormField>
+                        <KFormField v-if="configForm.extra_json.auth_type === 'psk'" :name="`${proto}-psk`" label="Pre-Shared Key">
                           <template #default="{ fieldId }">
                             <KInput :id="fieldId" v-model="configForm.extra_json.psk" type="password" placeholder="PSK" />
+                          </template>
+                        </KFormField>
+                        <KFormField v-if="configForm.extra_json.auth_type === 'certificate'" :name="`${proto}-certid`" label="Certificate ID">
+                          <template #default="{ fieldId }">
+                            <KInput :id="fieldId" v-model="configForm.extra_json.cert_id" placeholder="Certificate identifier" />
                           </template>
                         </KFormField>
                         <KFormField :name="`${proto}-dns1`" label="DNS 1">
@@ -443,6 +477,43 @@ onMounted(() => {
                       </template>
                     </div>
 
+                    <!-- Advanced Settings -->
+                    <details class="advanced-settings">
+                      <summary class="advanced-settings__title">Advanced Settings</summary>
+                      <div class="protocol-form__grid advanced-settings__grid">
+                        <!-- MTU: all protocols except SSH -->
+                        <KFormField v-if="proto !== 'ssh'" :name="`${proto}-mtu`" label="MTU">
+                          <template #default="{ fieldId }">
+                            <KInput :id="fieldId" v-model="configForm.mtu" type="number" placeholder="1500" />
+                          </template>
+                        </KFormField>
+                        <!-- Max Clients: all protocols -->
+                        <KFormField :name="`${proto}-max-clients`" label="Max Clients (0 = unlimited)">
+                          <template #default="{ fieldId }">
+                            <KInput :id="fieldId" v-model="configForm.max_clients" type="number" placeholder="0" />
+                          </template>
+                        </KFormField>
+                        <!-- Connection Limit: all protocols -->
+                        <KFormField :name="`${proto}-conn-limit`" label="Conn Limit (0 = unlimited)">
+                          <template #default="{ fieldId }">
+                            <KInput :id="fieldId" v-model="configForm.conn_limit" type="number" placeholder="0" />
+                          </template>
+                        </KFormField>
+                        <!-- Enable Logs: all protocols -->
+                        <KFormField :name="`${proto}-enable-logs`" label="Enable Logs">
+                          <template #default>
+                            <label class="toggle-switch">
+                              <input
+                                type="checkbox"
+                                :checked="configForm.enable_logs"
+                                @change="configForm.enable_logs = ($event.target as HTMLInputElement).checked"
+                              />
+                              <span class="toggle-switch__slider" />
+                            </label>
+                          </template>
+                        </KFormField>
+                      </div>
+                    </details>
 
                     <div class="protocol-form__actions">
                       <KButton variant="ghost" size="sm" @click="cancelEdit">Cancel</KButton>
@@ -576,6 +647,24 @@ onMounted(() => {
   justify-content: flex-end;
   gap: var(--space-2);
   margin-top: var(--space-4);
+}
+
+/* Advanced Settings */
+.advanced-settings {
+  margin-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-3);
+}
+.advanced-settings__title {
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  color: var(--color-muted);
+  cursor: pointer;
+  user-select: none;
+  padding: var(--space-1) 0;
+}
+.advanced-settings__grid {
+  margin-top: var(--space-3);
 }
 
 .text-muted { color: var(--color-muted); }

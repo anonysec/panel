@@ -1,0 +1,28 @@
+{
+  "id": "FEAT-002",
+  "type": "feat",
+  "description": "Enhance VPN protocol core configuration forms with full config options and conditional PSK field visibility based on auth method",
+  "status": "in_progress",
+  "steps": [
+    "1. In NodesView.vue (panel/web/admin/src/views/NodesView.vue), update the protocol config forms in the Cores tab to add missing fields that exist in the NodeVPNConfig interface (panel/web/admin/src/stores/nodes.ts): encryption, mtu, max_clients, enable_logs, conn_limit. Add these to all protocol forms where applicable.",
+    "2. For L2TP: Make the PSK field conditional - only show it when IPSec is being used (add an 'ipsec' boolean/toggle or 'mode' selector: 'L2TP/IPSec' vs 'Plain L2TP'). When the mode is plain L2TP, hide the PSK field. Update PROTOCOL_DEFAULTS for l2tp to include an ipsec: true default and add a mode/ipsec toggle to the form. Add an ipsec field to extra_json.",
+    "3. For IKEv2: Make the PSK field conditional based on auth type. Add an 'auth_type' selector with options like 'PSK' and 'Certificate'. Only show the PSK field when auth_type is 'PSK'. When 'Certificate', show a cert_id field instead. The cert_id already exists in PROTOCOL_DEFAULTS for ikev2.",
+    "4. For OpenVPN: Add fields for encryption (cipher is already there but add hmac_auth), MTU, max_clients, enable_logs, and conn_limit. These map to the NodeVPNConfig interface fields.",
+    "5. For SSH: Add fields for max_clients, conn_limit, and enable_logs. No PSK for SSH which is correct.",
+    "6. Update PROTOCOL_DEFAULTS to include the new fields with sensible defaults: encryption='AES-256-GCM', mtu=1500, max_clients=0 (unlimited), enable_logs=true, conn_limit=0 (unlimited).",
+    "7. Update the configForm initialization in startEdit() to include the new fields from extra_json and from top-level config properties."
+  ],
+  "acceptance_criteria": [
+    "L2TP config form shows PSK only when IPSec mode is selected (conditional visibility)",
+    "IKEv2 config form shows PSK only when auth_type is PSK, shows cert_id when auth_type is Certificate",
+    "All protocols show fields for: mtu, max_clients, enable_logs, conn_limit where applicable",
+    "OpenVPN shows additional encryption/hmac fields",
+    "PROTOCOL_DEFAULTS includes all new fields with sensible values",
+    "npm run build succeeds for admin"
+  ],
+  "verification": [
+    "cd /projects/sandbox/panel/panel/web/admin && npm run build"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}
