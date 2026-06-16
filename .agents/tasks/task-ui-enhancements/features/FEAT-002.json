@@ -2,7 +2,7 @@
   "id": "FEAT-002",
   "type": "feat",
   "description": "Enhance VPN protocol core configuration forms with full config options and conditional PSK field visibility based on auth method",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "1. In NodesView.vue (panel/web/admin/src/views/NodesView.vue), update the protocol config forms in the Cores tab to add missing fields that exist in the NodeVPNConfig interface (panel/web/admin/src/stores/nodes.ts): encryption, mtu, max_clients, enable_logs, conn_limit. Add these to all protocol forms where applicable.",
     "2. For L2TP: Make the PSK field conditional - only show it when IPSec is being used (add an 'ipsec' boolean/toggle or 'mode' selector: 'L2TP/IPSec' vs 'Plain L2TP'). When the mode is plain L2TP, hide the PSK field. Update PROTOCOL_DEFAULTS for l2tp to include an ipsec: true default and add a mode/ipsec toggle to the form. Add an ipsec field to extra_json.",
@@ -24,5 +24,5 @@
     "cd /projects/sandbox/panel/panel/web/admin && npm run build"
   ],
   "blocked_reason": null,
-  "findings": ""
+  "findings": "KSelect options require value to be string|number (not boolean), so L2TP ipsec toggle uses ipsec_mode with string values 'ipsec'/'plain' instead of boolean true/false. IKEv2 auth_type uses string 'psk'/'certificate'. Advanced Settings wrapped in a <details> element for collapsible UX. SSH has no mtu field as specified."
 }
