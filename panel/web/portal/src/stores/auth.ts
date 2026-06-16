@@ -1,6 +1,7 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import { useApi } from '@koris/composables/useApi'
+import router from '@/router'
 
 /**
  * Portal customer representation
@@ -56,8 +57,11 @@ export const usePortalAuthStore = defineStore('portal-auth', () => {
   // ─── API composable ───────────────────────────────────────────────────────
   const { get, post, loading, error } = useApi({
     onUnauthorized: () => {
+      // On 401, clear session state and redirect to portal login
       user.value = null
       isAuthenticated.value = false
+      totpRequired.value = false
+      router.push({ name: 'portal-login' })
     },
   })
 

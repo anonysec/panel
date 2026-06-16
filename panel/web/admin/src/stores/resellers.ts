@@ -1,6 +1,8 @@
 import { ref } from 'vue'
 import { defineStore } from 'pinia'
 import { useApi } from '@koris/composables/useApi'
+import { useAuthStore } from '@/stores/auth'
+import router from '@/router'
 
 /**
  * Reseller entity matching the backend data model
@@ -66,7 +68,11 @@ export const useResellersStore = defineStore('resellers', () => {
   // ─── API composable ───────────────────────────────────────────────────────
   const { get, post, del, error } = useApi({
     onUnauthorized: () => {
-      // Auth store handles 401 redirect via its own onUnauthorized callback
+      // On 401, clear auth state and redirect to login
+      const auth = useAuthStore()
+      auth.user = null
+      auth.isAuthenticated = false
+      router.push({ name: 'login' })
     },
   })
 

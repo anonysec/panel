@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useNodesStore } from '@/stores/nodes'
+import { useApi } from '@koris/composables/useApi'
+import { useToast } from '@koris/composables/useToast'
 import KTabs from '@koris/ui/KTabs.vue'
 import KFormField from '@koris/ui/KFormField.vue'
 import KInput from '@koris/ui/KInput.vue'
@@ -11,18 +13,72 @@ import KStatusPill from '@koris/ui/KStatusPill.vue'
 const props = defineProps<{ tab?: string }>()
 
 const nodesStore = useNodesStore()
+const { get, put } = useApi()
+const toast = useToast()
 const activeTab = ref(props.tab || 'panel-status')
 const saving = ref(false)
 
 const tabs = [
   { key: 'panel-status', label: 'Panel Status' },
   { key: 'panel-settings', label: 'Panel Settings' },
+  { key: 'data-warnings', label: 'Data Warnings' },
   { key: 'telegram', label: 'Telegram Bot' },
   { key: 'certificates', label: 'Certificates' },
   { key: 'vpn-settings', label: 'VPN Settings' },
   { key: 'audit-logs', label: 'Audit Logs' },
   { key: 'backup', label: 'Backup' },
 ]
+
+// ─── Data Warning Thresholds ────────────────────────────────────────────────
+const thresholds = ref<number[]>([80, 95])
+const savingThresholds = ref(false)
+const loadingThresholds = ref(false)
+
+async function loadThresholds(): Promise<void> {
+  loadingThresholds.value = true
+  try {
+    const res = await get<{ ok: boolean; thresholds: number[] }>('/api/settings/data-warning-thresholds')
+    if (res.thresholds && res.thresholds.length > 0) {
+      thresholds.value = res.thresholds
+    }
+  } catch {
+    // Use defaults on error
+  } finally {
+    loadingThresholds.value = false
+  }
+}
+
+function addThreshold(): void {
+  thresholds.value.push(50)
+}
+
+function removeThreshold(index: number): void {
+  if (thresholds.value.length > 1) {
+    thresholds.value.splice(index, 1)
+  }
+}
+
+function updateThreshold(index: number, value: string | number): void {
+  const num = typeof value === 'number' ? value : parseInt(value, 10)
+  if (!isNaN(num)) {
+    thresholds.value[index] = Math.min(100, Math.max(0, num))
+  }
+}
+
+async function saveThresholds(): Promise<void> {
+  savingThresholds.value = true
+  try {
+    // Sort and deduplicate before saving
+    const sorted = [...new Set(thresholds.value)].sort((a, b) => a - b)
+    thresholds.value = sorted
+    await put<{ ok: boolean }>('/api/settings/data-warning-thresholds', { thresholds: sorted })
+    toast.success('Data warning thresholds saved successfully.')
+  } catch {
+    toast.error('Failed to save data warning thresholds.')
+  } finally {
+    savingThresholds.value = false
+  }
+}
 
 // VPN Settings form
 const vpnForm = ref({
@@ -65,7 +121,10 @@ async function saveVpnSettings() {
 }
 
 onMounted(async () => {
-  await nodesStore.loadVpnSettings()
+  await Promise.all([
+    nodesStore.loadVpnSettings(),
+    loadThresholds(),
+  ])
   populateVpnForm()
 })
 </script>
@@ -121,6 +180,60 @@ onMounted(async () => {
                 />
               </template>
             </KFormField>
+          </form>
+        </div>
+      </template>
+
+      <!-- Data Usage Warnings -->
+      <template #data-warnings>
+        <div class="settings-panel">
+          <h4 class="section-title">Data Usage Warnings</h4>
+          <p class="text-muted text-sm">
+            Configure percentage thresholds at which customers receive data usage warnings.
+            When a customer's traffic reaches any of these thresholds, a warning notification will be sent.
+          </p>
+          <form class="settings-form" @submit.prevent="saveThresholds">
+            <div class="thresholds-list">
+              <div
+                v-for="(threshold, index) in thresholds"
+                :key="index"
+                class="threshold-row"
+              >
+                <KFormField :name="`threshold-${index}`" :label="`Threshold ${index + 1}`">
+                  <template #default="{ fieldId }">
+                    <div class="threshold-input-group">
+                      <KInput
+                        :id="fieldId"
+                        :model-value="String(threshold)"
+                        type="number"
+                        min="0"
+                        max="100"
+                        placeholder="e.g. 80"
+                        @update:model-value="updateThreshold(index, $event)"
+                      />
+                      <span class="threshold-unit">%</span>
+                      <KButton
+                        variant="ghost"
+                        size="sm"
+                        type="button"
+                        :disabled="thresholds.length <= 1"
+                        @click="removeThreshold(index)"
+                      >
+                        Remove
+                      </KButton>
+                    </div>
+                  </template>
+                </KFormField>
+              </div>
+            </div>
+            <div class="threshold-actions">
+              <KButton variant="ghost" size="sm" type="button" @click="addThreshold">
+                + Add Threshold
+              </KButton>
+            </div>
+            <KButton type="submit" variant="primary" :loading="savingThresholds">
+              Save Thresholds
+            </KButton>
           </form>
         </div>
       </template>
@@ -264,6 +377,12 @@ onMounted(async () => {
 .cert-item__label { font-size: var(--text-sm); }
 
 .backup-actions { display: flex; gap: var(--space-2); }
+
+.thresholds-list { display: flex; flex-direction: column; gap: var(--space-2); }
+.threshold-row { display: flex; align-items: flex-end; gap: var(--space-2); }
+.threshold-input-group { display: flex; align-items: center; gap: var(--space-2); }
+.threshold-unit { font-size: var(--text-sm); color: var(--color-muted); font-weight: var(--font-medium); }
+.threshold-actions { display: flex; align-items: center; }
 
 .text-muted { color: var(--color-muted); }
 .text-sm { font-size: var(--text-sm); }

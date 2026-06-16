@@ -4,37 +4,53 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"log"
+	"io"
 	"net"
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
+
+	"koris-next/node/internal/config"
+	"koris-next/node/internal/logger"
+	"koris-next/node/internal/updater"
 )
 
+const agentVersion = "0.36.0"
+
+type DiagnosticsReport struct {
+	AgentVersion  string `json:"agent_version"`
+	UptimeSeconds int64  `json:"uptime_seconds"`
+	GoVersion     string `json:"go_version"`
+	Goroutines    int    `json:"goroutines"`
+	MemAllocBytes int64  `json:"mem_alloc_bytes"`
+}
+
 type Push struct {
-	Token         string            `json:"token"`
-	Type          string            `json:"type"`
-	Hostname      string            `json:"hostname"`
-	PublicIP      string            `json:"public_ip"`
-	OS            string            `json:"os"`
-	Timestamp     time.Time         `json:"timestamp"`
-	CPUPercent    float64           `json:"cpu_percent"`
-	RAMPercent    float64           `json:"ram_percent"`
-	DiskPercent   float64           `json:"disk_percent"`
-	RxBps         int64             `json:"rx_bps"`
-	TxBps         int64             `json:"tx_bps"`
-	RxBytes       int64             `json:"rx_bytes"`
-	TxBytes       int64             `json:"tx_bytes"`
-	OnlineUsers   int               `json:"online_users"`
-	OpenVPNStatus string            `json:"openvpn_status"`
-	L2TPStatus    string            `json:"l2tp_status"`
-	IKEv2Status   string            `json:"ikev2_status"`
-	Services      map[string]string `json:"services"`
+	Token         string             `json:"token"`
+	Type          string             `json:"type"`
+	Hostname      string             `json:"hostname"`
+	PublicIP      string             `json:"public_ip"`
+	OS            string             `json:"os"`
+	Timestamp     time.Time          `json:"timestamp"`
+	CPUPercent    float64            `json:"cpu_percent"`
+	RAMPercent    float64            `json:"ram_percent"`
+	DiskPercent   float64            `json:"disk_percent"`
+	RxBps         int64              `json:"rx_bps"`
+	TxBps         int64              `json:"tx_bps"`
+	RxBytes       int64              `json:"rx_bytes"`
+	TxBytes       int64              `json:"tx_bytes"`
+	OnlineUsers   int                `json:"online_users"`
+	OpenVPNStatus string             `json:"openvpn_status"`
+	L2TPStatus    string             `json:"l2tp_status"`
+	IKEv2Status   string             `json:"ikev2_status"`
+	Services      map[string]string  `json:"services"`
+	Diagnostics   *DiagnosticsReport `json:"diagnostics,omitempty"`
 }
 
 type Task struct {
@@ -49,17 +65,119 @@ type TaskPollResponse struct {
 }
 
 func main() {
-	panel := strings.TrimRight(getenv("PANEL_URL", "http://127.0.0.1:8080"), "/")
-	token := getenv("NODE_TOKEN", "")
+	// Load configuration from env file or environment variables
+	envFile := getenv("NODE_ENV_FILE", "/etc/panel-node/node.env")
+	cfg, err := config.Load(envFile)
+	if err != nil {
+		// Fallback: try loading from environment variables directly
+		cfg = loadConfigFromEnv()
+		if cfg == nil {
+			fmt.Fprintf(os.Stderr, `{"timestamp":"%s","level":"error","message":"failed to load configuration","fields":{"error":"%s"}}`+"\n",
+				time.Now().UTC().Format(time.RFC3339), err.Error())
+			os.Exit(1)
+		}
+	}
+
+	// Initialize structured logger from config
+	logLevel := logger.ParseLevel(cfg.GetLogLevel())
+	log := logger.New(logLevel)
+
+	panel := cfg.GetPanelURL()
+	token := cfg.GetNodeToken()
 	if token == "" {
-		log.Fatal("NODE_TOKEN is required")
+		log.Error("NODE_TOKEN is required")
+		os.Exit(1)
 	}
-	intervalSeconds, _ := strconv.Atoi(getenv("NODE_INTERVAL", "10"))
-	if intervalSeconds < 3 {
-		intervalSeconds = 3
+	if panel == "" {
+		panel = "http://127.0.0.1:8080"
 	}
-	interval := time.Duration(intervalSeconds) * time.Second
+
+	interval := cfg.GetInterval()
+	if interval < 3 {
+		interval = 3
+	}
+	intervalDuration := time.Duration(interval) * time.Second
 	client := &http.Client{Timeout: 20 * time.Second}
+
+	log.Info("node agent starting", map[string]any{
+		"panel_url":    panel,
+		"interval_sec": interval,
+		"log_level":    cfg.GetLogLevel(),
+		"version":      agentVersion,
+	})
+
+	// Record startup time for diagnostics uptime calculation.
+	startTime := time.Now()
+
+	// SIGHUP signal handler for config hot-reload.
+	sighup := make(chan os.Signal, 1)
+	signal.Notify(sighup, syscall.SIGHUP)
+	go func() {
+		for range sighup {
+			log.Info("received SIGHUP, reloading configuration")
+			changes, err := cfg.Reload(envFile)
+			if err != nil {
+				log.Error("config reload failed", map[string]any{
+					"error": err.Error(),
+				})
+				continue
+			}
+			for key, vals := range changes {
+				log.Info("config key changed", map[string]any{
+					"key":       key,
+					"old_value": vals[0],
+					"new_value": vals[1],
+				})
+			}
+			if newLevel, ok := changes["LOG_LEVEL"]; ok {
+				log.SetLevel(logger.ParseLevel(newLevel[1]))
+				log.Info("log level updated", map[string]any{
+					"level": newLevel[1],
+				})
+			}
+			if len(changes) == 0 {
+				log.Info("config reload complete, no changes detected")
+			}
+		}
+	}()
+
+	// Auto-update goroutine: checks for new agent version on startup and every 6 hours.
+	agentUpdater := updater.New(panel, token, agentVersion, client)
+	go func() {
+		// Run update check immediately on startup.
+		if cfg.GetAutoUpdate() {
+			log.Info("running initial auto-update check")
+			if err := agentUpdater.CheckAndUpdate(); err != nil {
+				log.Error("auto-update check failed", map[string]any{
+					"error": err.Error(),
+				})
+			} else {
+				log.Info("auto-update check complete, already up to date")
+			}
+		} else {
+			log.Info("auto-update is disabled, skipping initial check")
+		}
+
+		ticker := time.NewTicker(6 * time.Hour)
+		defer ticker.Stop()
+		for range ticker.C {
+			if !cfg.GetAutoUpdate() {
+				log.Debug("auto-update is disabled, skipping scheduled check")
+				continue
+			}
+			log.Info("running scheduled auto-update check")
+			if err := agentUpdater.CheckAndUpdate(); err != nil {
+				log.Error("auto-update check failed", map[string]any{
+					"error": err.Error(),
+				})
+			} else {
+				log.Info("auto-update check complete, already up to date")
+			}
+		}
+	}()
+
+	// Consecutive failure tracking state for push endpoint.
+	tracker := NewFailureTracker(3, log)
 
 	lastRx, lastTx := netBytes()
 	lastAt := time.Now()
@@ -68,7 +186,7 @@ func main() {
 		now := time.Now()
 		dt := now.Sub(lastAt).Seconds()
 		if dt <= 0 {
-			dt = interval.Seconds()
+			dt = intervalDuration.Seconds()
 		}
 		host, _ := os.Hostname()
 		services := map[string]string{
@@ -96,41 +214,134 @@ func main() {
 			L2TPStatus:    services["l2tp"],
 			IKEv2Status:   services["ikev2"],
 			Services:      services,
+			Diagnostics:   buildDiagnostics(startTime, agentVersion),
 		}
-		postJSON(client, panel+"/api/node/push", token, push)
-		pollTasks(client, panel, token)
+
+		ok, errMsg := postJSON(client, panel+"/api/node/push", token, push, log)
+		if ok {
+			tracker.RecordSuccess()
+		} else {
+			tracker.RecordFailure(errMsg)
+		}
+
+		pollTasks(client, panel, token, log, cfg, envFile)
 		lastRx, lastTx, lastAt = nowRx, nowTx, now
-		time.Sleep(interval)
+		time.Sleep(intervalDuration)
 	}
 }
 
-func pollTasks(client *http.Client, panel, token string) {
-	req, _ := http.NewRequest(http.MethodPost, panel+"/api/node/tasks/poll", bytes.NewReader([]byte(`{}`)))
+// loadConfigFromEnv creates a Config from environment variables directly
+// when no env file is available.
+func loadConfigFromEnv() *config.Config {
+	token := os.Getenv("NODE_TOKEN")
+	if token == "" {
+		return nil
+	}
+
+	panelURL := strings.TrimRight(getenv("PANEL_URL", "http://127.0.0.1:8080"), "/")
+	intervalSeconds, _ := strconv.Atoi(getenv("NODE_INTERVAL", "10"))
+	if intervalSeconds <= 0 {
+		intervalSeconds = 10
+	}
+	logLevel := getenv("LOG_LEVEL", "info")
+	autoUpdate := getenv("NODE_AUTO_UPDATE", "true")
+
+	// Write a temporary env file for the config package to load
+	tmpFile, err := os.CreateTemp("", "node-env-*.env")
+	if err != nil {
+		return nil
+	}
+	defer os.Remove(tmpFile.Name())
+
+	content := fmt.Sprintf("NODE_TOKEN=%s\nPANEL_URL=%s\nNODE_INTERVAL=%d\nLOG_LEVEL=%s\nNODE_AUTO_UPDATE=%s\n",
+		token, panelURL, intervalSeconds, logLevel, autoUpdate)
+	if _, err := tmpFile.WriteString(content); err != nil {
+		tmpFile.Close()
+		return nil
+	}
+	tmpFile.Close()
+
+	cfg, err := config.Load(tmpFile.Name())
+	if err != nil {
+		return nil
+	}
+	return cfg
+}
+
+// buildDiagnostics collects runtime diagnostics for inclusion in the status push.
+func buildDiagnostics(startTime time.Time, version string) *DiagnosticsReport {
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	return &DiagnosticsReport{
+		AgentVersion:  version,
+		UptimeSeconds: int64(time.Since(startTime).Seconds()),
+		GoVersion:     runtime.Version(),
+		Goroutines:    runtime.NumGoroutine(),
+		MemAllocBytes: int64(m.Alloc),
+	}
+}
+
+func pollTasks(client *http.Client, panel, token string, log *logger.Logger, cfg *config.Config, envFile string) {
+	url := panel + "/api/node/tasks/poll"
+	req, _ := http.NewRequest(http.MethodPost, url, bytes.NewReader([]byte(`{}`)))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Node-Token", token)
+
+	log.Debug("polling tasks", map[string]any{
+		"url": url,
+	})
+
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Printf("task poll failed: %v", err)
+		log.Error("task poll failed", map[string]any{
+			"error": err.Error(),
+			"url":   url,
+		})
 		return
 	}
 	defer resp.Body.Close()
+
 	if resp.StatusCode/100 != 2 {
-		log.Printf("task poll status: %s", resp.Status)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		log.Warn("task poll non-2xx response", map[string]any{
+			"url":    url,
+			"status": resp.Status,
+			"body":   string(body),
+		})
 		return
 	}
+
+	log.Debug("task poll response received", map[string]any{
+		"url":    url,
+		"status": resp.Status,
+	})
+
 	var out TaskPollResponse
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		log.Printf("task poll decode: %v", err)
+		log.Error("task poll decode failed", map[string]any{
+			"error": err.Error(),
+			"url":   url,
+		})
 		return
 	}
+
 	for _, task := range out.Tasks {
-		status, result, errText := executeTask(task)
+		log.Info("executing task", map[string]any{
+			"task_id": task.ID,
+			"action":  task.Action,
+		})
+		status, result, errText := executeTask(task, cfg, envFile, log)
+		log.Info("task completed", map[string]any{
+			"task_id": task.ID,
+			"action":  task.Action,
+			"status":  status,
+		})
 		complete := map[string]any{"status": status, "result_json": result, "error": errText}
-		postJSON(client, fmt.Sprintf("%s/api/node/tasks/%d/complete", panel, task.ID), token, complete)
+		_, _ = postJSON(client, fmt.Sprintf("%s/api/node/tasks/%d/complete", panel, task.ID), token, complete, log)
 	}
 }
 
-func executeTask(task Task) (string, map[string]any, string) {
+func executeTask(task Task, cfg *config.Config, envFile string, log *logger.Logger) (string, map[string]any, string) {
 	var payload map[string]any
 	_ = json.Unmarshal(task.Payload, &payload)
 	switch task.Action {
@@ -157,6 +368,35 @@ func executeTask(task Task) (string, map[string]any, string) {
 			return "failed", map[string]any{"service": service, "output": string(out)}, err.Error()
 		}
 		return "succeeded", map[string]any{"service": service, "output": string(out), "status": serviceStatus(service)}, ""
+	case "agent.reload_config":
+		changes, err := cfg.Reload(envFile)
+		if err != nil {
+			log.Error("config reload failed via task", map[string]any{
+				"error": err.Error(),
+			})
+			return "failed", map[string]any{}, err.Error()
+		}
+		for key, vals := range changes {
+			log.Info("config key changed", map[string]any{
+				"key":       key,
+				"old_value": vals[0],
+				"new_value": vals[1],
+			})
+		}
+		if newLevel, ok := changes["LOG_LEVEL"]; ok {
+			log.SetLevel(logger.ParseLevel(newLevel[1]))
+			log.Info("log level updated", map[string]any{
+				"level": newLevel[1],
+			})
+		}
+		if len(changes) == 0 {
+			log.Info("config reload complete via task, no changes detected")
+		}
+		changesList := make(map[string]any)
+		for k, v := range changes {
+			changesList[k] = map[string]string{"old": v[0], "new": v[1]}
+		}
+		return "succeeded", map[string]any{"changes": changesList}, ""
 	default:
 		return "failed", map[string]any{}, "unsupported action"
 	}
@@ -178,18 +418,47 @@ func normalizeService(input string) string {
 	}
 }
 
-func postJSON(client *http.Client, url, token string, v any) {
+func postJSON(client *http.Client, url, token string, v any, log *logger.Logger) (bool, string) {
 	b, _ := json.Marshal(v)
+
+	log.Debug("sending request to panel", map[string]any{
+		"url":          url,
+		"method":       "POST",
+		"body_size":    len(b),
+		"request_body": string(b),
+	})
+
 	req, _ := http.NewRequest(http.MethodPost, url, bytes.NewReader(b))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Node-Token", token)
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Printf("post %s failed: %v", url, err)
-		return
+		log.Error("POST request failed", map[string]any{
+			"url":   url,
+			"error": err.Error(),
+		})
+		return false, err.Error()
 	}
-	_ = resp.Body.Close()
-	log.Printf("post %s: %s", url, resp.Status)
+	defer resp.Body.Close()
+
+	if resp.StatusCode/100 != 2 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		errMsg := fmt.Sprintf("non-2xx response: %d %s", resp.StatusCode, string(body))
+		log.Warn("non-2xx response from panel", map[string]any{
+			"url":    url,
+			"status": resp.StatusCode,
+			"body":   string(body),
+		})
+		return false, errMsg
+	}
+
+	log.Debug("panel response received", map[string]any{
+		"url":           url,
+		"status":        resp.Status,
+		"response_code": resp.StatusCode,
+	})
+
+	return true, ""
 }
 
 func getenv(k, d string) string {

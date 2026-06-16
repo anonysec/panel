@@ -1,6 +1,8 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import { useApi } from '@koris/composables/useApi'
+import { useAuthStore } from '@/stores/auth'
+import router from '@/router'
 import type { Customer, CustomerDetail } from '@koris/types'
 
 /**
@@ -56,6 +58,7 @@ export interface CreateCustomerPayload {
   data_gb: number
   speed_mbps: number
   days: number
+  template_id?: number
 }
 
 /**
@@ -70,6 +73,25 @@ export interface UpdateCustomerPayload {
   speed_mbps?: number
   days?: number
   allowed_protocols?: string[]
+}
+
+/**
+ * Bulk action request payload matching POST /api/customers/bulk
+ * Requirements: 2.2, 2.3, 2.4, 2.5
+ */
+export interface BulkActionRequest {
+  customer_ids: number[]
+  action: 'enable' | 'disable' | 'delete' | 'traffic_reset'
+}
+
+/**
+ * Bulk action response from POST /api/customers/bulk
+ * Requirements: 2.7
+ */
+export interface BulkActionResponse {
+  ok: boolean
+  succeeded: number[]
+  failed: { customer_id: number; error: string }[]
 }
 
 /**
@@ -119,6 +141,15 @@ interface CustomerMutationResponse {
   id?: number
 }
 
+interface TrafficResetResponse {
+  ok: boolean
+}
+
+interface ConnectionLimitResponse {
+  ok: boolean
+  connection_limit: number
+}
+
 /**
  * Customers management store (Pinia Composition API style)
  *
@@ -153,7 +184,11 @@ export const useCustomersStore = defineStore('customers', () => {
   // ─── API composable ───────────────────────────────────────────────────────
   const { get, post, patch, del, error } = useApi({
     onUnauthorized: () => {
-      // Auth store handles 401 redirect via its own onUnauthorized callback
+      // On 401, clear auth state and redirect to login
+      const auth = useAuthStore()
+      auth.user = null
+      auth.isAuthenticated = false
+      router.push({ name: 'login' })
     },
   })
 
@@ -373,6 +408,77 @@ export const useCustomersStore = defineStore('customers', () => {
     }
   }
 
+  /**
+   * Execute a bulk action on multiple customers.
+   * POST /api/customers/bulk with { customer_ids, action }
+   *
+   * On success, reloads the customers list.
+   * Returns the BulkActionResponse with succeeded/failed arrays, or null on error.
+   *
+   * Requirements: 2.2, 2.3, 2.4, 2.5, 2.7
+   */
+  async function bulkAction(request: BulkActionRequest): Promise<BulkActionResponse | null> {
+    loading.value = true
+    try {
+      const response = await post<BulkActionResponse>('/api/customers/bulk', request)
+      await loadCustomers()
+      return response
+    } catch {
+      return null
+    } finally {
+      loading.value = false
+    }
+  }
+
+  /**
+   * Reset traffic counters for a single customer.
+   * POST /api/customers/:id/traffic-reset
+   *
+   * On success, reloads the customer detail.
+   * Returns true on success, false on error.
+   *
+   * Requirements: 3.4
+   */
+  async function trafficReset(customerId: number): Promise<boolean> {
+    detailLoading.value = true
+    try {
+      await post<TrafficResetResponse>(`/api/customers/${customerId}/traffic-reset`, {})
+      // Refetch customer detail to reflect updated counters and status
+      await loadDetail(customerId)
+      return true
+    } catch {
+      return false
+    } finally {
+      detailLoading.value = false
+    }
+  }
+
+  /**
+   * Set the connection limit for a customer.
+   * POST /api/customers/:id/connection-limit with { limit }
+   *
+   * If limit == 0, the backend removes the Simultaneous-Use RADIUS attribute (unlimited).
+   * If limit > 0, the backend sets/replaces the Simultaneous-Use attribute.
+   *
+   * On success, reloads the customer detail.
+   * Returns true on success, false on error.
+   *
+   * Requirements: 4.3
+   */
+  async function setConnectionLimit(customerId: number, limit: number): Promise<boolean> {
+    detailLoading.value = true
+    try {
+      await post<ConnectionLimitResponse>(`/api/customers/${customerId}/connection-limit`, { limit })
+      // Refetch customer detail to reflect updated connection limit
+      await loadDetail(customerId)
+      return true
+    } catch {
+      return false
+    } finally {
+      detailLoading.value = false
+    }
+  }
+
   // ─── Expose ───────────────────────────────────────────────────────────────
   return {
     // State
@@ -399,5 +505,8 @@ export const useCustomersStore = defineStore('customers', () => {
     updateCustomer,
     deleteCustomer,
     archiveCustomer,
+    bulkAction,
+    trafficReset,
+    setConnectionLimit,
   }
 })

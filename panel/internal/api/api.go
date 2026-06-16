@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"math"
 	"net"
 	"net/http"
@@ -113,6 +114,7 @@ type Node struct {
 	StatusMetrics NodeStatus          `json:"status_metrics"`
 	Services      []Service           `json:"services"`
 	History       []NodeUsageSnapshot `json:"history,omitempty"`
+	Diagnostics   *DiagnosticsReport  `json:"diagnostics,omitempty"`
 }
 
 type NodeStatus struct {
@@ -125,6 +127,14 @@ type NodeStatus struct {
 	L2TP         string  `json:"l2tp_status"`
 	IKEv2        string  `json:"ikev2_status"`
 	UpdatedAt    string  `json:"updated_at"`
+}
+
+type DiagnosticsReport struct {
+	AgentVersion  string `json:"agent_version"`
+	UptimeSeconds int64  `json:"uptime_seconds"`
+	GoVersion     string `json:"go_version"`
+	Goroutines    int    `json:"goroutines"`
+	MemAllocBytes int64  `json:"mem_alloc_bytes"`
 }
 
 type Service struct {
@@ -295,6 +305,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("/api/auth/customer/logout", s.customerLogout)
 	mux.HandleFunc("/api/dashboard/stats", s.requireAdmin(s.dashboardStats))
 	mux.HandleFunc("/api/customers", s.requireAdmin(s.customers))
+	mux.HandleFunc("/api/customers/bulk", s.requireAdmin(s.customersBulk))
 	mux.HandleFunc("/api/customers/", s.requireAdmin(s.customerByID))
 	mux.HandleFunc("/api/deleted/customers", s.requireAdmin(s.deletedCustomers))
 	mux.HandleFunc("/api/plans", s.requireAdmin(s.plans))
@@ -326,6 +337,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("/api/portal/tickets", s.requireCustomer(s.portalTickets))
 	mux.HandleFunc("/api/portal/tickets/", s.requireCustomer(s.portalTicketByID))
 	mux.HandleFunc("/api/node/push", s.nodePush)
+	mux.HandleFunc("/api/node/agent/version", s.agentVersion)
+	mux.HandleFunc("/api/node/agent/download", s.agentDownload)
 	mux.HandleFunc("/api/audit-logs", s.requireAdmin(s.auditLogs))
 	mux.HandleFunc("/api/diagnostics", s.requireAdmin(s.diagnostics))
 	mux.HandleFunc("/api/resellers", s.requireAdmin(s.resellers))
@@ -347,13 +360,21 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("/api/events/", s.requireAdmin(s.eventByID))
 	mux.HandleFunc("/api/portal/events", s.requireCustomer(s.portalEvents))
 	mux.HandleFunc("/api/portal/events/", s.requireCustomer(s.portalEventByID))
+	mux.HandleFunc("/api/portal/warnings", s.requireCustomer(s.portalWarnings))
+	mux.HandleFunc("/api/templates", s.requireAdmin(s.templates))
+	mux.HandleFunc("/api/templates/", s.requireAdmin(s.templateByID))
+	mux.HandleFunc("/api/settings/data-warning-thresholds", s.requireAdmin(s.dataWarningThresholds))
+	mux.HandleFunc("/api/failover/providers", s.requireAdmin(s.failoverProviders))
+	mux.HandleFunc("/api/failover/providers/", s.requireAdmin(s.failoverProviderByID))
+	mux.HandleFunc("/api/failover/domains", s.requireAdmin(s.failoverDomains))
+	mux.HandleFunc("/api/failover/domains/", s.requireAdmin(s.failoverDomainByID))
 
 	mux.HandleFunc("/dashboard", redirectTo("/dashboard/"))
 	mux.Handle("/dashboard/", spaHandler(s.Config.AdminWebDir, "/dashboard/"))
 	mux.HandleFunc("/portal", redirectTo("/portal/"))
 	mux.Handle("/portal/", spaHandler(s.Config.PortalWebDir, "/portal/"))
 	mux.HandleFunc("/", s.notFound)
-	return mux
+	return noCacheMiddleware(mux)
 }
 
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {
@@ -650,6 +671,7 @@ func (s *Server) createCustomer(w http.ResponseWriter, r *http.Request) {
 		Days             *int     `json:"days"`
 		IPLimit          *int     `json:"ip_limit"`
 		ActivateOnConnect bool    `json:"activate_on_connect"`
+		TemplateID       *int64   `json:"template_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad_json"})
@@ -661,6 +683,47 @@ func (s *Server) createCustomer(w http.ResponseWriter, r *http.Request) {
 		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "username_password_required"})
 		return
 	}
+
+	// Template pre-population: load template and use its values as defaults
+	var templateRadiusChecks []radiusAttr
+	var templateRadiusReplies []radiusAttr
+	if in.TemplateID != nil {
+		var tmpl UserTemplate
+		row := s.DB.QueryRow(`SELECT id, name, plan_id, status, connection_limit, radius_checks, radius_replies, created_by, deleted_at, created_at, updated_at FROM user_templates WHERE id = ?`, *in.TemplateID)
+		var err error
+		tmpl, err = scanTemplate(row)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "bad_request", "invalid template_id: template not found")
+			return
+		}
+		if tmpl.DeletedAt != nil {
+			writeError(w, http.StatusBadRequest, "bad_request", "invalid template_id: template has been deleted")
+			return
+		}
+		// Pre-populate plan_id from template if not explicitly provided
+		if in.PlanID == nil && tmpl.PlanID != nil {
+			in.PlanID = tmpl.PlanID
+		}
+		// Pre-populate connection limit from template if not explicitly provided
+		if in.IPLimit == nil && tmpl.ConnectionLimit > 0 {
+			in.IPLimit = &tmpl.ConnectionLimit
+		}
+		// Parse RADIUS check attributes from template
+		if len(tmpl.RadiusChecks) > 0 && string(tmpl.RadiusChecks) != "null" {
+			if err := json.Unmarshal(tmpl.RadiusChecks, &templateRadiusChecks); err != nil {
+				writeError(w, http.StatusInternalServerError, "internal_error", "failed to parse template radius_checks")
+				return
+			}
+		}
+		// Parse RADIUS reply attributes from template
+		if len(tmpl.RadiusReplies) > 0 && string(tmpl.RadiusReplies) != "null" {
+			if err := json.Unmarshal(tmpl.RadiusReplies, &templateRadiusReplies); err != nil {
+				writeError(w, http.StatusInternalServerError, "internal_error", "failed to parse template radius_replies")
+				return
+			}
+		}
+	}
+
 	if in.PlanID != nil && *in.PlanID == 0 {
 		in.PlanID = nil
 	}
@@ -757,6 +820,26 @@ func (s *Server) createCustomer(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// Insert template RADIUS check attributes (skip attributes already set by explicit fields)
+	for _, attr := range templateRadiusChecks {
+		if attr.Attribute == "Cleartext-Password" || attr.Attribute == "Simultaneous-Use" || attr.Attribute == "Max-Data" {
+			continue // These are managed by explicit fields above
+		}
+		if _, err = tx.Exec(`INSERT INTO radcheck(username,attribute,op,value) VALUES(?,?,?,?)`, in.Username, attr.Attribute, attr.Op, attr.Value); err != nil {
+			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+			return
+		}
+	}
+	// Insert template RADIUS reply attributes (skip attributes already set by explicit fields)
+	for _, attr := range templateRadiusReplies {
+		if attr.Attribute == "Mikrotik-Rate-Limit" {
+			continue // Managed by speed_mbps field above
+		}
+		if _, err = tx.Exec(`INSERT INTO radreply(username,attribute,op,value) VALUES(?,?,?,?)`, in.Username, attr.Attribute, attr.Op, attr.Value); err != nil {
+			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+			return
+		}
+	}
 	if days > 0 {
 		if in.ActivateOnConnect {
 			// First-connection activation: don't set expires_at yet; auth script will set it on first VPN connect
@@ -826,6 +909,8 @@ func (s *Server) customerByID(w http.ResponseWriter, r *http.Request) {
 		s.renewCustomer(w, r, id)
 	case "restore":
 		s.restoreCustomer(w, r, id)
+	case "connection-limit":
+		s.setConnectionLimit(w, r, id)
 	default:
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
 	}
@@ -1139,7 +1224,7 @@ func (s *Server) updateCustomer(w http.ResponseWriter, r *http.Request, id int64
 		}
 	}
 
-	if (in.Status != nil && *in.Status != "active") || in.DataGB != nil || in.SpeedMbps != nil || in.PlanID != nil {
+	if in.Status != nil && *in.Status != "active" {
 		s.disconnectCustomerSessions(username)
 	}
 
@@ -1280,29 +1365,34 @@ func (s *Server) renewCustomer(w http.ResponseWriter, r *http.Request, id int64)
 		return
 	}
 
-	var walletCredit float64
-	_ = s.DB.QueryRow(`SELECT COALESCE(credit,0) FROM wallets WHERE username=?`, username).Scan(&walletCredit)
-
-	if role == "reseller" {
-		var resellerCredit float64
-		_ = s.DB.QueryRow(`SELECT COALESCE(credit,0) FROM admins WHERE username=?`, actor).Scan(&resellerCredit)
-		if plan.Price > 0 && resellerCredit < plan.Price {
-			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "insufficient_reseller_credit", "credit": resellerCredit, "required": plan.Price})
-			return
-		}
-	} else {
-		if plan.Price > 0 && walletCredit+0.0001 < plan.Price {
-			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "insufficient_wallet", "wallet": walletCredit, "required": plan.Price})
-			return
-		}
-	}
-
 	tx, err := s.DB.Begin()
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
 	defer tx.Rollback()
+
+	if role == "reseller" {
+		var resellerCredit float64
+		if err := tx.QueryRow(`SELECT COALESCE(credit,0) FROM admins WHERE username=? FOR UPDATE`, actor).Scan(&resellerCredit); err != nil && err != sql.ErrNoRows {
+			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+			return
+		}
+		if plan.Price > 0 && resellerCredit < plan.Price {
+			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "insufficient_reseller_credit", "credit": resellerCredit, "required": plan.Price})
+			return
+		}
+	} else {
+		var walletCredit float64
+		if err := tx.QueryRow(`SELECT COALESCE(credit,0) FROM wallets WHERE username=? FOR UPDATE`, username).Scan(&walletCredit); err != nil && err != sql.ErrNoRows {
+			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+			return
+		}
+		if plan.Price > 0 && walletCredit+0.0001 < plan.Price {
+			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "insufficient_wallet", "wallet": walletCredit, "required": plan.Price})
+			return
+		}
+	}
 
 	if _, err := tx.Exec(`UPDATE customers SET plan_id=?,status='active' WHERE id=? AND deleted_at IS NULL`, plan.ID, id); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
@@ -1790,6 +1880,14 @@ func (s *Server) fillNodeRuntime(n *Node) error {
 			}
 		}
 	}
+
+	var diag DiagnosticsReport
+	err = s.DB.QueryRow(`SELECT agent_version, uptime_seconds, go_version, goroutines, mem_alloc_bytes FROM node_diagnostics WHERE node_id=?`, n.ID).Scan(
+		&diag.AgentVersion, &diag.UptimeSeconds, &diag.GoVersion, &diag.Goroutines, &diag.MemAllocBytes)
+	if err == nil {
+		n.Diagnostics = &diag
+	}
+
 	return nil
 }
 
@@ -2260,9 +2358,21 @@ func (s *Server) realtimeWS(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}()
+
+	// Use a mutex to serialize all writes to the WebSocket connection.
+	// gorilla/websocket supports only one concurrent writer.
+	var wsMu sync.Mutex
 	writeRealtime := func(kind string, data any) error {
+		wsMu.Lock()
+		defer wsMu.Unlock()
 		return conn.WriteJSON(map[string]any{"type": kind, "time": time.Now().UTC(), "data": data})
 	}
+	writePing := func() error {
+		wsMu.Lock()
+		defer wsMu.Unlock()
+		return conn.WriteControl(websocket.PingMessage, []byte("ping"), time.Now().Add(5*time.Second))
+	}
+
 	_ = writeRealtime("stats", s.dashboardStatsPayload())
 	_ = writeRealtime("sessions", s.liveSessionsPayload())
 	ticker := time.NewTicker(3 * time.Second)
@@ -2281,7 +2391,7 @@ func (s *Server) realtimeWS(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		case <-pingTicker.C:
-			if err := conn.WriteControl(websocket.PingMessage, []byte("ping"), time.Now().Add(5*time.Second)); err != nil {
+			if err := writePing(); err != nil {
 				return
 			}
 		}
@@ -3232,9 +3342,20 @@ func (s *Server) openVPNEndpointNode(r *http.Request, nodeID int64) (host string
 	proto = "udp"
 	_ = s.DB.QueryRow(`SELECT openvpn_port,openvpn_protocol FROM vpn_core_settings WHERE id=1`).Scan(&port, &proto)
 	if nodeID > 0 {
+		// Priority 1: Check for active failover domain pointing to this node
+		var failoverDomain string
+		if err := s.DB.QueryRow(
+			`SELECT domain FROM failover_domains WHERE current_node_id = ? AND is_active = 1 LIMIT 1`, nodeID,
+		).Scan(&failoverDomain); err == nil && strings.TrimSpace(failoverDomain) != "" {
+			host = strings.TrimSpace(failoverDomain)
+		}
+
+		// Priority 2 & 3: Node's domain field, then public_ip
 		var domain, publicIP string
 		if err := s.DB.QueryRow(`SELECT name,COALESCE(domain,''),public_ip FROM nodes WHERE id=? AND status <> 'disabled' LIMIT 1`, nodeID).Scan(&nodeName, &domain, &publicIP); err == nil {
-			host = strings.TrimSpace(domain)
+			if host == "" {
+				host = strings.TrimSpace(domain)
+			}
 			if host == "" {
 				host = strings.TrimSpace(publicIP)
 			}
@@ -3965,6 +4086,7 @@ func (s *Server) nodePush(w http.ResponseWriter, r *http.Request) {
 		L2TPStatus    string            `json:"l2tp_status"`
 		IKEv2Status   string            `json:"ikev2_status"`
 		Services      map[string]string `json:"services"`
+		Diagnostics   *DiagnosticsReport `json:"diagnostics,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad_json"})
@@ -4036,6 +4158,10 @@ func (s *Server) nodePush(w http.ResponseWriter, r *http.Request) {
 		_, _ = tx.Exec(`INSERT INTO node_services(node_id,service,status) VALUES(?,?,?) ON DUPLICATE KEY UPDATE status=VALUES(status)`, nodeID, service, serviceStatus)
 	}
 	_, _ = tx.Exec(`INSERT INTO node_usage_snapshots(node_id,rx_bytes,tx_bytes,online_users) VALUES(?,?,?,?)`, nodeID, in.RxBytes, in.TxBytes, in.OnlineUsers)
+	if in.Diagnostics != nil {
+		_, _ = tx.Exec(`INSERT INTO node_diagnostics(node_id, agent_version, uptime_seconds, go_version, goroutines, mem_alloc_bytes) VALUES(?,?,?,?,?,?) ON DUPLICATE KEY UPDATE agent_version=VALUES(agent_version), uptime_seconds=VALUES(uptime_seconds), go_version=VALUES(go_version), goroutines=VALUES(goroutines), mem_alloc_bytes=VALUES(mem_alloc_bytes)`,
+			nodeID, in.Diagnostics.AgentVersion, in.Diagnostics.UptimeSeconds, in.Diagnostics.GoVersion, in.Diagnostics.Goroutines, in.Diagnostics.MemAllocBytes)
+	}
 	if err := tx.Commit(); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
@@ -4943,6 +5069,7 @@ rules:
 <head>
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta name="referrer" content="no-referrer">
 	<title>%s</title>
 	<style>
 		:root {
@@ -5096,9 +5223,10 @@ rules:
 		<p class="mu" style="font-size: 13px; line-height: 1.5; margin: 5px 0 0 0; color: var(--text); opacity: 0.85;">%s</p>
 	</div>
 </body>
-</html>`, lang, dir, t["title"], langsBar, t["title"], t["username"], username, map[bool]string{true: "online", false: "offline"}[isOnline], map[bool]string{true: t["online"], false: t["offline"]}[isOnline], t["usage"], usedGB, totalGBStr, pct, t["status"], status, t["l2tp_psk"], token, t["download"], t["guide_title"], t["guide_desc"])
+</html>`, lang, dir, t["title"], pct, langsBar, t["title"], t["username"], username, map[bool]string{true: "online", false: "offline"}[isOnline], map[bool]string{true: t["online"], false: t["offline"]}[isOnline], t["usage"], usedGB, totalGBStr, t["status"], status, t["l2tp_psk"], token, t["download"], t["guide_title"], t["guide_desc"])
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(html))
 }
@@ -5114,12 +5242,14 @@ func (s *Server) liveSessionsPayload() []map[string]any {
 	s.sessionMutex.Lock()
 	defer s.sessionMutex.Unlock()
 
+	activeIDs := make(map[int64]bool)
 	out := []map[string]any{}
 	for rows.Next() {
 		var id int64
 		var username, ip string
 		var rx, tx, duration int64
 		if err := rows.Scan(&id, &username, &ip, &rx, &tx, &duration); err == nil {
+			activeIDs[id] = true
 			prev, exists := s.prevSessionBytes[id]
 			rxSpeed := 0.0
 			txSpeed := 0.0
@@ -5150,6 +5280,14 @@ func (s *Server) liveSessionsPayload() []map[string]any {
 			})
 		}
 	}
+
+	// Cleanup stale entries: remove sessions no longer active to prevent memory leak
+	for id := range s.prevSessionBytes {
+		if !activeIDs[id] {
+			delete(s.prevSessionBytes, id)
+		}
+	}
+
 	return out
 }
 
@@ -5376,6 +5514,17 @@ func (s *Server) resellerPayments(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, "method", http.StatusMethodNotAllowed)
 }
 
+// noCacheMiddleware sets Cache-Control: no-store on all /api/ responses to prevent
+// browser-level caching of dynamic data.
+func noCacheMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			w.Header().Set("Cache-Control", "no-store")
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func writeJSON(w http.ResponseWriter, v any) {
 	writeJSONCode(w, http.StatusOK, v)
 }
@@ -5387,7 +5536,62 @@ func writeJSONCode(w http.ResponseWriter, code int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
+// ErrorResponse represents a structured error returned by the API.
+type ErrorResponse struct {
+	Error  string `json:"error"`
+	Code   string `json:"code"`
+	Status int    `json:"status"`
+}
 
+// writeError writes a standardized JSON error response with proper headers.
+func writeError(w http.ResponseWriter, status int, code, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(ErrorResponse{
+		Error:  message,
+		Code:   code,
+		Status: status,
+	})
+}
+
+// logServerError logs 5xx errors with request context for debugging.
+func (s *Server) logServerError(r *http.Request, err error) {
+	username, _, _ := s.currentAdmin(r)
+	requestID := r.Header.Get("X-Request-ID")
+	log.Printf(`{"level":"error","path":"%s","method":"%s","user":"%s","request_id":"%s","error":"%s"}`,
+		r.URL.Path, r.Method, username, requestID, err.Error())
+}
+
+// ========== Null-Safety Scanning Helpers ==========
+
+// nullStringPtr converts a sql.NullString to a *string.
+// Returns nil if the value is not valid, preserving JSON null serialization.
+func nullStringPtr(ns sql.NullString) *string {
+	if !ns.Valid {
+		return nil
+	}
+	return &ns.String
+}
+
+// nullInt64Ptr converts a sql.NullInt64 to a *int64.
+// Returns nil if the value is not valid, preserving JSON null serialization.
+func nullInt64Ptr(ni sql.NullInt64) *int64 {
+	if !ni.Valid {
+		return nil
+	}
+	return &ni.Int64
+}
+
+// nullTimePtr converts a sql.NullTime to a *string formatted as RFC3339.
+// Returns nil if the value is not valid, preserving JSON null serialization.
+func nullTimePtr(nt sql.NullTime) *string {
+	if !nt.Valid {
+		return nil
+	}
+	s := nt.Time.Format(time.RFC3339)
+	return &s
+}
 
 // ========== Per-Node VPN Config ==========
 

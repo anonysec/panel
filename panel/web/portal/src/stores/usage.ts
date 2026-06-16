@@ -1,6 +1,7 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import { useApi } from '@koris/composables/useApi'
+import router from '@/router'
 
 /**
  * A single usage session
@@ -23,6 +24,7 @@ export interface UsageSession {
 export interface UsageSummary {
   online: boolean
   active_sessions: number
+  connection_limit: number
   total_input_bytes: number
   total_output_bytes: number
   total_usage_bytes: number
@@ -57,7 +59,9 @@ export const useUsageStore = defineStore('portal-usage', () => {
   // ─── API composable ───────────────────────────────────────────────────────
   const { get, error } = useApi({
     onUnauthorized: () => {
-      // Auth store handles redirect
+      // Clear usage state and redirect to portal login
+      usage.value = null
+      router.push({ name: 'portal-login' })
     },
   })
 
@@ -65,6 +69,8 @@ export const useUsageStore = defineStore('portal-usage', () => {
   const isOnline = computed(() => usage.value?.online ?? false)
 
   const activeSessions = computed(() => usage.value?.active_sessions ?? 0)
+
+  const connectionLimit = computed(() => usage.value?.connection_limit ?? 0)
 
   const totalUsageBytes = computed(() => usage.value?.total_usage_bytes ?? 0)
 
@@ -126,6 +132,7 @@ export const useUsageStore = defineStore('portal-usage', () => {
     // Computed
     isOnline,
     activeSessions,
+    connectionLimit,
     totalUsageBytes,
     maxDataBytes,
     usagePercent,
