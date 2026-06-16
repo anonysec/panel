@@ -26,6 +26,7 @@ import (
 
 	"koris-next/panel/internal/auth"
 	"koris-next/panel/internal/config"
+	"koris-next/panel/internal/health"
 	"koris-next/panel/internal/notify"
 	"koris-next/panel/internal/templates"
 
@@ -37,6 +38,7 @@ type Server struct {
 	Config           config.Config
 	Auth             auth.Service
 	Notify           *notify.Notifier
+	HealthEngine     *health.DiagnosticsEngine
 	prevSessionBytes map[int64]SessionBytes
 	sessionMutex     sync.RWMutex
 }
@@ -283,11 +285,14 @@ type UsageSummary struct {
 var usernamePattern = regexp.MustCompile(`^[A-Za-z0-9_.-]{3,64}$`)
 
 func New(db *sql.DB, cfg config.Config) *Server {
+	analyzer := health.NewAnalyzer()
+	notifier := notify.New()
 	return &Server{
 		DB:               db,
 		Config:           cfg,
 		Auth:             auth.Service{DB: db},
-		Notify:           notify.New(),
+		Notify:           notifier,
+		HealthEngine:     health.NewDiagnosticsEngine(db, analyzer, notifier),
 		prevSessionBytes: make(map[int64]SessionBytes),
 	}
 }
@@ -368,6 +373,11 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/api/failover/providers/", s.requireAdmin(s.failoverProviderByID))
 	mux.HandleFunc("/api/failover/domains", s.requireAdmin(s.failoverDomains))
 	mux.HandleFunc("/api/failover/domains/", s.requireAdmin(s.failoverDomainByID))
+	mux.HandleFunc("/api/diagnostics/ai", s.requireAdmin(s.aiDiagnostics))
+	mux.HandleFunc("/api/diagnostics/ai/history", s.requireAdmin(s.aiDiagnosticsHistory))
+	mux.HandleFunc("/api/diagnostics/ai/rules", s.requireAdmin(s.aiHealingRules))
+	mux.HandleFunc("/api/diagnostics/ai/rules/", s.requireAdmin(s.aiHealingRuleByID))
+	mux.HandleFunc("/api/diagnostics/ai/healing-log", s.requireAdmin(s.aiHealingLog))
 
 	mux.HandleFunc("/dashboard", redirectTo("/dashboard/"))
 	mux.Handle("/dashboard/", spaHandler(s.Config.AdminWebDir, "/dashboard/"))
