@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCustomersStore } from '@/stores/customers'
+import { useToast } from '@koris/composables/useToast'
 import KTabs from '@koris/ui/KTabs.vue'
 import KFormField from '@koris/ui/KFormField.vue'
 import KInput from '@koris/ui/KInput.vue'
@@ -16,8 +17,83 @@ const props = defineProps<{ id: string }>()
 
 const router = useRouter()
 const store = useCustomersStore()
+const toast = useToast()
 const activeTab = ref('profile')
 const saving = ref(false)
+
+// ─── Traffic Reset State (Requirement 3.4) ───────────────────────────────────
+const resettingTraffic = ref(false)
+
+// ─── Connection Limit State (Requirement 4.3) ────────────────────────────────
+const editingConnectionLimit = ref(false)
+const connectionLimitInput = ref(0)
+const savingConnectionLimit = ref(false)
+
+/**
+ * Extracts the current connection limit from the customer's radius_checks.
+ * Looks for the Simultaneous-Use attribute. Returns 0 (unlimited) if not found.
+ * Requirement 4.3
+ */
+const currentConnectionLimit = computed(() => {
+  if (!store.detail?.radius_checks) return 0
+  const check = store.detail.radius_checks.find(
+    (rc) => rc.attribute === 'Simultaneous-Use'
+  )
+  return check ? Number(check.value) || 0 : 0
+})
+
+/**
+ * Reset traffic counters for this customer.
+ * Requirement 3.4
+ */
+async function handleTrafficReset() {
+  if (!store.detail) return
+  resettingTraffic.value = true
+  const success = await store.trafficReset(store.detail.id)
+  resettingTraffic.value = false
+  if (success) {
+    toast.success('Traffic counters have been reset successfully.')
+  } else {
+    toast.error('Failed to reset traffic counters. Please try again.')
+  }
+}
+
+/**
+ * Start editing the connection limit inline.
+ */
+function startEditConnectionLimit() {
+  connectionLimitInput.value = currentConnectionLimit.value
+  editingConnectionLimit.value = true
+}
+
+/**
+ * Cancel connection limit editing.
+ */
+function cancelEditConnectionLimit() {
+  editingConnectionLimit.value = false
+}
+
+/**
+ * Save the new connection limit.
+ * Requirement 4.3
+ */
+async function saveConnectionLimit() {
+  if (!store.detail) return
+  savingConnectionLimit.value = true
+  const limit = Math.max(0, Math.floor(connectionLimitInput.value))
+  const success = await store.setConnectionLimit(store.detail.id, limit)
+  savingConnectionLimit.value = false
+  if (success) {
+    editingConnectionLimit.value = false
+    toast.success(
+      limit === 0
+        ? 'Connection limit removed (unlimited).'
+        : `Connection limit set to ${limit}.`
+    )
+  } else {
+    toast.error('Failed to update connection limit. Please try again.')
+  }
+}
 
 const tabs = [
   { key: 'profile', label: 'Profile' },
@@ -267,6 +343,63 @@ onMounted(() => {
               </div>
             </div>
 
+            <!-- Traffic Management Section (Requirements 3.4, 4.3) -->
+            <div class="traffic-management">
+              <!-- Traffic Reset Button (Requirement 3.4) -->
+              <div class="traffic-management__row">
+                <div class="traffic-management__info">
+                  <h4 class="section-title">Traffic Reset</h4>
+                  <p class="traffic-management__desc">Reset all accumulated traffic counters for this customer's current billing period.</p>
+                </div>
+                <KButton
+                  variant="ghost"
+                  size="sm"
+                  :loading="resettingTraffic"
+                  @click="handleTrafficReset"
+                >
+                  Reset Traffic
+                </KButton>
+              </div>
+
+              <!-- Connection Limit Inline Editor (Requirement 4.3) -->
+              <div class="traffic-management__row">
+                <div class="traffic-management__info">
+                  <h4 class="section-title">Connection Limit</h4>
+                  <p class="traffic-management__desc">Maximum concurrent VPN sessions allowed. Set to 0 for unlimited.</p>
+                </div>
+                <div class="connection-limit-editor">
+                  <template v-if="!editingConnectionLimit">
+                    <span class="connection-limit-editor__value">
+                      {{ currentConnectionLimit === 0 ? 'Unlimited' : currentConnectionLimit }}
+                    </span>
+                    <KButton variant="ghost" size="sm" @click="startEditConnectionLimit">
+                      Edit
+                    </KButton>
+                  </template>
+                  <template v-else>
+                    <input
+                      v-model.number="connectionLimitInput"
+                      type="number"
+                      min="0"
+                      class="connection-limit-editor__input"
+                      aria-label="Connection limit"
+                    />
+                    <KButton
+                      variant="primary"
+                      size="sm"
+                      :loading="savingConnectionLimit"
+                      @click="saveConnectionLimit"
+                    >
+                      Save
+                    </KButton>
+                    <KButton variant="ghost" size="sm" @click="cancelEditConnectionLimit">
+                      Cancel
+                    </KButton>
+                  </template>
+                </div>
+              </div>
+            </div>
+
             <!-- Sessions Table -->
             <h4 class="section-title">Sessions</h4>
             <table class="mini-table" role="table">
@@ -366,7 +499,18 @@ onMounted(() => {
 .text-danger { color: var(--color-danger); }
 .empty-state { text-align: center; padding: var(--space-12); }
 
+.traffic-management { display: flex; flex-direction: column; gap: var(--space-4); padding: var(--space-4); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); }
+.traffic-management__row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); }
+.traffic-management__info { display: flex; flex-direction: column; gap: var(--space-1); }
+.traffic-management__desc { margin: 0; font-size: var(--text-xs); color: var(--color-muted); }
+
+.connection-limit-editor { display: flex; align-items: center; gap: var(--space-2); }
+.connection-limit-editor__value { font-size: var(--text-sm); font-weight: var(--font-semibold); color: var(--color-text); min-width: 60px; }
+.connection-limit-editor__input { width: 80px; padding: var(--space-1) var(--space-2); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-sm); color: var(--color-text); font-size: var(--text-sm); outline: none; transition: border-color var(--duration-normal); }
+.connection-limit-editor__input:focus { border-color: var(--color-primary); }
+
 @media (max-width: 768px) {
   .form-grid { grid-template-columns: 1fr; }
+  .traffic-management__row { flex-direction: column; align-items: flex-start; }
 }
 </style>

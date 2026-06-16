@@ -1,4 +1,5 @@
 import { ref, type Ref } from 'vue'
+import { useToast } from './useToast'
 
 /**
  * Error object for API failures
@@ -16,6 +17,8 @@ export interface UseApiOptions {
   baseUrl?: string
   onUnauthorized?: () => void
   onError?: (error: ApiError) => void
+  /** When true, automatically shows a toast notification on API errors. Defaults to true. */
+  showErrorToast?: boolean
 }
 
 /**
@@ -57,7 +60,8 @@ export function getCsrfToken(): string {
  * ```
  */
 export function useApi(options: UseApiOptions = {}): UseApiReturn {
-  const { baseUrl = '', onUnauthorized, onError } = options
+  const { baseUrl = '', onUnauthorized, onError, showErrorToast = true } = options
+  const toast = useToast()
 
   const loading: Ref<boolean> = ref(false)
   const error: Ref<string> = ref('')
@@ -116,6 +120,9 @@ export function useApi(options: UseApiOptions = {}): UseApiReturn {
           url: `${baseUrl}${url}`,
         }
         error.value = 'Unauthorized'
+        if (showErrorToast) {
+          toast.error('Session expired. Please log in again.')
+        }
         if (onUnauthorized) {
           onUnauthorized()
         }
@@ -146,6 +153,9 @@ export function useApi(options: UseApiOptions = {}): UseApiReturn {
           url: `${baseUrl}${url}`,
         }
         error.value = message
+        if (showErrorToast) {
+          toast.error(message)
+        }
         if (onError) {
           onError(apiError)
         }

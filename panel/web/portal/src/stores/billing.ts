@@ -1,6 +1,7 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import { useApi } from '@koris/composables/useApi'
+import router from '@/router'
 import type { Plan, Payment } from '@koris/types/entities'
 
 /**
@@ -65,7 +66,11 @@ export const useBillingStore = defineStore('portal-billing', () => {
   // ─── API composable ───────────────────────────────────────────────────────
   const { get, post, error } = useApi({
     onUnauthorized: () => {
-      // Auth store handles redirect
+      // Clear billing state and redirect to portal login
+      payments.value = []
+      paymentMethods.value = []
+      plans.value = []
+      router.push({ name: 'portal-login' })
     },
   })
 

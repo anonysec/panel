@@ -35,15 +35,29 @@ func New(cfg Config) *Sender {
 	return &Sender{cfg: cfg}
 }
 
+// sanitizeHeader removes \r and \n characters from a string to prevent
+// email header injection attacks. Without this, an attacker could inject
+// arbitrary headers (e.g., BCC) by including CRLF sequences in user-controlled
+// values like email subjects or recipient addresses.
+func sanitizeHeader(s string) string {
+	s = strings.ReplaceAll(s, "\r", "")
+	s = strings.ReplaceAll(s, "\n", "")
+	return s
+}
+
 func (s *Sender) Send(to, subject, body string) error {
 	if !s.cfg.Enabled || s.cfg.Host == "" {
 		return nil
 	}
+	// Sanitize user-controlled header values to prevent header injection
+	to = sanitizeHeader(to)
+	subject = sanitizeHeader(subject)
+
 	msg := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n%s",
 		s.cfg.From, to, subject, body)
 	addr := s.cfg.Host + ":" + s.cfg.Port
 	auth := smtp.PlainAuth("", s.cfg.Username, s.cfg.Password, s.cfg.Host)
-	return smtp.SendMail(addr, auth, s.cfg.From, []string{to}, []byte(msg))
+	return smtp.SendMail(addr, auth, s.cfg.From, []string{sanitizeHeader(to)}, []byte(msg))
 }
 
 func (s *Sender) SendExpiryWarning(to, username string, daysLeft int) error {

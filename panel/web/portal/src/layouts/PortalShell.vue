@@ -2,6 +2,7 @@
 import { useRouter } from 'vue-router'
 import { usePortalAuthStore } from '@/stores/auth'
 import { useTheme } from '@koris/composables/useTheme'
+import NotificationCenter from '@/components/NotificationCenter.vue'
 
 const router = useRouter()
 const auth = usePortalAuthStore()
@@ -25,6 +26,7 @@ async function logout() {
         <router-link :to="{ name: 'portal-profile' }">Profile</router-link>
       </nav>
       <div class="portal-nav__actions">
+        <NotificationCenter />
         <button @click="toggleTheme" class="portal-nav__btn">{{ isDark ? '☀️' : '🌙' }}</button>
         <span class="portal-nav__user">{{ auth.user?.username }}</span>
         <button @click="logout" class="portal-nav__btn portal-nav__btn--logout">Logout</button>

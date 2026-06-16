@@ -1,0 +1,891 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "1.1 Create migration file `panel/migrations/018_major_update.sql`": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592279307
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592288189
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592437292
+      }
+    ],
+    "1.2 Implement `writeError` helper and error response structs in `panel/internal/api/api.go`": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592279311
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592288977
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592438103
+      }
+    ],
+    "1.3 Implement `noCacheMiddleware` in `panel/internal/api/api.go`": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592279316
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592289790
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592438870
+      }
+    ],
+    "1.4 Implement null-safety scanning helpers in `panel/internal/api/api.go`": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592279319
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592290603
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592439776
+      }
+    ],
+    "2. Checkpoint - Ensure migration and core patterns compile": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592279323
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592444948
+      }
+    ],
+    "3.1 Implement `UserTemplate` struct and templates CRUD handlers in `panel/internal/api/`": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592279327
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592448680
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592643413
+      }
+    ],
+    "3.2 Implement template pre-population logic in existing customer creation handler": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592279331
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592854504
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781593108287
+      }
+    ],
+    "4.1 Implement `BulkActionRequest`, `BulkActionResponse`, `BulkFailure` structs and bulk handler": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592279334
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592449552
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592644635
+      }
+    ],
+    "5.1 Implement traffic reset handler at POST `/api/customers/{id}/traffic-reset`": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592279337
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592450272
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592647455
+      }
+    ],
+    "5.2 Add \"traffic_reset\" action to the bulk handler": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592279342
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592855255
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781593106964
+      }
+    ],
+    "5.3 Implement connection limit handler at POST `/api/customers/{id}/connection-limit`": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592279345
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592451172
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592645465
+      }
+    ],
+    "6.1 Implement `checkDataWarnings(username)` function in `panel/internal/api/`": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592279348
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592654918
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592850066
+      }
+    ],
+    "6.2 Implement GET `/api/portal/warnings` endpoint for customer portal": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592279352
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592856007
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781593107394
+      }
+    ],
+    "6.3 Implement admin settings endpoint for warning threshold configuration": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592279356
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592856816
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781593109083
+      }
+    ],
+    "7.1 Implement GET `/api/node/agent/version` endpoint": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592279359
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592655663
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592847620
+      }
+    ],
+    "7.2 Implement GET `/api/node/agent/download` endpoint": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592279363
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592656418
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592848306
+      }
+    ],
+    "7.3 Implement diagnostics storage in the node status push handler": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592279366
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592657276
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592849159
+      }
+    ],
+    "8. Checkpoint - Ensure all backend API handlers compile and tests pass": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592279371
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781593115234
+      }
+    ],
+    "9.1 Create `stores/templates.ts` Pinia store in `panel/web/admin/src/stores/`": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592279375
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781593420510
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781593583993
+      }
+    ],
+    "9.2 Create `TemplatesView.vue` in `panel/web/admin/src/views/`": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592279378
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781593591869
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781593806019
+      }
+    ],
+    "9.3 Add template selection dropdown to the existing customer creation form": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592279382
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781593810541
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781594176577
+      }
+    ],
+    "10.1 Extend `CustomersView.vue` with multi-select and bulk action toolbar": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592279387
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781593592966
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781593805066
+      }
+    ],
+    "10.2 Extend `stores/customers.ts` with bulkAction, trafficReset, and setConnectionLimit methods": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592279390
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781593421467
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781593584857
+      }
+    ],
+    "10.3 Extend `CustomerDetailView.vue` with traffic reset button and connection limit inline editor": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592279394
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781593811922
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781594180126
+      }
+    ],
+    "11.1 Add data warning threshold configuration to `SettingsView.vue`": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592279398
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781593813158
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781594177334
+      }
+    ],
+    "11.2 Create `utils/nullSafe.ts` in `panel/web/admin/src/`": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592279401
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781593595010
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781593802458
+      }
+    ],
+    "11.3 Create `composables/useFreshData.ts` stale data prevention composable": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592279405
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781593814360
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781594178494
+      }
+    ],
+    "12.1 Enhance API composable with global error interceptor": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592279408
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781593815475
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781594179254
+      }
+    ],
+    "13.1 Create `composables/useUsageDisplay.ts` in `panel/web/portal/src/`": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592279413
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781593422369
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781593585745
+      }
+    ],
+    "13.2 Enhance `DashboardView.vue` in portal with usage display": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592279416
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781594186408
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781594404709
+      }
+    ],
+    "13.3 Enhance `UsageView.vue` in portal with connection limit and session info": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592279420
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781594187529
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781594406324
+      }
+    ],
+    "13.4 Add notification center component to portal": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592279423
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781594185386
+      }
+    ],
+    "13.5 Create `utils/nullSafe.ts` in `panel/web/portal/src/`": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592279427
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781593594099
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781593803332
+      }
+    ],
+    "14.1 Add error interceptor and 401 redirect to portal API composable": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592279431
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781594188557
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781594405451
+      }
+    ],
+    "14.2 Add stale data composable to portal": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592279435
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781594189381
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781594407778
+      }
+    ],
+    "15. Checkpoint - Ensure all frontend compiles and tests pass": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592279439
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781594552360
+      }
+    ],
+    "16.1 Create `node/internal/logger/logger.go` structured logger package": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592279442
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592451873
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592646548
+      }
+    ],
+    "16.2 Replace all `log.Printf` calls in `node/cmd/node/main.go` with structured logger": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592279447
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781593119809
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781593398252
+      }
+    ],
+    "16.3 Implement non-2xx response logging in the node's HTTP post helper": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592279451
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781593120541
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781593398945
+      }
+    ],
+    "16.4 Implement consecutive failure tracking": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592279455
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781593121330
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781593399631
+      }
+    ],
+    "17.1 Create `node/internal/config/config.go` with hot-reload support": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592279459
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592857650
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781593110003
+      }
+    ],
+    "17.2 Add SIGHUP signal handler in `node/cmd/node/main.go`": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592279462
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781593423334
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781593586551
+      }
+    ],
+    "17.3 Add task-based reload handler for action \"agent.reload_config\"": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592279466
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781594412819
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781594550579
+      }
+    ],
+    "18.1 Create `node/internal/updater/updater.go` with auto-update logic": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592279470
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781593424147
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781593587441
+      }
+    ],
+    "18.2 Integrate auto-update into the main agent loop": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592279474
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781594413909
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781594551325
+      }
+    ],
+    "19.1 Implement diagnostics report builder and integrate into status push": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592279477
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781593596203
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781593804173
+      }
+    ],
+    "20. Final Checkpoint - Ensure full build and all tests pass": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592279481
+      },
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781594553329
+      }
+    ],
+    "1. Database migration and core backend patterns": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592439780
+      }
+    ],
+    "4. Bulk Actions API": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592644638
+      }
+    ],
+    "7. Node Agent Version and Diagnostics API": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781592849162
+      }
+    ],
+    "5. Traffic Reset and Connection Limit APIs": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781593106968
+      }
+    ],
+    "3. User Templates API": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781593108290
+      }
+    ],
+    "6. Data Usage Warnings API": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781593109087
+      }
+    ],
+    "16. Node Agent — Structured Logging": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781593399634
+      }
+    ],
+    "19. Node Agent — Diagnostics Push": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781593804176
+      }
+    ],
+    "9. Admin Dashboard — Templates Management View": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781594176581
+      }
+    ],
+    "11. Admin Dashboard — Data Warning Settings and Null Safety": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781594178497
+      }
+    ],
+    "12. Admin Dashboard — Error Handling and 401 Redirect": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781594179258
+      }
+    ],
+    "10. Admin Dashboard — Bulk Actions and Customer Enhancements": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781594180130
+      }
+    ],
+    "13. Customer Portal — Usage Display and Warnings": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781594406328
+      }
+    ],
+    "14. Customer Portal — Error Handling and Stale Data": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781594407782
+      }
+    ],
+    "17. Node Agent — Config Hot-Reload": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781594550583
+      }
+    ],
+    "18. Node Agent — Auto-Update": [
+      {
+        "executionId": "a9b60f11-19bf-44e7-ac1a-83ccee07d9f6",
+        "chatSessionId": "218de042-06a3-4a00-b79b-c7341884e769",
+        "timestamp": 1781594551328
+      }
+    ]
+  }
+}

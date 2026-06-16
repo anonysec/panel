@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { onMounted, computed } from 'vue'
+import { computed } from 'vue'
 import { useUsageStore } from '@/stores/usage'
+import { useFreshData } from '@/composables/useFreshData'
 import KChart from '@koris/ui/KChart.vue'
 import KStatusPill from '@koris/ui/KStatusPill.vue'
 import KSkeleton from '@koris/ui/KSkeleton.vue'
@@ -10,9 +11,7 @@ import UsageGauge from '@/components/UsageGauge.vue'
 
 const usageStore = useUsageStore()
 
-onMounted(() => {
-  usageStore.loadUsage()
-})
+useFreshData(() => usageStore.loadUsage())
 
 const chartData = computed(() => usageStore.bandwidthChartData)
 const sessions = computed(() => usageStore.sessions)
@@ -20,6 +19,13 @@ const isOnline = computed(() => usageStore.isOnline)
 const usagePercent = computed(() => usageStore.usagePercent)
 const totalUsageBytes = computed(() => usageStore.totalUsageBytes)
 const maxDataBytes = computed(() => usageStore.maxDataBytes)
+const activeSessions = computed(() => usageStore.activeSessions)
+const connectionLimit = computed(() => usageStore.connectionLimit)
+
+const connectionLimitDisplay = computed(() => {
+  if (!connectionLimit.value || connectionLimit.value === 0) return 'Unlimited'
+  return String(connectionLimit.value)
+})
 
 const sessionColumns = [
   { key: 'status', label: 'Status' },
@@ -80,7 +86,7 @@ function formatDuration(seconds: number): string {
           </div>
           <div class="usage__stat">
             <div class="usage__stat-label">Active Sessions</div>
-            <div class="usage__stat-value">{{ usageStore.activeSessions }}</div>
+            <div class="usage__stat-value">{{ activeSessions }}</div>
           </div>
           <div class="usage__stat">
             <div class="usage__stat-label">Remaining</div>
@@ -88,6 +94,40 @@ function formatDuration(seconds: number): string {
           </div>
         </div>
       </div>
+
+      <!-- Connection Info section -->
+      <section class="usage__connection-info">
+        <h2 class="usage__section-title">Connection Info</h2>
+        <div class="usage__connection-cards">
+          <div class="usage__connection-card">
+            <div class="usage__connection-card-icon">
+              <span class="usage__connection-icon">&#x1F4E1;</span>
+            </div>
+            <div class="usage__connection-card-content">
+              <div class="usage__connection-card-label">Active Sessions</div>
+              <div class="usage__connection-card-value">{{ activeSessions }}</div>
+              <div class="usage__connection-card-sub">Currently connected device{{ activeSessions !== 1 ? 's' : '' }}</div>
+            </div>
+          </div>
+          <div class="usage__connection-card">
+            <div class="usage__connection-card-icon">
+              <span class="usage__connection-icon">&#x1F512;</span>
+            </div>
+            <div class="usage__connection-card-content">
+              <div class="usage__connection-card-label">Connection Limit</div>
+              <div class="usage__connection-card-value">{{ connectionLimitDisplay }}</div>
+              <div class="usage__connection-card-sub">
+                <template v-if="connectionLimit > 0">
+                  {{ activeSessions }} of {{ connectionLimit }} used
+                </template>
+                <template v-else>
+                  No concurrent session restriction
+                </template>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
 
       <!-- Bandwidth Chart -->
       <section class="usage__section" v-if="chartData.length">
@@ -217,7 +257,62 @@ function formatDuration(seconds: number): string {
 .usage__chart-container {
   width: 100%;
 }
+.usage__connection-info {
+  margin-bottom: var(--space-6);
+  padding: var(--space-5);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+.usage__connection-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+.usage__connection-card {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+.usage__connection-card-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  flex-shrink: 0;
+}
+.usage__connection-icon {
+  font-size: var(--text-lg);
+}
+.usage__connection-card-content {
+  flex: 1;
+  min-width: 0;
+}
+.usage__connection-card-label {
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: var(--space-1);
+}
+.usage__connection-card-value {
+  font-size: var(--text-xl);
+  font-weight: 700;
+  margin-bottom: var(--space-1);
+}
+.usage__connection-card-sub {
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+}
 @media (max-width: 768px) {
   .usage__summary { grid-template-columns: 1fr; }
+  .usage__connection-cards { grid-template-columns: 1fr; }
 }
 </style>

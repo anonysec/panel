@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { onMounted, ref, computed } from 'vue'
+import { ref, computed } from 'vue'
 import { usePortalAuthStore } from '@/stores/auth'
 import { useBillingStore } from '@/stores/billing'
+import { useFreshData } from '@/composables/useFreshData'
 import KButton from '@koris/ui/KButton.vue'
 import KDataTable from '@koris/ui/KDataTable.vue'
 import KFormField from '@koris/ui/KFormField.vue'
@@ -23,12 +24,12 @@ const paymentForm = ref({
 const renewPlanId = ref<number>(0)
 const notice = ref('')
 
-onMounted(async () => {
+useFreshData(async () => {
   await billing.loadBillingData()
-  if (billing.paymentMethods.length) {
+  if (billing.paymentMethods.length && !paymentForm.value.method) {
     paymentForm.value.method = billing.paymentMethods[0].name
   }
-  if (billing.activePlans.length) {
+  if (billing.activePlans.length && !renewPlanId.value) {
     renewPlanId.value = billing.activePlans[0].id
   }
 })
