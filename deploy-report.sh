@@ -19,7 +19,11 @@ if [ -z "$GITHUB_TOKEN" ]; then
 fi
 
 # Collect diagnostics
-PANEL_LOGS=$(journalctl -u panel -n 50 --no-pager -o short-iso 2>&1 || echo "journalctl not available")
+PANEL_LOGS=$(journalctl -u panel -n 30 --no-pager -o short-iso 2>&1 || echo "not available")
+NGINX_LOGS=$(journalctl -u nginx -n 15 --no-pager -o short-iso 2>&1 || echo "not available")
+OPENVPN_LOGS=$(journalctl -u openvpn@server -n 15 --no-pager -o short-iso 2>&1 || echo "not available")
+MYSQL_LOGS=$(journalctl -u mariadb -n 10 --no-pager -o short-iso 2>&1 || echo "not available")
+NODE_AGENT_LOGS=$(journalctl -u node-agent -n 15 --no-pager -o short-iso 2>&1 || echo "not available")
 SERVICE_STATUS=$(systemctl is-active panel 2>/dev/null || echo "unknown")
 HEALTH_CHECK=$(curl -s --max-time 5 http://127.0.0.1:${PANEL_PORT:-8088}/api/health 2>/dev/null || echo "health check failed")
 PANEL_VERSION=$(cat /opt/koris-next/VERSION 2>/dev/null || echo "unknown")
@@ -41,9 +45,29 @@ BODY="## Deploy Report — ${DATE}
 ${HEALTH_CHECK}
 \`\`\`
 
-### Last 50 Panel Logs
+### Panel Logs (last 30)
 \`\`\`
 ${PANEL_LOGS}
+\`\`\`
+
+### Nginx Logs (last 15)
+\`\`\`
+${NGINX_LOGS}
+\`\`\`
+
+### OpenVPN Logs (last 15)
+\`\`\`
+${OPENVPN_LOGS}
+\`\`\`
+
+### MariaDB Logs (last 10)
+\`\`\`
+${MYSQL_LOGS}
+\`\`\`
+
+### Node Agent Logs (last 15)
+\`\`\`
+${NODE_AGENT_LOGS}
 \`\`\`"
 
 # Try jq first for proper JSON escaping, fallback to simple approach
