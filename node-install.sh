@@ -97,9 +97,9 @@ chmod 600 /etc/panel-node/node.env
 
 # VPN scripts
 if [[ -d "$INSTALL_DIR/scripts/openvpn" ]]; then
-    mkdir -p /etc/openvpn/scripts
-    cp -f "$INSTALL_DIR/scripts/openvpn/"*.sh /etc/openvpn/scripts/ 2>/dev/null || true
-    chmod +x /etc/openvpn/scripts/*.sh 2>/dev/null || true
+    mkdir -p /etc/openvpn/server
+    cp -f "$INSTALL_DIR/scripts/openvpn/"*.sh /etc/openvpn/server/ 2>/dev/null || true
+    chmod +x /etc/openvpn/server/*.sh 2>/dev/null || true
 fi
 
 # Service
