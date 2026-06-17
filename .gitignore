@@ -5,9 +5,7 @@ node_modules/
 # panel/web/admin/www/
 # panel/web/portal/www/
 
-# Lock files (regenerated on npm install)
-panel/web/admin/package-lock.json
-panel/web/portal/package-lock.json
+# Lock files
 package-lock.json
 
 # Go build artifacts

@@ -4,8 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
-    "build": "vite build",
-    "typecheck": "vue-tsc --noEmit"
+    "build": "vite build"
   },
   "dependencies": {
     "@vueuse/core": "^11.3.0",
