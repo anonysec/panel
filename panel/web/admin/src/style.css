@@ -36,7 +36,7 @@ select:focus{border-color:rgba(37,99,235,0.5)}
 .topbar{display:flex;align-items:center;gap:14px;margin-bottom:22px}
 .topbar-left h2{font-size:20px;font-weight:700;letter-spacing:-.02em}
 .topbar-left p{font-size:12.5px;color:var(--muted);margin-top:2px}
-.topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.topbar-right{margin-inline-start:auto;display:flex;align-items:center;gap:10px}
 .search-box{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);padding:8px 12px;border-radius:10px;width:220px}
 .search-box input{background:none;border:none;outline:none;color:var(--text);font-size:12.5px;width:100%}
 .search-box svg{width:15px;height:15px;color:var(--muted);flex-shrink:0}
@@ -299,121 +299,52 @@ kbd{font-size:10px;padding:2px 5px;border-radius:4px;background:var(--surface-2)
 .lang-select{width:auto;min-width:38px;min-height:28px;padding:3px 6px;font-size:10px;font-weight:600;border-radius:7px;background:var(--surface-2);border:1px solid var(--border);color:var(--muted);cursor:pointer;text-align:center}
 .lang-select:focus{border-color:var(--brand)}
 
-/* RTL support */
+/* RTL support - Browser handles flex row reversal automatically when dir="rtl" is set.
+   Only explicit overrides for borders, margins, positions, and number inputs are needed. */
+
+/* Sidebar border swap */
 [dir="rtl"] .sidebar{border-right:none;border-left:1px solid var(--border)}
-[dir="rtl"] .nav-item{text-align:right;flex-direction:row-reverse}
+
+/* Badge margin swap */
 [dir="rtl"] .nav-item .badge{margin-left:0;margin-right:auto}
-[dir="rtl"] .topbar-right{margin-left:0;margin-right:auto}
-[dir="rtl"] .sidebar-foot{direction:rtl}
-[dir="rtl"] .user-cell{flex-direction:row-reverse}
-[dir="rtl"] .card-head{flex-direction:row-reverse}
-[dir="rtl"] .action-row{flex-direction:row-reverse}
-[dir="rtl"] th{text-align:right}
-[dir="rtl"] .modal-head{flex-direction:row-reverse}
-[dir="rtl"] .search-box{flex-direction:row-reverse}
-[dir="rtl"] .legend{flex-direction:row-reverse}
-[dir="rtl"] .dlist .row{flex-direction:row-reverse}
+
+/* Dlist value margin */
 [dir="rtl"] .dlist .row .v{margin-left:0;margin-right:auto}
-[dir="rtl"] .tabs{flex-direction:row-reverse}
-[dir="rtl"] .brand{flex-direction:row-reverse}
-[dir="rtl"] .brand-text{text-align:right}
 
-/* RTL - Additional layout fixes */
-[dir="rtl"] .portal-nav__links{flex-direction:row-reverse}
-[dir="rtl"] .topbar-left{text-align:right}
-[dir="rtl"] .topbar-left h2{text-align:right}
-[dir="rtl"] .topbar-left p{text-align:right}
-[dir="rtl"] .form-grid{direction:rtl}
-[dir="rtl"] .form-stack{direction:rtl}
-[dir="rtl"] .form-actions{flex-direction:row-reverse}
+/* Protocol card controls margin */
 [dir="rtl"] .protocol-card__controls{margin-left:0;margin-right:auto}
-[dir="rtl"] .bulk-toolbar{flex-direction:row-reverse}
-[dir="rtl"] .search-bar{flex-direction:row-reverse}
-[dir="rtl"] .two-col{direction:rtl}
-[dir="rtl"] .settings-layout{direction:rtl}
-[dir="rtl"] .settings-nav button{text-align:right}
-[dir="rtl"] .node-card{direction:rtl;text-align:right}
-[dir="rtl"] .stat-card{direction:rtl;text-align:right}
-[dir="rtl"] .pagination{flex-direction:row-reverse}
+
+/* Toast position */
 [dir="rtl"] .toast{right:auto;left:16px}
-[dir="rtl"] .notif-dropdown{right:auto;left:0}
-
-/* RTL - Comprehensive component coverage */
-[dir="rtl"] body{text-align:right}
-[dir="rtl"] .topbar{flex-direction:row-reverse}
-[dir="rtl"] .main{text-align:right}
-
-/* RTL - Buttons with icons */
-[dir="rtl"] .btn-primary,[dir="rtl"] .btn-ghost,[dir="rtl"] .btn-danger{direction:rtl}
-[dir="rtl"] .icon-btn .notif-dot{right:auto;left:8px}
-
-/* RTL - Node cards comprehensive */
-[dir="rtl"] .node-grid{direction:rtl}
-[dir="rtl"] .node-metrics span{text-align:center}
-
-/* RTL - Stat cards */
-[dir="rtl"] .stat-card .ic{margin-left:12px;margin-right:0}
-[dir="rtl"] .stat-card .lbl{text-align:right}
-[dir="rtl"] .stat-card .trend{text-align:right}
-
-/* RTL - Tables */
-[dir="rtl"] td{text-align:right}
-[dir="rtl"] .table-wrap{direction:rtl}
-
-/* RTL - Modal */
-[dir="rtl"] .modal{direction:rtl;text-align:right}
-[dir="rtl"] .modal-close{margin-left:0;margin-right:auto}
-
-/* RTL - Toast animation */
 [dir="rtl"] .toast .toast-close{margin-left:0;margin-right:auto}
 @keyframes slideInRtl{from{opacity:0;transform:translateX(-20px)}to{opacity:1;transform:none}}
 [dir="rtl"] .toast{animation-name:slideInRtl}
 
-/* RTL - Form elements */
-[dir="rtl"] label{text-align:right}
-[dir="rtl"] input,[dir="rtl"] select,[dir="rtl"] textarea{text-align:right}
+/* Notification dropdown position */
+[dir="rtl"] .notif-dropdown{right:auto;left:0}
+
+/* Notification dot position */
+[dir="rtl"] .icon-btn .notif-dot{right:auto;left:8px}
+
+/* Modal close button margin */
+[dir="rtl"] .modal-close{margin-left:0;margin-right:auto}
+
+/* Stat card icon margin swap */
+[dir="rtl"] .stat-card .ic{margin-left:12px;margin-right:0}
+
+/* Auth screen border swap */
+[dir="rtl"] .auth-right{border-left:none;border-right:1px solid var(--border)}
+
+/* Number/tel inputs keep LTR direction */
 [dir="rtl"] input[type="number"],[dir="rtl"] input[type="tel"]{direction:ltr;text-align:left}
 
-/* RTL - Grid layouts */
-[dir="rtl"] .grid{direction:rtl}
-[dir="rtl"] .g2{direction:rtl}
-[dir="rtl"] .g4{direction:rtl}
+/* Subscription URL input stays LTR */
+[dir="rtl"] .sp__sub-url-input{direction:ltr;text-align:left}
 
-/* RTL - Command palette */
-[dir="rtl"] .cmd-input-row{flex-direction:row-reverse}
-[dir="rtl"] .cmd-item{flex-direction:row-reverse}
-[dir="rtl"] .cmd-item-text{text-align:right}
-
-/* RTL - Notifications dropdown */
-[dir="rtl"] .notif-head{flex-direction:row-reverse}
-[dir="rtl"] .notif-item{flex-direction:row-reverse}
-[dir="rtl"] .notif-text{text-align:right}
-
-/* RTL - Pill alignment */
-[dir="rtl"] .pill{direction:rtl}
-
-/* RTL - Auth screen */
-[dir="rtl"] .auth-screen{direction:rtl}
-[dir="rtl"] .auth-left{text-align:right}
-[dir="rtl"] .auth-right{border-left:none;border-right:1px solid var(--border);text-align:right}
-
-/* RTL - Empty state */
-[dir="rtl"] .empty-state{text-align:center}
-
-/* RTL - Alert */
-[dir="rtl"] .alert{text-align:right}
-
-/* RTL - Sidebar footer */
-[dir="rtl"] .sidebar-foot{flex-direction:row-reverse}
-[dir="rtl"] .sidebar-foot .meta{text-align:right}
-
-/* RTL - Donut chart */
-[dir="rtl"] .donut-wrap{direction:rtl}
-
-/* RTL - Settings */
+/* Settings grid flip (nav moves to right side) */
 [dir="rtl"] .settings-layout{grid-template-columns:1fr 200px}
 
-/* RTL - Bulk toolbar */
+/* Bulk toolbar clear margin */
 [dir="rtl"] .bulk-toolbar .bulk-toolbar__clear{margin-left:0;margin-right:auto}
 
 /* Responsive */

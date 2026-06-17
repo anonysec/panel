@@ -55,6 +55,15 @@ interface AppLink {
 }
 const appLinks = ref<AppLink[]>([])
 
+const defaultAppLinks: AppLink[] = [
+  { name: 'iOS', url: '#', platform: 'ios', icon: '🍎' },
+  { name: 'Android', url: '#', platform: 'android', icon: '🤖' },
+  { name: 'Windows', url: '#', platform: 'windows', icon: '🪟' },
+  { name: 'macOS', url: '#', platform: 'macos', icon: '💻' },
+]
+
+const displayAppLinks = computed(() => appLinks.value.length ? appLinks.value : defaultAppLinks)
+
 // ---- Support ----
 const showCreateForm = ref(false)
 const ticketForm = ref({ subject: '', message: '' })
@@ -310,7 +319,7 @@ function handleBackToList() {
     </section>
 
     <!-- ===== Section: Download Apps ===== -->
-    <section v-if="appLinks.length" class="sp__section">
+    <section class="sp__section">
       <h2 class="sp__section-title">
         <svg viewBox="0 0 20 20" fill="currentColor" width="20" height="20"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
         {{ t('portal.apps.title') }}
@@ -318,8 +327,8 @@ function handleBackToList() {
       <p class="sp__apps-desc">{{ t('portal.apps.desc') }}</p>
       <div class="sp__apps-grid">
         <a
-          v-for="link in appLinks"
-          :key="link.url"
+          v-for="link in displayAppLinks"
+          :key="link.platform"
           :href="link.url"
           target="_blank"
           rel="noopener noreferrer"
@@ -779,77 +788,10 @@ function handleBackToList() {
 }
 
 /* ===== RTL support ===== */
-[dir="rtl"] .sp__welcome {
-  text-align: right;
-}
-[dir="rtl"] .sp__section {
-  text-align: right;
-}
-[dir="rtl"] .sp__section-title {
-  flex-direction: row-reverse;
-  text-align: right;
-}
-[dir="rtl"] .sp__account-item {
-  text-align: right;
-}
-[dir="rtl"] .sp__usage-content {
-  flex-direction: row-reverse;
-}
-[dir="rtl"] .sp__usage-info {
-  text-align: right;
-}
-[dir="rtl"] .sp__progress-labels {
-  flex-direction: row-reverse;
-}
-[dir="rtl"] .sp__profile-card {
-  flex-direction: row-reverse;
-}
-[dir="rtl"] .sp__profile-info {
-  text-align: right;
-}
-[dir="rtl"] .sp__sub-url-row {
-  flex-direction: row-reverse;
-}
-[dir="rtl"] .sp__sub-url-label {
-  text-align: right;
-}
-[dir="rtl"] .sp__sub-url-desc {
-  text-align: right;
-}
+/* Browser handles flex row reversal automatically with dir="rtl".
+   Only subscription URL input needs explicit LTR direction. */
 [dir="rtl"] .sp__sub-url-input {
   direction: ltr;
   text-align: left;
-}
-[dir="rtl"] .sp__ticket-row {
-  flex-direction: row-reverse;
-}
-[dir="rtl"] .sp__ticket-row-info {
-  flex-direction: row-reverse;
-  text-align: right;
-}
-[dir="rtl"] .sp__ticket-header {
-  flex-direction: row-reverse;
-}
-[dir="rtl"] .sp__form-actions {
-  flex-direction: row-reverse;
-}
-[dir="rtl"] .sp__back-btn {
-  flex-direction: row-reverse;
-}
-[dir="rtl"] .sp__new-ticket-btn {
-  flex-direction: row-reverse;
-}
-[dir="rtl"] .sp__notice {
-  text-align: right;
-}
-
-@media (max-width: 640px) {
-  [dir="rtl"] .sp__usage-content {
-    flex-direction: column-reverse;
-    text-align: center;
-  }
-  [dir="rtl"] .sp__sub-url-row {
-    flex-direction: column-reverse;
-  }
 }
 </style>

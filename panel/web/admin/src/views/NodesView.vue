@@ -335,7 +335,7 @@ function removeAllowedKey(index: number) {
   configForm.value.extra_json.allowed_keys = current.join('\n')
 }
 
-// ─── Outbound Helpers ────────────────────────────────────────────────────────
+// ─── Proxy Helpers ────────────────────────────────────────────────────────
 function initOutbound() {
   if (!configForm.value.extra_json.outbound) {
     configForm.value.extra_json.outbound = { enabled: false, type: 'vless', address: '', uuid: '', tls: true, path: '', sni: '' }
@@ -1003,7 +1003,7 @@ onMounted(() => {
                       </div>
                     </div>
 
-                    <!-- Outbound / Tunnel Group -->
+                    <!-- Proxy Group -->
                     <div class="form-group">
                       <h5 class="form-group__title">{{ t('nodes.outbound') }}</h5>
                       <p class="form-group__desc">{{ t('nodes.outbound_desc') }}</p>

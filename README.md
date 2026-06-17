@@ -1,24 +1,49 @@
 # KorisPanel
 
-Multi-protocol, multi-node VPN management panel with customer billing, real-time monitoring, and reseller system.
+**Multi-protocol, multi-node VPN management panel** with customer billing, real-time monitoring, reseller system, and modern web UI.
 
-## Features
+Manage your entire VPN infrastructure from a single dashboard: nodes, customers, subscriptions, payments, support tickets, and more.
 
-- **Multi-Protocol VPN** — OpenVPN, L2TP/IPSec, IKEv2, SSH Tunnel
-- **Multi-Node** — Manage unlimited VPN nodes from a single panel
-- **Customer Management** — User accounts with data/speed limits, expiry, status control
-- **Subscription Plans** — Create plans with data caps, speed limits, duration, pricing
-- **Wallet & Billing** — Per-user wallet, manual/automated payments, payment methods
-- **Reseller System** — Sub-accounts with credit allocation and customer provisioning
-- **Real-Time Monitoring** — Live bandwidth charts, session tracking, node health metrics
-- **Ticket System** — Customer support tickets with admin/user messaging
-- **Telegram Bot** — Remote panel management via Telegram commands
-- **FreeRADIUS Integration** — Standards-based AAA with session accounting
-- **Admin Dashboard** — Analytics, usage monitor, live sessions, audit logs
+---
+
+## Key Features
+
+### VPN & Networking
+- **Multi-Protocol** - OpenVPN, L2TP/IPSec, IKEv2, SSH Tunnel
+- **Multi-Node** - Manage unlimited VPN nodes from one panel
+- **Upstream Proxy** - Route node traffic through xray, SOCKS5, or HTTP proxy
+- **FreeRADIUS Integration** - Standards-based AAA with session accounting
+- **Real-Time Monitoring** - Live bandwidth charts, session tracking, node health
+
+### Business & Billing
+- **Subscription Plans** - Quota-based or pay-as-you-go pricing
+- **Wallet & Payments** - Per-user wallet, manual/crypto payments, payment methods
+- **Reseller System** - Sub-accounts with credit allocation and customer provisioning
+
+### Customer Experience
+- **Self-Service Portal** - Simple single-page UI for customers (usage, profiles, support)
+- **Download Apps** - Configurable app download links for iOS, Android, Windows, macOS
+- **Ticket System** - Customer support with admin/user messaging
+- **Telegram Bot** - Both admin management and customer self-service via inline buttons
+
+### Admin Panel
+- **Dashboard** - Stats overview, usage graphs, recent activity
+- **Customer Management** - Accounts with data/speed limits, expiry, bulk actions
+- **Theming** - 5 built-in themes (Midnight, Kiro, GitHub, Soft Dark, Corporate)
+- **Dark/Light/System Mode** - Auto-detects OS preference
+- **Multi-Language** - English, Persian (RTL), Chinese, Russian
+- **Timezone Support** - Dates formatted per user locale and browser timezone
+- **Templates** - Pre-configured customer profiles for quick provisioning
+
+## Screenshots
+
+> Screenshots will be added after initial release.
+
+---
 
 ## Quick Install
 
-### Panel (one-liner)
+### Panel Server (one-liner)
 
 ```bash
 bash <(curl -Ls https://raw.githubusercontent.com/anonysec/panel/main/install.sh)
@@ -30,9 +55,11 @@ bash <(curl -Ls https://raw.githubusercontent.com/anonysec/panel/main/install.sh
 bash <(curl -Ls https://raw.githubusercontent.com/anonysec/panel/main/node-install.sh)
 ```
 
-You'll need the **Panel URL** and **Node Token** (generated in panel admin under Services > Nodes > + New Node).
+You will need the **Panel URL** and **Node Token** (generated in admin panel under Services > Nodes > Add Node).
 
-## Management
+---
+
+## Management CLI
 
 After installation, use the `koris` command:
 
@@ -45,6 +72,8 @@ koris logs         # Recent logs
 koris follow       # Live log stream
 koris uninstall    # Remove everything
 ```
+
+---
 
 ## Requirements
 
@@ -67,50 +96,52 @@ koris uninstall    # Remove everything
 |-----------|---------|
 | OS | Ubuntu 20.04+ / Debian 11+ |
 | RAM | 512 MB |
-| Outbound | Must reach panel URL |
+| Network | Must reach panel URL |
 | Packages | OpenVPN, StrongSwan, xl2tpd (installed automatically) |
+
+---
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                   Panel Server                       │
-│                                                     │
-│  ┌──────────┐  ┌──────────┐  ┌──────────────────┐ │
-│  │  Nginx   │→ │  Panel   │→ │  MariaDB         │ │
-│  │  :80/443 │  │  :8080   │  │  (radius DB)     │ │
-│  └──────────┘  └──────────┘  └──────────────────┘ │
-│                      │                              │
-│                      ↓                              │
-│              ┌──────────────┐                       │
-│              │ FreeRADIUS   │                       │
-│              │ (auth/acct)  │                       │
-│              └──────────────┘                       │
-└─────────────────────────────────────────────────────┘
-         │ WebSocket + REST API
-         ↓
-┌─────────────────────────────────────────────────────┐
-│                Node Server(s)                        │
-│                                                     │
-│  ┌──────────┐  ┌──────────┐  ┌──────────────────┐ │
-│  │  Node    │  │ OpenVPN  │  │ StrongSwan       │ │
-│  │  Agent   │→ │ :1194    │  │ IKEv2/L2TP       │ │
-│  └──────────┘  └──────────┘  └──────────────────┘ │
-└─────────────────────────────────────────────────────┘
+                    Panel Server
+ +-------------------------------------------------+
+ |  Nginx (:80/443)                                |
+ |      |                                          |
+ |      v                                          |
+ |  Panel Backend (:8080)  -->  MariaDB            |
+ |      |                       (radius DB)        |
+ |      v                                          |
+ |  FreeRADIUS (auth/acct)                         |
+ +-------------------------------------------------+
+          |  WebSocket + REST API
+          v
+ +-------------------------------------------------+
+ |              Node Server(s)                      |
+ |                                                  |
+ |  Node Agent --> OpenVPN (:1194)                  |
+ |             --> StrongSwan (IKEv2/L2TP)          |
+ |             --> SSH Tunnel                       |
+ |             --> [Upstream Proxy] (optional)      |
+ +-------------------------------------------------+
 ```
 
-## Admin Panel
+---
 
-Access at `http://YOUR_IP/dashboard/` after installation.
+## Tech Stack
 
-**Sidebar navigation:**
-- **Dashboard** — Stats overview, usage monitor (day/week/month), recent users
-- **Analytics** — Revenue, bandwidth charts, user distribution, live sessions
-- **Transactions** — Payment recording, approval queue, payment methods management
-- **Users** — Accounts (with status filters), Tickets, Resellers
-- **Services** — Nodes (health metrics), Cores (per-protocol config cards)
-- **Plans** — Subscription plan CRUD
-- **Settings** — Panel status, VPN settings, Telegram bot, certificates, audit logs, backups
+| Layer | Technology |
+|-------|-----------|
+| Backend | Go 1.22+, Chi router, GORM |
+| Admin Frontend | Vue 3, TypeScript, Vite |
+| Portal Frontend | Vue 3, TypeScript, Vite |
+| Database | MariaDB 10.5+ |
+| AAA | FreeRADIUS 3.x |
+| VPN Protocols | OpenVPN, StrongSwan, xl2tpd |
+| Reverse Proxy | Nginx |
+| Bot | Telegram Bot API (inline keyboards) |
+
+---
 
 ## API
 
@@ -127,20 +158,22 @@ All admin operations are available via REST API at `/api/`. Key endpoints:
 | `GET /api/payments` | List payments |
 | `WS /api/realtime` | WebSocket for live stats/sessions |
 
+---
+
 ## Configuration
 
 Panel config: `/etc/panel/panel.env`
 Node config: `/etc/panel-node/node.env`
 
-Key panel environment variables:
-
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `PANEL_ADDR` | Listen address | `127.0.0.1:8080` |
-| `PANEL_DB_DSN` | MariaDB connection string | — |
+| `PANEL_DB_DSN` | MariaDB connection string | - |
 | `PANEL_SETUP_KEY` | Initial admin setup key | auto-generated |
 | `PANEL_SESSION_SECRET` | Cookie signing secret | auto-generated |
 | `PANEL_VERSION` | Display version | from `VERSION` file |
+
+---
 
 ## Development
 
@@ -154,14 +187,14 @@ go run ./panel/cmd/panel
 
 # Frontend (admin)
 cd panel/web/admin
-npm install
-npm run dev
+npm install && npm run dev
 
 # Frontend (portal)
 cd panel/web/portal
-npm install
-npm run dev
+npm install && npm run dev
 ```
+
+---
 
 ## Updating
 
@@ -176,6 +209,8 @@ cd /opt/koris-next
 git pull origin main
 bash deploy.sh
 ```
+
+---
 
 ## License
 

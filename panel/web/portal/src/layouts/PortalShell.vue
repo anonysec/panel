@@ -148,7 +148,7 @@ const langLabels: Record<Locale, string> = {
   font-size: var(--text-md);
 }
 .portal-header__actions {
-  margin-left: auto;
+  margin-inline-start: auto;
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -339,21 +339,8 @@ const langLabels: Record<Locale, string> = {
   }
 }
 
-/* RTL support */
-[dir="rtl"] .portal-header {
-  flex-direction: row-reverse;
-}
-[dir="rtl"] .portal-header__brand {
-  flex-direction: row-reverse;
-}
-[dir="rtl"] .portal-header__actions {
-  margin-left: 0;
-  margin-right: auto;
-  direction: ltr;
-}
-[dir="rtl"] .portal-header__user-toggle {
-  flex-direction: row-reverse;
-}
+/* RTL support - Browser handles flex reversal automatically with dir="rtl".
+   Only position/margin overrides needed. */
 [dir="rtl"] .portal-header__dropdown {
   right: auto;
   left: 0;
@@ -362,9 +349,6 @@ const langLabels: Record<Locale, string> = {
   text-align: right;
 }
 [dir="rtl"] .portal-header__dropdown-header {
-  text-align: right;
-}
-[dir="rtl"] .portal-main {
   text-align: right;
 }
 </style>
