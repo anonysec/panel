@@ -69,6 +69,15 @@ export interface CreateNodePayload {
 }
 
 /**
+ * Node edit payload matching PATCH /api/nodes/:id
+ */
+export interface EditNodePayload {
+  name?: string
+  public_ip?: string
+  domain?: string
+}
+
+/**
  * Node task creation payload matching POST /api/node/tasks
  */
 export interface CreateNodeTaskPayload {
@@ -391,6 +400,27 @@ export const useNodesStore = defineStore('nodes', () => {
     }
   }
 
+  /**
+   * Edit a node's name, public_ip, or domain.
+   * PATCH /api/nodes/:id → { ok }
+   *
+   * On success, reloads the nodes list.
+   * On error, preserves existing data.
+   */
+  async function editNode(nodeId: number, payload: EditNodePayload): Promise<boolean> {
+    loading.value = true
+    try {
+      await patch<NodeMutationResponse>(`/api/nodes/${nodeId}`, payload)
+      await loadNodes()
+      return true
+    } catch {
+      // Preserve existing data on error (Requirement 3.4)
+      return false
+    } finally {
+      loading.value = false
+    }
+  }
+
   // ─── Expose ───────────────────────────────────────────────────────────────
   return {
     // State
@@ -412,6 +442,7 @@ export const useNodesStore = defineStore('nodes', () => {
     rotateNodeToken,
     updateNode,
     deleteNode,
+    editNode,
     createNodeTask,
     updateVpnSettings,
     saveNodeVpnConfig,
