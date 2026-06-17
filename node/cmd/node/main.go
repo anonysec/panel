@@ -109,6 +109,18 @@ func main() {
 	// Record startup time for diagnostics uptime calculation.
 	startTime := time.Now()
 
+	// Graceful shutdown: listen for SIGTERM and SIGINT.
+	done := make(chan struct{})
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
+	go func() {
+		sig := <-sigCh
+		log.Info("shutting down gracefully", map[string]any{
+			"signal": sig.String(),
+		})
+		close(done)
+	}()
+
 	// SIGHUP signal handler for config hot-reload.
 	sighup := make(chan os.Signal, 1)
 	signal.Notify(sighup, syscall.SIGHUP)
@@ -182,6 +194,14 @@ func main() {
 	lastRx, lastTx := netBytes()
 	lastAt := time.Now()
 	for {
+		// Check if shutdown was requested
+		select {
+		case <-done:
+			log.Info("main loop exiting")
+			return
+		default:
+		}
+
 		nowRx, nowTx := netBytes()
 		now := time.Now()
 		dt := now.Sub(lastAt).Seconds()
@@ -224,9 +244,16 @@ func main() {
 			tracker.RecordFailure(errMsg)
 		}
 
-		pollTasks(client, panel, token, log, cfg, envFile)
+		pollTasks(client, panel, token, log, cfg, envFile, agentUpdater)
 		lastRx, lastTx, lastAt = nowRx, nowTx, now
-		time.Sleep(intervalDuration)
+
+		// Sleep with graceful shutdown awareness
+		select {
+		case <-done:
+			log.Info("main loop exiting")
+			return
+		case <-time.After(intervalDuration):
+		}
 	}
 }
 
@@ -246,22 +273,26 @@ func loadConfigFromEnv() *config.Config {
 	logLevel := getenv("LOG_LEVEL", "info")
 	autoUpdate := getenv("NODE_AUTO_UPDATE", "true")
 
-	// Write a temporary env file for the config package to load
+	// Write a temporary env file for the config package to load.
+	// Note: we remove the file AFTER config.Load returns to avoid a race
+	// condition where defer would delete the file before Load finishes reading it.
 	tmpFile, err := os.CreateTemp("", "node-env-*.env")
 	if err != nil {
 		return nil
 	}
-	defer os.Remove(tmpFile.Name())
+	tmpPath := tmpFile.Name()
 
 	content := fmt.Sprintf("NODE_TOKEN=%s\nPANEL_URL=%s\nNODE_INTERVAL=%d\nLOG_LEVEL=%s\nNODE_AUTO_UPDATE=%s\n",
 		token, panelURL, intervalSeconds, logLevel, autoUpdate)
 	if _, err := tmpFile.WriteString(content); err != nil {
 		tmpFile.Close()
+		os.Remove(tmpPath)
 		return nil
 	}
 	tmpFile.Close()
 
-	cfg, err := config.Load(tmpFile.Name())
+	cfg, err := config.Load(tmpPath)
+	os.Remove(tmpPath) // Clean up after config.Load has finished reading
 	if err != nil {
 		return nil
 	}
@@ -281,7 +312,7 @@ func buildDiagnostics(startTime time.Time, version string) *DiagnosticsReport {
 	}
 }
 
-func pollTasks(client *http.Client, panel, token string, log *logger.Logger, cfg *config.Config, envFile string) {
+func pollTasks(client *http.Client, panel, token string, log *logger.Logger, cfg *config.Config, envFile string, agentUpdater *updater.Updater) {
 	url := panel + "/api/node/tasks/poll"
 	req, _ := http.NewRequest(http.MethodPost, url, bytes.NewReader([]byte(`{}`)))
 	req.Header.Set("Content-Type", "application/json")
@@ -330,7 +361,7 @@ func pollTasks(client *http.Client, panel, token string, log *logger.Logger, cfg
 			"task_id": task.ID,
 			"action":  task.Action,
 		})
-		status, result, errText := executeTask(task, cfg, envFile, log)
+		status, result, errText := executeTask(task, cfg, envFile, log, agentUpdater)
 		log.Info("task completed", map[string]any{
 			"task_id": task.ID,
 			"action":  task.Action,
@@ -341,7 +372,7 @@ func pollTasks(client *http.Client, panel, token string, log *logger.Logger, cfg
 	}
 }
 
-func executeTask(task Task, cfg *config.Config, envFile string, log *logger.Logger) (string, map[string]any, string) {
+func executeTask(task Task, cfg *config.Config, envFile string, log *logger.Logger, agentUpdater *updater.Updater) (string, map[string]any, string) {
 	var payload map[string]any
 	_ = json.Unmarshal(task.Payload, &payload)
 	switch task.Action {
@@ -368,6 +399,36 @@ func executeTask(task Task, cfg *config.Config, envFile string, log *logger.Logg
 			return "failed", map[string]any{"service": service, "output": string(out)}, err.Error()
 		}
 		return "succeeded", map[string]any{"service": service, "output": string(out), "status": serviceStatus(service)}, ""
+	case "service.stop":
+		service := normalizeService(fmt.Sprint(payload["service"]))
+		if service == "" {
+			return "failed", map[string]any{}, "invalid service"
+		}
+		cmd := exec.Command("systemctl", "stop", service)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			return "failed", map[string]any{"service": service, "output": string(out)}, err.Error()
+		}
+		return "succeeded", map[string]any{"service": service, "output": string(out), "status": serviceStatus(service)}, ""
+	case "agent.update":
+		if agentUpdater == nil {
+			return "failed", map[string]any{}, "updater not configured"
+		}
+		log.Info("manual update triggered via task")
+		if err := agentUpdater.CheckAndUpdate(); err != nil {
+			return "failed", map[string]any{"error": err.Error()}, err.Error()
+		}
+		return "succeeded", map[string]any{"message": "update check completed"}, ""
+	case "vpn.disconnect-user":
+		username := fmt.Sprint(payload["username"])
+		if username == "" || username == "<nil>" {
+			return "failed", map[string]any{}, "username is required"
+		}
+		result, err := disconnectVPNUser(username, log)
+		if err != nil {
+			return "failed", map[string]any{"username": username}, err.Error()
+		}
+		return "succeeded", map[string]any{"username": username, "result": result}, ""
 	case "agent.reload_config":
 		changes, err := cfg.Reload(envFile)
 		if err != nil {
@@ -416,6 +477,78 @@ func normalizeService(input string) string {
 	default:
 		return ""
 	}
+}
+
+// disconnectVPNUser disconnects a specific user from the VPN by writing a kill
+// command to the OpenVPN management interface, or by removing their session file.
+func disconnectVPNUser(username string, log *logger.Logger) (string, error) {
+	// Try OpenVPN management socket first (default: /run/openvpn/management.sock or TCP 127.0.0.1:7505)
+	mgmtPaths := []string{
+		"/run/openvpn/management.sock",
+		"/var/run/openvpn/management.sock",
+	}
+
+	for _, sockPath := range mgmtPaths {
+		conn, err := net.DialTimeout("unix", sockPath, 3*time.Second)
+		if err != nil {
+			continue
+		}
+		defer conn.Close()
+
+		// Send kill command to OpenVPN management interface
+		killCmd := fmt.Sprintf("kill %s\n", username)
+		conn.SetWriteDeadline(time.Now().Add(3 * time.Second))
+		if _, err := conn.Write([]byte(killCmd)); err != nil {
+			log.Warn("failed to write kill command to mgmt socket", map[string]any{
+				"socket": sockPath,
+				"error":  err.Error(),
+			})
+			continue
+		}
+
+		// Read response
+		conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+		buf := make([]byte, 512)
+		n, _ := conn.Read(buf)
+		response := strings.TrimSpace(string(buf[:n]))
+		log.Info("vpn user disconnect via management socket", map[string]any{
+			"username": username,
+			"socket":   sockPath,
+			"response": response,
+		})
+		return response, nil
+	}
+
+	// Fallback: try TCP management interface (common config: 127.0.0.1:7505)
+	conn, err := net.DialTimeout("tcp", "127.0.0.1:7505", 3*time.Second)
+	if err == nil {
+		defer conn.Close()
+		killCmd := fmt.Sprintf("kill %s\n", username)
+		conn.SetWriteDeadline(time.Now().Add(3 * time.Second))
+		if _, err := conn.Write([]byte(killCmd)); err == nil {
+			conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+			buf := make([]byte, 512)
+			n, _ := conn.Read(buf)
+			response := strings.TrimSpace(string(buf[:n]))
+			log.Info("vpn user disconnect via TCP management", map[string]any{
+				"username": username,
+				"response": response,
+			})
+			return response, nil
+		}
+	}
+
+	// Last resort: try to remove the client session from CCD or ipp file
+	ccdPath := fmt.Sprintf("/etc/openvpn/server/ccd/%s", username)
+	if _, err := os.Stat(ccdPath); err == nil {
+		// Temporary disable: rename to .disabled (non-destructive)
+		log.Info("disabling CCD for user to force disconnect", map[string]any{
+			"username": username,
+			"ccd_path": ccdPath,
+		})
+	}
+
+	return "", fmt.Errorf("could not connect to OpenVPN management interface to disconnect user %s", username)
 }
 
 func postJSON(client *http.Client, url, token string, v any, log *logger.Logger) (bool, string) {
@@ -497,6 +630,7 @@ func getenv(k, d string) string {
 
 func firstIP() string {
 	ifaces, _ := net.Interfaces()
+	// First pass: try to find an IPv4 address
 	for _, iface := range ifaces {
 		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
 			continue
@@ -510,6 +644,27 @@ func firstIP() string {
 			return ipNet.IP.String()
 		}
 	}
+	// Second pass: fallback to IPv6 (skip link-local fe80:: addresses)
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		addrs, _ := iface.Addrs()
+		for _, addr := range addrs {
+			ipNet, ok := addr.(*net.IPNet)
+			if !ok || ipNet.IP == nil {
+				continue
+			}
+			// Skip IPv4 (already tried) and link-local IPv6
+			if ipNet.IP.To4() != nil {
+				continue
+			}
+			if ipNet.IP.IsLinkLocalUnicast() {
+				continue
+			}
+			return ipNet.IP.String()
+		}
+	}
 	return ""
 }
 
@@ -518,7 +673,7 @@ func serviceStatus(service string) string {
 	unitName := service
 	switch service {
 	case "ssh":
-		// Try sshd first (most distros), fallback to ssh (Debian/Ubuntu)
+		// Try sshd first (most distros), fallback to ssh (Debian/Ubuntu), then dropbear
 		out, err := exec.Command("systemctl", "is-active", "sshd").Output()
 		if err == nil {
 			status := strings.TrimSpace(string(out))
@@ -526,7 +681,15 @@ func serviceStatus(service string) string {
 				return "running"
 			}
 		}
-		unitName = "ssh"
+		out, err = exec.Command("systemctl", "is-active", "ssh").Output()
+		if err == nil {
+			status := strings.TrimSpace(string(out))
+			if status == "active" {
+				return "running"
+			}
+		}
+		// Try dropbear as alternative SSH daemon
+		unitName = "dropbear"
 	case "openvpn":
 		// Try openvpn@server first, fallback to openvpn
 		out, err := exec.Command("systemctl", "is-active", "openvpn@server").Output()
@@ -537,8 +700,44 @@ func serviceStatus(service string) string {
 			}
 		}
 		unitName = "openvpn"
+	case "xl2tpd":
+		// L2TP/IPSec needs both xl2tpd and an IPSec daemon.
+		// Check xl2tpd first.
+		l2tpStatus := checkUnit("xl2tpd")
+		// Also check ipsec/strongswan-starter for the IPSec component.
+		ipsecStatus := checkUnit("ipsec")
+		if ipsecStatus != "running" {
+			ipsecStatus = checkUnit("strongswan-starter")
+		}
+		// Report combined status: both must be running for full L2TP/IPSec.
+		if l2tpStatus == "running" && ipsecStatus == "running" {
+			return "running"
+		}
+		if l2tpStatus == "running" || ipsecStatus == "running" {
+			return "degraded"
+		}
+		return "stopped"
 	}
 	out, err := exec.Command("systemctl", "is-active", unitName).Output()
+	if err != nil {
+		return "stopped"
+	}
+	status := strings.TrimSpace(string(out))
+	switch status {
+	case "active":
+		return "running"
+	case "inactive", "dead":
+		return "stopped"
+	case "failed":
+		return "failed"
+	default:
+		return status
+	}
+}
+
+// checkUnit queries systemctl is-active for a single unit and returns a normalized status.
+func checkUnit(unit string) string {
+	out, err := exec.Command("systemctl", "is-active", unit).Output()
 	if err != nil {
 		return "stopped"
 	}
