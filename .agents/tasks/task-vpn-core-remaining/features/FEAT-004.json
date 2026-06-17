@@ -1,0 +1,34 @@
+{
+  "id": "FEAT-004",
+  "type": "feat",
+  "description": "Automatic certificate rotation (Task Group 8: full implementation). Worker with 1-hour ticker, CheckExpiring, Regenerate, DistributeToNodes, cert.distribute task action in node agent, warning/critical events, and panel startup initialization.",
+  "status": "in_progress",
+  "steps": [
+    "Create migration panel/migrations/024_cert_rotation.sql: This is a no-op since 017_cert_expiry.sql already added expires_at and fingerprint columns. Content: '-- Certificate rotation support (base columns already in 017_cert_expiry.sql)\\nSELECT 1;'",
+    "Create panel/internal/certrotation/worker.go with package certrotation. Define: type Worker struct { db *sql.DB; interval time.Duration; stop chan struct{} }. func New(db *sql.DB) *Worker (sets interval to 1 hour). func (w *Worker) Start() - launches goroutine with time.Ticker that calls w.run() every hour. func (w *Worker) Stop(). func (w *Worker) run() - calls CheckExpiring then processes results.",
+    "Implement CheckExpiring(db *sql.DB) ([]ExpiringCert, error) that queries: SELECT id, name, cert_path, expires_at, fingerprint FROM vpn_certificates WHERE expires_at IS NOT NULL AND expires_at < NOW() + INTERVAL 30 DAY AND (status IS NULL OR status != 'revoked'). Returns slice of ExpiringCert{ID, Name, CertPath, ExpiresAt, Fingerprint, DaysUntilExpiry}.",
+    "Implement Regenerate(cert ExpiringCert) (newFingerprint string, err error) that: 1) determines cert type from path (CA vs server vs tls-crypt), 2) calls appropriate openssl command via exec.Command (e.g., 'openssl req -x509 -nodes -days 3650 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 ...' for CA, or 'openssl x509 -req ...' for server certs), 3) updates the vpn_certificates table with new expires_at and fingerprint, 4) returns the new fingerprint.",
+    "Implement DistributeToNodes(db *sql.DB, cert ExpiringCert) error that: 1) queries all online/stale nodes from the nodes table, 2) for each node, creates a node task with action='cert.distribute' and payload containing cert_path and cert_content (base64 encoded).",
+    "In the run() method, after CheckExpiring: for each cert, if DaysUntilExpiry <= 7, call createEvent with severity='error' (critical). If DaysUntilExpiry <= 30, call createEvent with severity='warning'. If DaysUntilExpiry <= 7, call Regenerate then DistributeToNodes. Store an eventCreator func in the Worker struct (func(eventType, severity, title, message string)) to decouple from api.Server.",
+    "In node/cmd/node/main.go executeTask switch, add case 'cert.distribute': reads cert_path and cert_content (base64) from payload, decodes content, writes to cert_path with 0600 permissions, then validates chain with 'openssl verify -CAfile /etc/openvpn/server/ca.crt <cert_path>' (if ca.crt exists). Return succeeded with validation result.",
+    "In panel/cmd/panel/main.go, after startWorker(database) call, add: certWorker := certrotation.New(database); certWorker.Start(). Add import 'koris-next/panel/internal/certrotation'. Pass an event creator function that uses the database to insert events.",
+    "Write unit tests in panel/internal/certrotation/worker_test.go: test that CheckExpiring returns correct results with mock data (test the SQL query structure), test that DaysUntilExpiry calculation is correct. Since we cannot run a real DB, test the helper functions (fingerprint calculation, cert type detection) in isolation."
+  ],
+  "acceptance_criteria": [
+    "go build ./... passes",
+    "go test ./... passes",
+    "certrotation.Worker struct exists with Start/Stop methods",
+    "CheckExpiring queries certs expiring within 30 days",
+    "Regenerate calls openssl to regenerate certificates",
+    "DistributeToNodes creates cert.distribute tasks for online nodes",
+    "cert.distribute task action in node agent writes cert and validates with openssl verify",
+    "Panel main.go initializes cert rotation worker",
+    "Warning events generated for 30-day expiry, critical for 7-day"
+  ],
+  "verification": [
+    "cd /projects/sandbox/panel && go build ./...",
+    "cd /projects/sandbox/panel && go test ./..."
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

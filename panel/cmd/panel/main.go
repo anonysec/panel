@@ -20,6 +20,7 @@ import (
 
 	"koris-next/panel/internal/api"
 	"koris-next/panel/internal/bot"
+	"koris-next/panel/internal/certrotation"
 	"koris-next/panel/internal/config"
 	"koris-next/panel/internal/db"
 	"koris-next/panel/internal/notify"
@@ -292,6 +293,14 @@ func main() {
 		log.Fatalf("migrate: %v", err)
 	}
 	startWorker(database)
+
+	// Start certificate rotation worker
+	certEventFn := func(eventType, severity, title, message string) {
+		_, _ = database.Exec(`INSERT INTO events(type,severity,title,message,actor,related) VALUES(?,?,?,?,?,?)`,
+			eventType, severity, title, message, "system", "")
+	}
+	certWorker := certrotation.New(database, certEventFn)
+	certWorker.Start()
 
 	// Start session enforcer (kills excess connections every 30s)
 	enforcer := sessions.NewEnforcer(database)

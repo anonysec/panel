@@ -593,6 +593,54 @@ func executeTask(task Task, cfg *config.Config, envFile string, log *logger.Logg
 			return "failed", map[string]any{}, fmt.Sprintf("write config: %s", err.Error())
 		}
 		return "succeeded", map[string]any{"public_key": pubKey, "removed": true}, ""
+	case "cert.distribute":
+		certPath := fmt.Sprint(payload["cert_path"])
+		certContent := fmt.Sprint(payload["cert_content"])
+		if certPath == "" || certPath == "<nil>" {
+			return "failed", map[string]any{}, "cert_path is required"
+		}
+		if certContent == "" || certContent == "<nil>" {
+			return "failed", map[string]any{}, "cert_content is required"
+		}
+		// Path traversal protection: only allow known VPN config directories
+		cleanPath := filepath.Clean(certPath)
+		allowedPrefixes := []string{"/etc/openvpn/", "/etc/wireguard/", "/etc/strongswan/"}
+		pathAllowed := false
+		for _, prefix := range allowedPrefixes {
+			if strings.HasPrefix(cleanPath, prefix) {
+				pathAllowed = true
+				break
+			}
+		}
+		if !pathAllowed {
+			return "failed", map[string]any{}, "cert_path must be under /etc/openvpn/, /etc/wireguard/, or /etc/strongswan/"
+		}
+		// Decode base64 content
+		decoded, err := base64.StdEncoding.DecodeString(certContent)
+		if err != nil {
+			return "failed", map[string]any{}, fmt.Sprintf("base64 decode: %s", err.Error())
+		}
+		// Create parent directories if needed
+		if err := os.MkdirAll(filepath.Dir(cleanPath), 0755); err != nil {
+			return "failed", map[string]any{}, fmt.Sprintf("create dir: %s", err.Error())
+		}
+		// Write cert file with restrictive permissions
+		if err := os.WriteFile(cleanPath, decoded, 0600); err != nil {
+			return "failed", map[string]any{}, fmt.Sprintf("write cert: %s", err.Error())
+		}
+		// Validate with openssl verify if ca.crt exists
+		validationResult := "skipped"
+		caPath := filepath.Join(filepath.Dir(cleanPath), "ca.crt")
+		if _, err := os.Stat(caPath); err == nil {
+			cmd := exec.Command("openssl", "verify", "-CAfile", caPath, cleanPath)
+			out, err := cmd.CombinedOutput()
+			if err != nil {
+				validationResult = fmt.Sprintf("failed: %s", strings.TrimSpace(string(out)))
+			} else {
+				validationResult = "ok"
+			}
+		}
+		return "succeeded", map[string]any{"cert_path": cleanPath, "validation": validationResult}, ""
 	case "wireguard.sync_config":
 		// Use wg-quick strip to produce a config without wg-quick directives (Address, DNS, etc.)
 		stripCmd := exec.Command("wg-quick", "strip", "wg0")
