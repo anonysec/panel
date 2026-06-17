@@ -26,10 +26,10 @@ function getPersistedLocale(): Locale {
 /** Shared reactive locale state (singleton across all useI18n calls) */
 const currentLocale = ref<Locale>(getPersistedLocale())
 
-/** Apply document direction based on locale */
+/** Apply document direction based on locale via data attribute (prevents global layout flip) */
 function applyDirection(locale: Locale): void {
   if (typeof document === 'undefined') return
-  document.documentElement.dir = RTL_LOCALES.includes(locale) ? 'rtl' : 'ltr'
+  document.documentElement.setAttribute('data-dir', RTL_LOCALES.includes(locale) ? 'rtl' : 'ltr')
 }
 
 // Apply direction on initial load

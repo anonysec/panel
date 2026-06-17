@@ -788,9 +788,9 @@ function handleBackToList() {
 }
 
 /* ===== RTL support ===== */
-/* Browser handles flex row reversal automatically with dir="rtl".
+/* Using data-dir attribute to prevent layout flip.
    Only subscription URL input needs explicit LTR direction. */
-[dir="rtl"] .sp__sub-url-input {
+[data-dir="rtl"] .sp__sub-url-input {
   direction: ltr;
   text-align: left;
 }

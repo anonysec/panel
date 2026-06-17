@@ -125,7 +125,6 @@ const langLabels: Record<Locale, string> = {
   position: sticky;
   top: 0;
   z-index: 100;
-  direction: ltr;
 }
 .portal-header__brand {
   display: flex;
@@ -340,24 +339,24 @@ const langLabels: Record<Locale, string> = {
   }
 }
 
-/* RTL support - Browser handles flex reversal automatically with dir="rtl".
+/* RTL support - Using data-dir attribute to prevent layout flip.
    Only position/margin overrides needed. */
-:global([dir="rtl"]) .portal-main {
+:global([data-dir="rtl"]) .portal-main {
   direction: rtl;
   text-align: right;
 }
-[dir="rtl"] .portal-header__dropdown {
+[data-dir="rtl"] .portal-header__dropdown {
   right: auto;
   left: 0;
 }
-[dir="rtl"] .portal-header__dropdown-item {
+[data-dir="rtl"] .portal-header__dropdown-item {
   text-align: right;
 }
-[dir="rtl"] .portal-header__dropdown-header {
+[data-dir="rtl"] .portal-header__dropdown-header {
   text-align: right;
 }
 /* Content direction for RTL - text flows right-to-left inside main */
-:global([dir="rtl"]) .portal-main {
+:global([data-dir="rtl"]) .portal-main {
   direction: rtl;
   text-align: right;
 }

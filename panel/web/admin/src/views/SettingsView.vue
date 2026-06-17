@@ -770,12 +770,12 @@ onMounted(async () => {
 .app-link-item__fields { display: flex; gap: var(--space-2); flex: 1; min-width: 0; flex-wrap: wrap; }
 
 /* RTL support */
-[dir="rtl"] .settings-view { text-align: right; }
-[dir="rtl"] .settings-form { text-align: right; }
-[dir="rtl"] .section-title { text-align: right; }
-[dir="rtl"] .subsection-title { text-align: right; }
-[dir="rtl"] .cert-item__label { text-align: right; }
-[dir="rtl"] .export-item__label { text-align: right; }
-[dir="rtl"] .backup-section { text-align: right; }
-[dir="rtl"] .theme-card { text-align: right; }
+[data-dir="rtl"] .settings-view { text-align: right; }
+[data-dir="rtl"] .settings-form { text-align: right; }
+[data-dir="rtl"] .section-title { text-align: right; }
+[data-dir="rtl"] .subsection-title { text-align: right; }
+[data-dir="rtl"] .cert-item__label { text-align: right; }
+[data-dir="rtl"] .export-item__label { text-align: right; }
+[data-dir="rtl"] .backup-section { text-align: right; }
+[data-dir="rtl"] .theme-card { text-align: right; }
 </style>

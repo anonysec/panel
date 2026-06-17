@@ -638,7 +638,7 @@ onMounted(() => {
 }
 
 /* RTL support */
-[dir="rtl"] .bulk-toolbar__clear { margin-left: 0; margin-right: auto; }
-[dir="rtl"] .username-cell__text { text-align: right; }
-[dir="rtl"] .archived-description { text-align: right; }
+[data-dir="rtl"] .bulk-toolbar__clear { margin-left: 0; margin-right: auto; }
+[data-dir="rtl"] .username-cell__text { text-align: right; }
+[data-dir="rtl"] .archived-description { text-align: right; }
 </style>

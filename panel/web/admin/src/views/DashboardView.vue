@@ -270,15 +270,15 @@ function formatDuration(seconds: number): string {
 }
 
 /* RTL support */
-[dir="rtl"] .stat-card__body { text-align: right; }
-[dir="rtl"] .stat-card__label { text-align: right; }
-[dir="rtl"] .mini-table th { text-align: right; }
-[dir="rtl"] .mini-table td { text-align: right; }
-[dir="rtl"] .metric-bar__value { text-align: left; }
-[dir="rtl"] .metric-bar__label { text-align: right; }
-[dir="rtl"] .session-row { direction: rtl; }
-[dir="rtl"] .panel-title { text-align: right; }
-[dir="rtl"] .charts-row { direction: rtl; }
-[dir="rtl"] .bottom-row { direction: rtl; }
-[dir="rtl"] .traffic-stat__label { text-align: center; }
+[data-dir="rtl"] .stat-card__body { text-align: right; }
+[data-dir="rtl"] .stat-card__label { text-align: right; }
+[data-dir="rtl"] .mini-table th { text-align: right; }
+[data-dir="rtl"] .mini-table td { text-align: right; }
+[data-dir="rtl"] .metric-bar__value { text-align: left; }
+[data-dir="rtl"] .metric-bar__label { text-align: right; }
+[data-dir="rtl"] .session-row { direction: rtl; }
+[data-dir="rtl"] .panel-title { text-align: right; }
+[data-dir="rtl"] .charts-row { direction: rtl; }
+[data-dir="rtl"] .bottom-row { direction: rtl; }
+[data-dir="rtl"] .traffic-stat__label { text-align: center; }
 </style>
