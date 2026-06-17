@@ -1357,7 +1357,7 @@ onMounted(() => {
 }
 
 /* RTL support */
-[data-dir="rtl"] .node-card { direction: rtl; text-align: right; }
+[data-dir="rtl"] .node-card { text-align: right; }
 [data-dir="rtl"] .metric-row__val { text-align: left; }
 [data-dir="rtl"] .metric-row__label { text-align: right; }
 [data-dir="rtl"] .protocol-card__controls { margin-left: 0; margin-right: auto; }

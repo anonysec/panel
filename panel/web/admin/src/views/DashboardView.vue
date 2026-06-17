@@ -276,9 +276,9 @@ function formatDuration(seconds: number): string {
 [data-dir="rtl"] .mini-table td { text-align: right; }
 [data-dir="rtl"] .metric-bar__value { text-align: left; }
 [data-dir="rtl"] .metric-bar__label { text-align: right; }
-[data-dir="rtl"] .session-row { direction: rtl; }
+[data-dir="rtl"] .session-row { text-align: right; }
 [data-dir="rtl"] .panel-title { text-align: right; }
-[data-dir="rtl"] .charts-row { direction: rtl; }
-[data-dir="rtl"] .bottom-row { direction: rtl; }
+[data-dir="rtl"] .charts-row { text-align: right; }
+[data-dir="rtl"] .bottom-row { text-align: right; }
 [data-dir="rtl"] .traffic-stat__label { text-align: center; }
 </style>
