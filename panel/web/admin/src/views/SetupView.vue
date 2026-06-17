@@ -2,10 +2,12 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useI18n } from '@koris/composables/useI18n'
 import KFormField from '@koris/ui/KFormField.vue'
 import KInput from '@koris/ui/KInput.vue'
 import KButton from '@koris/ui/KButton.vue'
 
+const { t } = useI18n()
 const router = useRouter()
 const store = useAuthStore()
 
@@ -18,17 +20,17 @@ const errors = ref<{ username?: string; password?: string; confirm?: string }>({
 function validate(): boolean {
   errors.value = {}
   if (!username.value.trim()) {
-    errors.value.username = 'Username is required'
+    errors.value.username = t('setup.username_required')
   } else if (username.value.length < 3) {
-    errors.value.username = 'Username must be at least 3 characters'
+    errors.value.username = t('setup.username_min_length')
   }
   if (!password.value) {
-    errors.value.password = 'Password is required'
+    errors.value.password = t('setup.password_required')
   } else if (password.value.length < 6) {
-    errors.value.password = 'Password must be at least 6 characters'
+    errors.value.password = t('setup.password_min_length')
   }
   if (password.value !== confirmPassword.value) {
-    errors.value.confirm = 'Passwords do not match'
+    errors.value.confirm = t('setup.passwords_no_match')
   }
   return Object.keys(errors.value).length === 0
 }
@@ -57,12 +59,12 @@ async function handleSetup() {
     <aside class="setup-hero">
       <div class="setup-hero__content">
         <div class="setup-hero__logo">
-          <span class="setup-hero__logo-icon">◆</span>
+          <span class="setup-hero__logo-icon">&#9670;</span>
           <span class="setup-hero__logo-text">KorisPanel</span>
         </div>
-        <h1 class="setup-hero__title">Welcome to<br>KorisPanel</h1>
+        <h1 class="setup-hero__title">{{ t('setup.hero_title') }}</h1>
         <p class="setup-hero__desc">
-          Set up your admin account to start managing your VPN infrastructure.
+          {{ t('setup.hero_desc') }}
         </p>
       </div>
       <div class="setup-hero__gradient" />
@@ -71,23 +73,23 @@ async function handleSetup() {
     <!-- Right: Setup Form -->
     <main class="setup-form-wrapper">
       <form class="setup-form" @submit.prevent="handleSetup">
-        <h2 class="setup-form__title">Initial Setup</h2>
-        <p class="setup-form__subtitle text-muted">Create the owner account to get started.</p>
+        <h2 class="setup-form__title">{{ t('setup.initial_setup') }}</h2>
+        <p class="setup-form__subtitle text-muted">{{ t('setup.create_owner') }}</p>
 
         <div class="setup-form__fields">
           <!-- Setup Key (if required) -->
-          <KFormField v-if="store.setupKeyRequired" name="setup-key" label="Setup Key" hint="Provided during installation">
+          <KFormField v-if="store.setupKeyRequired" name="setup-key" :label="t('setup.setup_key')" :hint="t('setup.setup_key_hint')">
             <template #default="{ fieldId, describedBy }">
               <KInput
                 :id="fieldId"
                 v-model="setupKey"
-                placeholder="Enter setup key"
+                :placeholder="t('setup.enter_setup_key')"
                 :aria-describedby="describedBy"
               />
             </template>
           </KFormField>
 
-          <KFormField name="setup-username" label="Username" :error="errors.username" required>
+          <KFormField name="setup-username" :label="t('login.username')" :error="errors.username" required>
             <template #default="{ fieldId, describedBy }">
               <KInput
                 :id="fieldId"
@@ -99,27 +101,27 @@ async function handleSetup() {
             </template>
           </KFormField>
 
-          <KFormField name="setup-password" label="Password" :error="errors.password" required>
+          <KFormField name="setup-password" :label="t('login.password')" :error="errors.password" required>
             <template #default="{ fieldId, describedBy }">
               <KInput
                 :id="fieldId"
                 v-model="password"
                 type="password"
                 autocomplete="new-password"
-                placeholder="Min 6 characters"
+                :placeholder="t('setup.min_6_chars')"
                 :aria-describedby="describedBy"
               />
             </template>
           </KFormField>
 
-          <KFormField name="setup-confirm" label="Confirm Password" :error="errors.confirm" required>
+          <KFormField name="setup-confirm" :label="t('setup.confirm_password')" :error="errors.confirm" required>
             <template #default="{ fieldId, describedBy }">
               <KInput
                 :id="fieldId"
                 v-model="confirmPassword"
                 type="password"
                 autocomplete="new-password"
-                placeholder="Repeat password"
+                :placeholder="t('setup.repeat_password')"
                 :aria-describedby="describedBy"
               />
             </template>
@@ -137,7 +139,7 @@ async function handleSetup() {
           :loading="store.loading"
           full-width
         >
-          Create Account
+          {{ t('setup.create_account') }}
         </KButton>
       </form>
     </main>

@@ -1,11 +1,14 @@
 package api
 
 import (
+	"bytes"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 )
 
@@ -190,11 +193,31 @@ func (s *Server) portalWarnings(w http.ResponseWriter, r *http.Request) {
 // dataWarningThresholds handles PUT /api/settings/data-warning-thresholds
 // to allow admins to configure the data usage warning threshold percentages.
 func (s *Server) dataWarningThresholds(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPut {
+	switch r.Method {
+	case http.MethodGet:
+		s.getDataWarningThresholds(w, r)
+	case http.MethodPut:
+		s.putDataWarningThresholds(w, r)
+	default:
 		http.Error(w, "method", http.StatusMethodNotAllowed)
-		return
 	}
+}
 
+func (s *Server) getDataWarningThresholds(w http.ResponseWriter, r *http.Request) {
+	thresholds := []int{80, 95}
+	var thresholdJSON string
+	if err := s.DB.QueryRow(
+		`SELECT setting_value FROM panel_settings WHERE setting_key = 'data_warning_thresholds'`,
+	).Scan(&thresholdJSON); err == nil && thresholdJSON != "" {
+		var parsed []int
+		if json.Unmarshal([]byte(thresholdJSON), &parsed) == nil && len(parsed) > 0 {
+			thresholds = parsed
+		}
+	}
+	writeJSON(w, map[string]any{"ok": true, "thresholds": thresholds})
+}
+
+func (s *Server) putDataWarningThresholds(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Thresholds []int `json:"thresholds"`
 	}
@@ -232,7 +255,8 @@ func (s *Server) dataWarningThresholds(w http.ResponseWriter, r *http.Request) {
 
 	// Update panel_settings
 	_, err = s.DB.Exec(
-		`UPDATE panel_settings SET setting_value = ? WHERE setting_key = 'data_warning_thresholds'`,
+		`INSERT INTO panel_settings(setting_key, setting_value) VALUES('data_warning_thresholds', ?)
+		 ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)`,
 		string(thresholdJSON),
 	)
 	if err != nil {
@@ -241,4 +265,255 @@ func (s *Server) dataWarningThresholds(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, map[string]any{"ok": true, "thresholds": in.Thresholds})
+}
+
+// warningConfig handles GET/PUT /api/settings/warning-config for expiry, connection, and webhook settings.
+func (s *Server) warningConfig(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		s.getWarningConfig(w, r)
+	case http.MethodPut:
+		s.putWarningConfig(w, r)
+	default:
+		http.Error(w, "method", http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) getWarningConfig(w http.ResponseWriter, r *http.Request) {
+	config := map[string]any{
+		"expiry_days":     []int{7, 3, 1},
+		"conn_thresholds": []int{80, 95},
+		"webhook_url":     "",
+	}
+	var cfgJSON string
+	if err := s.DB.QueryRow(
+		`SELECT setting_value FROM panel_settings WHERE setting_key = 'warning_config'`,
+	).Scan(&cfgJSON); err == nil && cfgJSON != "" {
+		var parsed map[string]any
+		if json.Unmarshal([]byte(cfgJSON), &parsed) == nil {
+			config = parsed
+		}
+	}
+	writeJSON(w, map[string]any{"ok": true, "config": config})
+}
+
+func (s *Server) putWarningConfig(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		ExpiryDays     []int  `json:"expiry_days"`
+		ConnThresholds []int  `json:"conn_thresholds"`
+		WebhookURL     string `json:"webhook_url"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
+		return
+	}
+
+	// Validate webhook URL if provided
+	in.WebhookURL = strings.TrimSpace(in.WebhookURL)
+	if in.WebhookURL != "" {
+		parsed, err := url.Parse(in.WebhookURL)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "bad_request", "invalid webhook URL")
+			return
+		}
+		if parsed.Scheme != "http" && parsed.Scheme != "https" {
+			writeError(w, http.StatusBadRequest, "bad_request", "webhook URL must use http or https scheme")
+			return
+		}
+		if parsed.Host == "" {
+			writeError(w, http.StatusBadRequest, "bad_request", "webhook URL must have a valid host")
+			return
+		}
+	}
+
+	cfgJSON, err := json.Marshal(map[string]any{
+		"expiry_days":     in.ExpiryDays,
+		"conn_thresholds": in.ConnThresholds,
+		"webhook_url":     in.WebhookURL,
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to serialize config")
+		return
+	}
+
+	_, err = s.DB.Exec(
+		`INSERT INTO panel_settings(setting_key, setting_value) VALUES('warning_config', ?)
+		 ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)`,
+		string(cfgJSON),
+	)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to update warning config")
+		return
+	}
+
+	writeJSON(w, map[string]any{"ok": true})
+}
+
+// checkExpiryWarnings checks if a user's subscription is about to expire.
+func (s *Server) checkExpiryWarnings(username string) {
+	// Load expiry warning config
+	expiryDays := []int{7, 3, 1}
+	var cfgJSON string
+	if err := s.DB.QueryRow(
+		`SELECT setting_value FROM panel_settings WHERE setting_key = 'warning_config'`,
+	).Scan(&cfgJSON); err == nil && cfgJSON != "" {
+		var parsed struct {
+			ExpiryDays []int `json:"expiry_days"`
+		}
+		if json.Unmarshal([]byte(cfgJSON), &parsed) == nil && len(parsed.ExpiryDays) > 0 {
+			expiryDays = parsed.ExpiryDays
+		}
+	}
+
+	// Get subscription expiry
+	var expiresAt sql.NullTime
+	err := s.DB.QueryRow(
+		`SELECT expires_at FROM subscriptions WHERE username = ? AND status = 'active' ORDER BY id DESC LIMIT 1`,
+		username,
+	).Scan(&expiresAt)
+	if err != nil || !expiresAt.Valid {
+		return
+	}
+
+	daysLeft := int(time.Until(expiresAt.Time).Hours() / 24)
+
+	for _, threshold := range expiryDays {
+		if daysLeft > threshold {
+			continue
+		}
+
+		// Check if we already warned
+		var count int
+		_ = s.DB.QueryRow(
+			`SELECT COUNT(*) FROM events WHERE type = 'expiry_warning' AND related = ? AND title LIKE ?`,
+			username, fmt.Sprintf("%%%d day%%", threshold),
+		).Scan(&count)
+		if count > 0 {
+			continue
+		}
+
+		title := fmt.Sprintf("Subscription expiry in %d day(s) for %s", threshold, username)
+		message := fmt.Sprintf("Customer %s subscription expires in %d day(s) on %s.",
+			username, daysLeft, expiresAt.Time.Format("2006-01-02"))
+		s.createEvent("expiry_warning", "warning", title, message, "system", username)
+		s.dispatchWebhook("expiry_warning", title, message, username)
+	}
+}
+
+// checkConnectionWarnings checks if a user's concurrent sessions are near the limit.
+func (s *Server) checkConnectionWarnings(username string) {
+	// Load connection warning config
+	connThresholds := []int{80, 95}
+	var cfgJSON string
+	if err := s.DB.QueryRow(
+		`SELECT setting_value FROM panel_settings WHERE setting_key = 'warning_config'`,
+	).Scan(&cfgJSON); err == nil && cfgJSON != "" {
+		var parsed struct {
+			ConnThresholds []int `json:"conn_thresholds"`
+		}
+		if json.Unmarshal([]byte(cfgJSON), &parsed) == nil && len(parsed.ConnThresholds) > 0 {
+			connThresholds = parsed.ConnThresholds
+		}
+	}
+
+	// Get max sessions from radcheck (Simultaneous-Use attribute)
+	var maxSessions int
+	err := s.DB.QueryRow(
+		`SELECT CAST(value AS UNSIGNED) FROM radcheck WHERE username = ? AND attribute = 'Simultaneous-Use' ORDER BY id DESC LIMIT 1`,
+		username,
+	).Scan(&maxSessions)
+	if err != nil || maxSessions <= 0 {
+		return
+	}
+
+	// Get current session count
+	var currentSessions int
+	_ = s.DB.QueryRow(
+		`SELECT COUNT(*) FROM radacct WHERE username = ? AND acctstoptime IS NULL`,
+		username,
+	).Scan(&currentSessions)
+
+	if currentSessions == 0 {
+		return
+	}
+
+	usagePercent := float64(currentSessions) / float64(maxSessions) * 100.0
+
+	for _, threshold := range connThresholds {
+		if usagePercent < float64(threshold) {
+			continue
+		}
+
+		var count int
+		_ = s.DB.QueryRow(
+			`SELECT COUNT(*) FROM events WHERE type = 'conn_warning' AND related = ? AND title LIKE ? AND created_at > NOW() - INTERVAL 1 HOUR`,
+			username, fmt.Sprintf("%%%d%%", threshold),
+		).Scan(&count)
+		if count > 0 {
+			continue
+		}
+
+		title := fmt.Sprintf("Connection usage at %d%% for %s", threshold, username)
+		message := fmt.Sprintf("Customer %s is using %d of %d allowed connections (%d%%).",
+			username, currentSessions, maxSessions, int(usagePercent))
+		s.createEvent("conn_warning", "warning", title, message, "system", username)
+		s.dispatchWebhook("conn_warning", title, message, username)
+	}
+}
+
+// dispatchWebhook sends a warning event to the configured webhook URL.
+func (s *Server) dispatchWebhook(eventType, title, message, username string) {
+	var cfgJSON string
+	if err := s.DB.QueryRow(
+		`SELECT setting_value FROM panel_settings WHERE setting_key = 'warning_config'`,
+	).Scan(&cfgJSON); err != nil || cfgJSON == "" {
+		return
+	}
+	var parsed struct {
+		WebhookURL string `json:"webhook_url"`
+	}
+	if json.Unmarshal([]byte(cfgJSON), &parsed) != nil || parsed.WebhookURL == "" {
+		return
+	}
+
+	payload, _ := json.Marshal(map[string]string{
+		"type":     eventType,
+		"title":    title,
+		"message":  message,
+		"username": username,
+		"time":     time.Now().UTC().Format(time.RFC3339),
+	})
+
+	go func() {
+		client := &http.Client{Timeout: 10 * time.Second}
+		resp, err := client.Post(parsed.WebhookURL, "application/json", bytes.NewReader(payload))
+		if err != nil {
+			log.Printf("[webhook] failed to dispatch to %s: %v", parsed.WebhookURL, err)
+			return
+		}
+		resp.Body.Close()
+	}()
+}
+
+// portalAppLinks returns the configured app download links (public endpoint).
+// GET /api/portal/app-links
+func (s *Server) portalAppLinks(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method", http.StatusMethodNotAllowed)
+		return
+	}
+	var linksJSON string
+	err := s.DB.QueryRow(
+		`SELECT setting_value FROM panel_settings WHERE setting_key = 'app_links'`,
+	).Scan(&linksJSON)
+	if err != nil || linksJSON == "" {
+		writeJSON(w, map[string]any{"ok": true, "links": []any{}})
+		return
+	}
+	var links []map[string]string
+	if json.Unmarshal([]byte(linksJSON), &links) != nil {
+		writeJSON(w, map[string]any{"ok": true, "links": []any{}})
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true, "links": links})
 }

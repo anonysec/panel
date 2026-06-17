@@ -556,4 +556,27 @@ function formatTime(timestamp: string): string {
     right: -8px;
   }
 }
+
+/* RTL support: topbar actions must always stay on the physical right side */
+:global([dir="rtl"]) .topbar {
+  flex-direction: row-reverse;
+}
+
+:global([dir="rtl"]) .topbar-right {
+  margin-left: 0;
+  margin-right: auto;
+  direction: ltr;
+}
+
+:global([dir="rtl"]) .topbar-left {
+  text-align: right;
+}
+
+:global([dir="rtl"]) .breadcrumb-list {
+  flex-direction: row-reverse;
+}
+
+:global([dir="rtl"]) .breadcrumb-separator {
+  transform: rotate(180deg);
+}
 </style>

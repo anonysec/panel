@@ -2,10 +2,12 @@
 import { ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useI18n } from '@koris/composables/useI18n'
 import KFormField from '@koris/ui/KFormField.vue'
 import KInput from '@koris/ui/KInput.vue'
 import KButton from '@koris/ui/KButton.vue'
 
+const { t } = useI18n()
 const router = useRouter()
 const route = useRoute()
 const store = useAuthStore()
@@ -17,10 +19,10 @@ const errors = ref<{ username?: string; password?: string }>({})
 function validate(): boolean {
   errors.value = {}
   if (!username.value.trim()) {
-    errors.value.username = 'Username is required'
+    errors.value.username = t('login.username_required')
   }
   if (!password.value) {
-    errors.value.password = 'Password is required'
+    errors.value.password = t('login.password_required')
   }
   return Object.keys(errors.value).length === 0
 }
@@ -42,12 +44,12 @@ async function handleLogin() {
     <aside class="login-hero">
       <div class="login-hero__content">
         <div class="login-hero__logo">
-          <span class="login-hero__logo-icon">◆</span>
+          <span class="login-hero__logo-icon">&#9670;</span>
           <span class="login-hero__logo-text">KorisPanel</span>
         </div>
-        <h1 class="login-hero__title">VPN Management<br>Made Simple</h1>
+        <h1 class="login-hero__title">{{ t('login.hero_title') }}</h1>
         <p class="login-hero__desc">
-          Manage your VPN infrastructure, customers, and billing from a single dashboard.
+          {{ t('login.hero_desc') }}
         </p>
       </div>
       <div class="login-hero__gradient" />
@@ -56,11 +58,11 @@ async function handleLogin() {
     <!-- Right: Login Form -->
     <main class="login-form-wrapper">
       <form class="login-form" @submit.prevent="handleLogin">
-        <h2 class="login-form__title">Admin Sign In</h2>
-        <p class="login-form__subtitle text-muted">Enter your credentials to continue</p>
+        <h2 class="login-form__title">{{ t('login.sign_in') }}</h2>
+        <p class="login-form__subtitle text-muted">{{ t('login.sign_in_subtitle') }}</p>
 
         <div class="login-form__fields">
-          <KFormField name="username" label="Username" :error="errors.username">
+          <KFormField name="username" :label="t('login.username')" :error="errors.username">
             <template #default="{ fieldId, describedBy }">
               <KInput
                 :id="fieldId"
@@ -72,14 +74,14 @@ async function handleLogin() {
             </template>
           </KFormField>
 
-          <KFormField name="password" label="Password" :error="errors.password">
+          <KFormField name="password" :label="t('login.password')" :error="errors.password">
             <template #default="{ fieldId, describedBy }">
               <KInput
                 :id="fieldId"
                 v-model="password"
                 type="password"
                 autocomplete="current-password"
-                placeholder="Enter password"
+                :placeholder="t('login.enter_password')"
                 :aria-describedby="describedBy"
               />
             </template>
@@ -97,7 +99,7 @@ async function handleLogin() {
           :loading="store.loading"
           full-width
         >
-          Sign In
+          {{ t('login.sign_in_btn') }}
         </KButton>
       </form>
     </main>

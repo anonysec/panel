@@ -27,6 +27,7 @@ const saving = ref(false)
 const tabs = computed(() => [
   { key: 'panel-settings', label: t('settings.panel_settings') },
   { key: 'data-warnings', label: t('settings.data_warnings') },
+  { key: 'app-links', label: t('settings.app_links') },
   { key: 'telegram', label: t('settings.telegram') },
   { key: 'certificates', label: t('settings.certificates') },
   { key: 'backup', label: t('settings.backup') },
@@ -71,7 +72,12 @@ async function loadPanelSettings(): Promise<void> {
     const res = await get<{ ok: boolean; settings: Record<string, string> }>('/api/panel-settings')
     if (res.settings) {
       panelName.value = res.settings.panel_name || ''
-      panelLang.value = res.settings.language || 'en'
+      // Only apply server language if user has NOT explicitly chosen a language via sidebar
+      // (localStorage takes priority as the most recent user choice)
+      const storedLang = typeof window !== 'undefined' ? localStorage.getItem('koris-lang') : null
+      if (!storedLang) {
+        panelLang.value = res.settings.language || 'en'
+      }
       // Load theme settings from server
       if (res.settings.ui_theme && availableThemes.some((t) => t.id === res.settings.ui_theme)) {
         selectedTheme.value = res.settings.ui_theme as UITheme
@@ -110,6 +116,122 @@ async function savePanelSettings(): Promise<void> {
 const thresholds = ref<number[]>([80, 95])
 const savingThresholds = ref(false)
 const loadingThresholds = ref(false)
+
+// ─── Expiry Warnings ────────────────────────────────────────────────────────
+const expiryDays = ref<number[]>([7, 3, 1])
+const connThresholds = ref<number[]>([80, 95])
+const webhookUrl = ref('')
+const savingWarningConfig = ref(false)
+
+async function loadWarningConfig(): Promise<void> {
+  try {
+    const res = await get<{ ok: boolean; config: { expiry_days?: number[]; conn_thresholds?: number[]; webhook_url?: string } }>('/api/settings/warning-config')
+    if (res.config) {
+      if (res.config.expiry_days?.length) expiryDays.value = res.config.expiry_days
+      if (res.config.conn_thresholds?.length) connThresholds.value = res.config.conn_thresholds
+      if (res.config.webhook_url) webhookUrl.value = res.config.webhook_url
+    }
+  } catch {
+    // Use defaults
+  }
+}
+
+function addExpiryDay(): void { expiryDays.value.push(7) }
+function removeExpiryDay(i: number): void { if (expiryDays.value.length > 1) expiryDays.value.splice(i, 1) }
+function updateExpiryDay(i: number, v: string | number): void {
+  const num = typeof v === 'number' ? v : parseInt(v, 10)
+  if (!isNaN(num)) expiryDays.value[i] = Math.max(1, num)
+}
+
+function addConnThreshold(): void { connThresholds.value.push(80) }
+function removeConnThreshold(i: number): void { if (connThresholds.value.length > 1) connThresholds.value.splice(i, 1) }
+function updateConnThreshold(i: number, v: string | number): void {
+  const num = typeof v === 'number' ? v : parseInt(v, 10)
+  if (!isNaN(num)) connThresholds.value[i] = Math.min(100, Math.max(1, num))
+}
+
+async function saveWarningConfig(): Promise<void> {
+  savingWarningConfig.value = true
+  try {
+    await put<{ ok: boolean }>('/api/settings/warning-config', {
+      expiry_days: [...new Set(expiryDays.value)].sort((a, b) => b - a),
+      conn_thresholds: [...new Set(connThresholds.value)].sort((a, b) => a - b),
+      webhook_url: webhookUrl.value.trim(),
+    })
+    toast.success(t('settings.warning_config_save_success'))
+  } catch {
+    toast.error(t('settings.warning_config_save_error'))
+  } finally {
+    savingWarningConfig.value = false
+  }
+}
+
+// ─── App Links ──────────────────────────────────────────────────────────────
+interface AppLink {
+  name: string
+  url: string
+  platform: string
+  icon: string
+}
+const appLinks = ref<AppLink[]>([])
+const savingAppLinks = ref(false)
+const loadingAppLinks = ref(false)
+
+const platformOptions = computed(() => [
+  { label: 'iOS', value: 'ios' },
+  { label: 'Android', value: 'android' },
+  { label: 'Windows', value: 'windows' },
+  { label: 'Mac', value: 'mac' },
+  { label: t('settings.app_platform_other'), value: 'other' },
+])
+
+const platformIcons: Record<string, string> = {
+  ios: '🍎',
+  android: '🤖',
+  windows: '🪟',
+  mac: '💻',
+  other: '🔗',
+}
+
+async function loadAppLinks(): Promise<void> {
+  loadingAppLinks.value = true
+  try {
+    const res = await get<{ ok: boolean; settings: Record<string, string> }>('/api/panel-settings')
+    if (res.settings?.app_links) {
+      try {
+        const parsed = JSON.parse(res.settings.app_links)
+        if (Array.isArray(parsed)) appLinks.value = parsed
+      } catch { /* keep default */ }
+    }
+  } catch { /* use defaults */ }
+  finally { loadingAppLinks.value = false }
+}
+
+function addAppLink(): void {
+  appLinks.value.push({ name: '', url: '', platform: 'other', icon: '🔗' })
+}
+
+function removeAppLink(i: number): void {
+  appLinks.value.splice(i, 1)
+}
+
+function updatePlatformIcon(i: number): void {
+  appLinks.value[i].icon = platformIcons[appLinks.value[i].platform] || '🔗'
+}
+
+async function saveAppLinks(): Promise<void> {
+  savingAppLinks.value = true
+  try {
+    await patch<{ ok: boolean }>('/api/panel-settings', {
+      app_links: JSON.stringify(appLinks.value.filter(l => l.name && l.url)),
+    })
+    toast.success(t('settings.app_links_save_success'))
+  } catch {
+    toast.error(t('settings.app_links_save_error'))
+  } finally {
+    savingAppLinks.value = false
+  }
+}
 
 async function loadThresholds(): Promise<void> {
   loadingThresholds.value = true
@@ -190,38 +312,65 @@ async function saveTelegramSettings(): Promise<void> {
 
 // ─── Backup ─────────────────────────────────────────────────────────────────
 const importFileInput = ref<HTMLInputElement | null>(null)
+const exporting = ref(false)
+const importing = ref(false)
 
-interface ExportItem {
-  label: string
-  url: string
-}
-
-const exportItems: ExportItem[] = [
-  { label: 'Customers CSV', url: '/api/export/customers.csv' },
-  { label: 'Payments CSV', url: '/api/export/payments.csv' },
-  { label: 'Wallet Transactions CSV', url: '/api/export/wallet-transactions.csv' },
-  { label: 'RADIUS Accounting CSV', url: '/api/export/radacct.csv' },
-]
-
-function downloadExport(url: string): void {
-  window.open(url, '_blank')
+async function downloadBackup(): Promise<void> {
+  exporting.value = true
+  try {
+    const res = await fetch('/api/backup/export', { credentials: 'include' })
+    if (!res.ok) throw new Error('Export failed')
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+    a.download = `panel-backup-${ts}.json`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    toast.success(t('settings.export_success'))
+  } catch {
+    toast.error(t('settings.export_error'))
+  } finally {
+    exporting.value = false
+  }
 }
 
 function triggerImport(): void {
   importFileInput.value?.click()
 }
 
-function handleImportFile(event: Event): void {
+async function handleImportFile(event: Event): Promise<void> {
   const target = event.target as HTMLInputElement
-  if (target.files && target.files.length > 0) {
-    toast.success(t('settings.import_coming_soon'))
-    // Reset file input so the same file can be selected again
+  if (!target.files || target.files.length === 0) return
+  const file = target.files[0]
+  importing.value = true
+  try {
+    const formData = new FormData()
+    formData.append('file', file)
+    const res = await fetch('/api/backup/import', {
+      method: 'POST',
+      credentials: 'include',
+      body: formData,
+    })
+    const data = await res.json()
+    if (data.ok) {
+      toast.success(t('settings.import_success'))
+    } else {
+      toast.error(t('settings.import_error') + (data.error ? `: ${data.error}` : ''))
+    }
+  } catch {
+    toast.error(t('settings.import_error'))
+  } finally {
+    importing.value = false
     target.value = ''
   }
 }
 
 onMounted(async () => {
-  await Promise.all([loadPanelSettings(), loadThresholds(), loadTelegramSettings()])
+  await Promise.all([loadPanelSettings(), loadThresholds(), loadTelegramSettings(), loadWarningConfig(), loadAppLinks()])
 })
 </script>
 
@@ -252,6 +401,7 @@ onMounted(async () => {
                     { label: 'English', value: 'en' },
                     { label: 'Persian', value: 'fa' },
                     { label: 'Chinese', value: 'zh' },
+                    { label: 'Russian', value: 'ru' },
                   ]"
                   :disabled="loadingSettings"
                 />
@@ -364,6 +514,112 @@ onMounted(async () => {
               {{ t('settings.save_thresholds') }}
             </KButton>
           </form>
+
+          <!-- Expiry Warnings -->
+          <div class="warning-subsection">
+            <h5 class="subsection-title">{{ t('settings.expiry_warnings') }}</h5>
+            <p class="text-muted text-sm">{{ t('settings.expiry_warnings_desc') }}</p>
+            <form class="settings-form" @submit.prevent="saveWarningConfig">
+              <div class="thresholds-list">
+                <div v-for="(day, index) in expiryDays" :key="'exp-'+index" class="threshold-row">
+                  <KFormField :name="`expiry-${index}`" :label="`${t('settings.days_before_expiry')} ${index + 1}`">
+                    <template #default="{ fieldId }">
+                      <div class="threshold-input-group">
+                        <KInput
+                          :id="fieldId"
+                          :model-value="String(day)"
+                          type="number"
+                          min="1"
+                          max="365"
+                          placeholder="7"
+                          @update:model-value="updateExpiryDay(index, $event)"
+                        />
+                        <span class="threshold-unit">{{ t('settings.days_unit') }}</span>
+                        <KButton variant="ghost" size="sm" type="button" :disabled="expiryDays.length <= 1" @click="removeExpiryDay(index)">
+                          {{ t('label.remove') }}
+                        </KButton>
+                      </div>
+                    </template>
+                  </KFormField>
+                </div>
+              </div>
+              <div class="threshold-actions">
+                <KButton variant="ghost" size="sm" type="button" @click="addExpiryDay">{{ t('settings.add_threshold') }}</KButton>
+              </div>
+
+              <!-- Connection Limit Warnings -->
+              <h5 class="subsection-title">{{ t('settings.conn_warnings') }}</h5>
+              <p class="text-muted text-sm">{{ t('settings.conn_warnings_desc') }}</p>
+              <div class="thresholds-list">
+                <div v-for="(ct, index) in connThresholds" :key="'conn-'+index" class="threshold-row">
+                  <KFormField :name="`conn-${index}`" :label="`${t('label.threshold')} ${index + 1}`">
+                    <template #default="{ fieldId }">
+                      <div class="threshold-input-group">
+                        <KInput
+                          :id="fieldId"
+                          :model-value="String(ct)"
+                          type="number"
+                          min="1"
+                          max="100"
+                          placeholder="80"
+                          @update:model-value="updateConnThreshold(index, $event)"
+                        />
+                        <span class="threshold-unit">%</span>
+                        <KButton variant="ghost" size="sm" type="button" :disabled="connThresholds.length <= 1" @click="removeConnThreshold(index)">
+                          {{ t('label.remove') }}
+                        </KButton>
+                      </div>
+                    </template>
+                  </KFormField>
+                </div>
+              </div>
+              <div class="threshold-actions">
+                <KButton variant="ghost" size="sm" type="button" @click="addConnThreshold">{{ t('settings.add_threshold') }}</KButton>
+              </div>
+
+              <!-- Webhook URL -->
+              <h5 class="subsection-title">{{ t('settings.webhook_url') }}</h5>
+              <p class="text-muted text-sm">{{ t('settings.webhook_url_desc') }}</p>
+              <KFormField name="webhook-url" :label="t('settings.webhook_url')">
+                <template #default="{ fieldId }">
+                  <KInput :id="fieldId" v-model="webhookUrl" placeholder="https://example.com/webhook" />
+                </template>
+              </KFormField>
+
+              <KButton type="submit" variant="primary" :loading="savingWarningConfig">
+                {{ t('settings.save_warning_config') }}
+              </KButton>
+            </form>
+          </div>
+        </div>
+      </template>
+
+      <!-- App Links -->
+      <template #app-links>
+        <div class="settings-panel">
+          <h4 class="section-title">{{ t('settings.app_links') }}</h4>
+          <p class="text-muted text-sm">{{ t('settings.app_links_desc') }}</p>
+          <form class="settings-form app-links-form" @submit.prevent="saveAppLinks">
+            <div class="app-links-list">
+              <div v-for="(link, index) in appLinks" :key="index" class="app-link-item">
+                <div class="app-link-item__icon">{{ link.icon }}</div>
+                <div class="app-link-item__fields">
+                  <KInput v-model="appLinks[index].name" :placeholder="t('settings.app_link_name')" />
+                  <KInput v-model="appLinks[index].url" placeholder="https://..." />
+                  <KSelect
+                    v-model="appLinks[index].platform"
+                    :options="platformOptions"
+                    @update:model-value="updatePlatformIcon(index)"
+                  />
+                </div>
+                <KButton variant="ghost" size="sm" type="button" @click="removeAppLink(index)">{{ t('label.remove') }}</KButton>
+              </div>
+            </div>
+            <div class="threshold-actions">
+              <KButton variant="ghost" size="sm" type="button" @click="addAppLink">{{ t('settings.add_app_link') }}</KButton>
+            </div>
+            <KButton type="submit" variant="primary" :loading="savingAppLinks">{{ t('settings.save_app_links') }}</KButton>
+          </form>
         </div>
       </template>
 
@@ -413,31 +669,23 @@ onMounted(async () => {
 
           <div class="backup-section">
             <h5 class="subsection-title">{{ t('settings.export_backup') }}</h5>
-            <p class="text-muted text-sm">{{ t('settings.available_exports') }}</p>
-            <div class="export-list">
-              <div
-                v-for="item in exportItems"
-                :key="item.url"
-                class="export-item"
-              >
-                <span class="export-item__label">{{ item.label }}</span>
-                <KButton variant="ghost" size="sm" @click="downloadExport(item.url)">
-                  {{ t('label.download') }}
-                </KButton>
-              </div>
-            </div>
+            <p class="text-muted text-sm">{{ t('settings.backup_format') }}</p>
+            <KButton variant="primary" size="sm" :loading="exporting" @click="downloadBackup">
+              {{ t('settings.export_backup') }}
+            </KButton>
           </div>
 
           <div class="backup-section">
             <h5 class="subsection-title">{{ t('settings.import_backup') }}</h5>
+            <p class="text-muted text-sm">{{ t('settings.import_backup_desc') }}</p>
             <input
               ref="importFileInput"
               type="file"
-              accept=".csv,.json"
+              accept=".json"
               class="hidden-input"
               @change="handleImportFile"
             />
-            <KButton variant="ghost" size="sm" @click="triggerImport">
+            <KButton variant="ghost" size="sm" :loading="importing" @click="triggerImport">
               {{ t('settings.import_backup') }}
             </KButton>
           </div>
@@ -508,7 +756,18 @@ onMounted(async () => {
   .threshold-input-group { flex-wrap: wrap; }
   .theme-cards { grid-template-columns: 1fr; max-width: 100%; }
   .mode-radios { flex-direction: column; }
+  .app-link-item { flex-direction: column; align-items: stretch; }
+  .app-link-item__fields { flex-direction: column; }
 }
+
+.warning-subsection { margin-top: var(--space-5); padding-top: var(--space-4); border-top: 1px solid var(--color-border); }
+
+/* App Links */
+.app-links-form { max-width: 600px; }
+.app-links-list { display: flex; flex-direction: column; gap: var(--space-3); }
+.app-link-item { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-3); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); }
+.app-link-item__icon { font-size: 1.5rem; width: 40px; text-align: center; flex-shrink: 0; }
+.app-link-item__fields { display: flex; gap: var(--space-2); flex: 1; min-width: 0; flex-wrap: wrap; }
 
 /* RTL support */
 [dir="rtl"] .settings-view { text-align: right; }

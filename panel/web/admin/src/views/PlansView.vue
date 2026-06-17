@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { usePlansStore } from '@/stores/plans'
+import { useI18n } from '@koris/composables/useI18n'
 import KButton from '@koris/ui/KButton.vue'
 import KFormField from '@koris/ui/KFormField.vue'
 import KInput from '@koris/ui/KInput.vue'
 import KSkeleton from '@koris/ui/KSkeleton.vue'
 import KEmptyState from '@koris/ui/KEmptyState.vue'
 
+const { t } = useI18n()
 const store = usePlansStore()
 const showForm = ref(false)
 const editingId = ref<number | null>(null)
@@ -100,34 +102,34 @@ onMounted(() => {
   <div class="page plans-view">
     <!-- Header -->
     <header class="page-header">
-      <KButton variant="primary" icon="+" @click="openCreate">Create Plan</KButton>
+      <KButton variant="primary" icon="+" @click="openCreate">{{ t('plans.create_plan') }}</KButton>
     </header>
 
     <!-- Create/Edit Form -->
     <div v-if="showForm" class="plan-form-panel">
-      <h4 class="form-title">{{ editingId ? 'Edit Plan' : 'New Plan' }}</h4>
+      <h4 class="form-title">{{ editingId ? t('plans.edit_plan') : t('plans.new_plan') }}</h4>
       <form class="plan-form" @submit.prevent="handleSubmit">
         <!-- Billing Type Selector -->
         <div class="billing-type-selector">
           <label class="billing-type-option" :class="{ active: form.billing_type === 'quota' }">
             <input type="radio" v-model="form.billing_type" value="quota" />
-            <span class="billing-type-label">Quota</span>
-            <span class="billing-type-desc">Fixed data + duration</span>
+            <span class="billing-type-label">{{ t('plans.type_quota') }}</span>
+            <span class="billing-type-desc">{{ t('plans.type_quota_desc') }}</span>
           </label>
           <label class="billing-type-option" :class="{ active: form.billing_type === 'payg' }">
             <input type="radio" v-model="form.billing_type" value="payg" />
-            <span class="billing-type-label">Pay-as-you-go</span>
-            <span class="billing-type-desc">Per GB + per day pricing</span>
+            <span class="billing-type-label">{{ t('plans.type_payg') }}</span>
+            <span class="billing-type-desc">{{ t('plans.type_payg_desc') }}</span>
           </label>
         </div>
 
         <div class="form-grid">
-          <KFormField name="plan-name" label="Name" required>
+          <KFormField name="plan-name" :label="t('plans.name')" required>
             <template #default="{ fieldId }">
-              <KInput :id="fieldId" v-model="form.name" placeholder="Plan name" />
+              <KInput :id="fieldId" v-model="form.name" :placeholder="t('plans.name_placeholder')" />
             </template>
           </KFormField>
-          <KFormField name="plan-speed" label="Speed (Mbps)">
+          <KFormField name="plan-speed" :label="t('plans.speed')">
             <template #default="{ fieldId }">
               <KInput :id="fieldId" v-model="form.speed_mbps" type="number" placeholder="100" />
             </template>
@@ -135,17 +137,17 @@ onMounted(() => {
 
           <!-- Quota-specific fields -->
           <template v-if="!isPayg">
-            <KFormField name="plan-data" label="Data (GB)" required>
+            <KFormField name="plan-data" :label="t('plans.data_gb')" required>
               <template #default="{ fieldId }">
                 <KInput :id="fieldId" v-model="form.data_gb" type="number" placeholder="50" />
               </template>
             </KFormField>
-            <KFormField name="plan-duration" label="Duration (Days)" required>
+            <KFormField name="plan-duration" :label="t('plans.duration_days')" required>
               <template #default="{ fieldId }">
                 <KInput :id="fieldId" v-model="form.duration_days" type="number" placeholder="30" />
               </template>
             </KFormField>
-            <KFormField name="plan-price" label="Price ($)" required>
+            <KFormField name="plan-price" :label="t('plans.price')" required>
               <template #default="{ fieldId }">
                 <KInput :id="fieldId" v-model="form.price" type="number" placeholder="9.99" />
               </template>
@@ -154,30 +156,30 @@ onMounted(() => {
 
           <!-- PAYG-specific fields -->
           <template v-if="isPayg">
-            <KFormField name="plan-price-per-gb" label="Price per GB ($)" required>
+            <KFormField name="plan-price-per-gb" :label="t('plans.price_per_gb')" required>
               <template #default="{ fieldId }">
                 <KInput :id="fieldId" v-model="form.price_per_gb" type="number" step="0.01" placeholder="0.50" />
               </template>
             </KFormField>
-            <KFormField name="plan-price-per-day" label="Price per Day ($)" required>
+            <KFormField name="plan-price-per-day" :label="t('plans.price_per_day')" required>
               <template #default="{ fieldId }">
                 <KInput :id="fieldId" v-model="form.price_per_day" type="number" step="0.01" placeholder="0.10" />
               </template>
             </KFormField>
-            <KFormField name="plan-disconnect" label="Disconnect on zero balance">
+            <KFormField name="plan-disconnect" :label="t('plans.disconnect_on_zero')">
               <template #default>
                 <label class="toggle-label">
                   <input type="checkbox" v-model="form.disconnect_on_zero" class="toggle-input" />
-                  <span class="toggle-text">{{ form.disconnect_on_zero ? 'Yes' : 'No' }}</span>
+                  <span class="toggle-text">{{ form.disconnect_on_zero ? t('plans.yes') : t('plans.no') }}</span>
                 </label>
               </template>
             </KFormField>
           </template>
         </div>
         <div class="form-actions">
-          <KButton variant="ghost" @click="resetForm">Cancel</KButton>
+          <KButton variant="ghost" @click="resetForm">{{ t('btn.cancel') }}</KButton>
           <KButton type="submit" variant="primary" :loading="saving">
-            {{ editingId ? 'Update' : 'Create' }}
+            {{ editingId ? t('plans.update') : t('btn.create') }}
           </KButton>
         </div>
       </form>
@@ -192,8 +194,8 @@ onMounted(() => {
     <KEmptyState
       v-else-if="store.list.length === 0"
       icon="📋"
-      title="No Plans"
-      description="Create your first subscription plan to get started."
+      :title="t('plans.no_plans')"
+      :description="t('plans.no_plans_desc')"
     />
 
     <!-- Plans Grid -->
@@ -203,9 +205,9 @@ onMounted(() => {
           <h4 class="plan-card__name">{{ plan.name }}</h4>
           <div class="plan-card__badges">
             <span class="plan-card__type-badge" :class="plan.billing_type === 'payg' ? 'badge--payg' : 'badge--quota'">
-              {{ plan.billing_type === 'payg' ? 'PAYG' : 'Quota' }}
+              {{ plan.billing_type === 'payg' ? 'PAYG' : t('plans.type_quota') }}
             </span>
-            <span v-if="!plan.is_active" class="plan-card__badge">Inactive</span>
+            <span v-if="!plan.is_active" class="plan-card__badge">{{ t('plans.inactive') }}</span>
           </div>
         </div>
 
@@ -215,34 +217,34 @@ onMounted(() => {
         <div v-else class="plan-card__price plan-card__price--payg">
           <span>${{ plan.price_per_gb }}/GB</span>
           <span class="price-separator">+</span>
-          <span>${{ plan.price_per_day }}/day</span>
+          <span>${{ plan.price_per_day }}/{{ t('plans.day') }}</span>
         </div>
 
         <div class="plan-card__specs">
           <template v-if="plan.billing_type !== 'payg'">
             <div class="plan-spec">
-              <span class="plan-spec__label">Data</span>
+              <span class="plan-spec__label">{{ t('plans.data') }}</span>
               <span class="plan-spec__value">{{ plan.data_gb }} GB</span>
             </div>
             <div class="plan-spec">
-              <span class="plan-spec__label">Duration</span>
-              <span class="plan-spec__value">{{ plan.duration_days }} days</span>
+              <span class="plan-spec__label">{{ t('plans.duration') }}</span>
+              <span class="plan-spec__value">{{ plan.duration_days }} {{ t('plans.days') }}</span>
             </div>
           </template>
           <template v-else>
             <div class="plan-spec">
-              <span class="plan-spec__label">Disconnect on $0</span>
-              <span class="plan-spec__value">{{ plan.disconnect_on_zero ? 'Yes' : 'No' }}</span>
+              <span class="plan-spec__label">{{ t('plans.disconnect_on_zero') }}</span>
+              <span class="plan-spec__value">{{ plan.disconnect_on_zero ? t('plans.yes') : t('plans.no') }}</span>
             </div>
           </template>
           <div class="plan-spec">
-            <span class="plan-spec__label">Speed</span>
+            <span class="plan-spec__label">{{ t('plans.speed_label') }}</span>
             <span class="plan-spec__value">{{ plan.speed_mbps }} Mbps</span>
           </div>
         </div>
         <div class="plan-card__actions">
-          <KButton variant="ghost" size="sm" @click="openEdit(plan)">Edit</KButton>
-          <KButton v-if="plan.is_active" variant="danger" size="sm" @click="deactivatePlan(plan.id)">Deactivate</KButton>
+          <KButton variant="ghost" size="sm" @click="openEdit(plan)">{{ t('btn.edit') }}</KButton>
+          <KButton v-if="plan.is_active" variant="danger" size="sm" @click="deactivatePlan(plan.id)">{{ t('plans.deactivate') }}</KButton>
         </div>
       </div>
     </div>

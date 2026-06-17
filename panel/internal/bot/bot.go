@@ -270,6 +270,30 @@ func (b *Bot) handleUpdate(u Update) {
 		if isAdmin && len(args) > 0 {
 			b.cmdTraffic(chatID, args[0])
 		}
+	case "/renew":
+		if isAdmin && len(args) >= 2 {
+			b.cmdRenew(chatID, args[0], args[1])
+		} else if isAdmin {
+			b.sendMessage(chatID, "Usage: `/renew username days`", "Markdown")
+		}
+	case "/broadcast":
+		if isAdmin && len(args) > 0 {
+			b.cmdBroadcast(chatID, strings.Join(args, " "))
+		} else if isAdmin {
+			b.sendMessage(chatID, "Usage: `/broadcast message`", "Markdown")
+		}
+	case "/online":
+		if isAdmin {
+			b.cmdOnline(chatID)
+		}
+	case "/backup":
+		if isAdmin {
+			b.cmdBackup(chatID)
+		}
+	case "/nodes":
+		if isAdmin {
+			b.cmdNodes(chatID)
+		}
 	case "/me":
 		b.cmdMe(chatID, u.Message.From)
 	case "/usage":
@@ -289,10 +313,60 @@ func (b *Bot) handleCallback(cb *CallbackQuery) {
 
 	chatID := cb.Message.Chat.ID
 	data := cb.Data
+	isAdmin := b.isAdminChat(chatID)
 
 	if strings.HasPrefix(data, "user:") {
-		username := strings.TrimPrefix(data, "user:")
-		b.cmdFind(chatID, username)
+		if isAdmin {
+			username := strings.TrimPrefix(data, "user:")
+			b.cmdFind(chatID, username)
+		}
+	} else if strings.HasPrefix(data, "enable:") {
+		username := strings.TrimPrefix(data, "enable:")
+		if isAdmin {
+			b.cmdSetStatus(chatID, username, "active")
+		}
+	} else if strings.HasPrefix(data, "disable:") {
+		username := strings.TrimPrefix(data, "disable:")
+		if isAdmin {
+			b.cmdSetStatus(chatID, username, "disabled")
+		}
+	} else if strings.HasPrefix(data, "reset:") {
+		username := strings.TrimPrefix(data, "reset:")
+		if isAdmin {
+			b.cmdTraffic(chatID, username)
+		}
+	} else if strings.HasPrefix(data, "menu:") {
+		action := strings.TrimPrefix(data, "menu:")
+		if isAdmin {
+			switch action {
+			case "stats":
+				b.cmdStats(chatID)
+			case "users":
+				b.cmdUsers(chatID)
+			case "online":
+				b.cmdOnline(chatID)
+			case "nodes":
+				b.cmdNodes(chatID)
+			case "backup":
+				b.cmdBackup(chatID)
+			case "me":
+				b.cmdMe(chatID, cb.From)
+			case "usage":
+				b.cmdUsage(chatID, cb.From)
+			case "plans":
+				b.cmdPlans(chatID)
+			}
+		} else {
+			// Customer menu actions
+			switch action {
+			case "me":
+				b.cmdMe(chatID, cb.From)
+			case "usage":
+				b.cmdUsage(chatID, cb.From)
+			case "plans":
+				b.cmdPlans(chatID)
+			}
+		}
 	}
 }
 
@@ -300,9 +374,33 @@ func (b *Bot) handleCallback(cb *CallbackQuery) {
 
 func (b *Bot) cmdStart(chatID int64, isAdmin bool) {
 	if isAdmin {
-		b.sendMessage(chatID, "Welcome to *KorisPanel Bot*\n\nAdmin commands:\n/stats — Panel statistics\n/users — Recent users\n/find `username` — User details\n/create `user pass` — Create user\n/enable `username` — Enable user\n/disable `username` — Disable user\n/traffic `username` — Reset traffic\n/help — Show all commands", "Markdown")
+		msg := "Welcome to *KorisPanel Bot*\n\nAdmin commands:\n" +
+			"/stats — Panel statistics\n" +
+			"/users — Recent users\n" +
+			"/find `username` — User details\n" +
+			"/create `user pass` — Create user\n" +
+			"/enable `username` — Enable user\n" +
+			"/disable `username` — Disable user\n" +
+			"/traffic `username` — Reset traffic\n" +
+			"/renew `username days` — Extend subscription\n" +
+			"/broadcast `msg` — Message all admins\n" +
+			"/online — Online users\n" +
+			"/backup — Export backup\n" +
+			"/nodes — Node status\n" +
+			"/help — Show all commands"
+
+		keyboard := InlineKeyboard{InlineKeyboard: [][]InlineButton{
+			{{Text: "📊 Stats", CallbackData: "menu:stats"}, {Text: "👥 Users", CallbackData: "menu:users"}},
+			{{Text: "🟢 Online", CallbackData: "menu:online"}, {Text: "🖥 Nodes", CallbackData: "menu:nodes"}},
+			{{Text: "💾 Backup", CallbackData: "menu:backup"}},
+		}}
+		b.sendMessageWithKeyboard(chatID, msg, "Markdown", keyboard)
 	} else {
-		b.sendMessage(chatID, "Welcome to *KorisPanel Bot*\n\nCommands:\n/me — Account info\n/usage — Data usage\n/plans — Available plans\n/help — Help", "Markdown")
+		keyboard := InlineKeyboard{InlineKeyboard: [][]InlineButton{
+			{{Text: "👤 My Account", CallbackData: "menu:me"}, {Text: "📊 Usage", CallbackData: "menu:usage"}},
+			{{Text: "📋 Plans", CallbackData: "menu:plans"}},
+		}}
+		b.sendMessageWithKeyboard(chatID, "Welcome to *KorisPanel Bot*\n\nCommands:\n/me — Account info\n/usage — Data usage\n/plans — Available plans\n/help — Help", "Markdown", keyboard)
 	}
 }
 
@@ -569,6 +667,153 @@ func (b *Bot) cmdPlans(chatID int64) {
 		}
 	}
 	b.sendMessage(chatID, sb.String(), "Markdown")
+}
+
+func (b *Bot) cmdRenew(chatID int64, username string, daysStr string) {
+	days, err := strconv.Atoi(daysStr)
+	if err != nil || days <= 0 {
+		b.sendMessage(chatID, "Days must be a positive number", "")
+		return
+	}
+	username = strings.TrimSpace(username)
+
+	// Try to extend active subscription
+	result, err := b.db.Exec(
+		`UPDATE subscriptions SET expires_at = DATE_ADD(expires_at, INTERVAL ? DAY)
+		 WHERE username = ? AND status = 'active' ORDER BY id DESC LIMIT 1`,
+		days, username,
+	)
+	if err != nil {
+		b.sendMessage(chatID, "Error: "+err.Error(), "")
+		return
+	}
+	affected, _ := result.RowsAffected()
+	if affected == 0 {
+		// No active subscription, try to reactivate expired one
+		result, err = b.db.Exec(
+			`UPDATE subscriptions SET expires_at = DATE_ADD(NOW(), INTERVAL ? DAY), status = 'active'
+			 WHERE username = ? ORDER BY id DESC LIMIT 1`,
+			days, username,
+		)
+		if err != nil {
+			b.sendMessage(chatID, "Error: "+err.Error(), "")
+			return
+		}
+		affected, _ = result.RowsAffected()
+		if affected == 0 {
+			b.sendMessage(chatID, fmt.Sprintf("User `%s` not found or has no subscription", username), "Markdown")
+			return
+		}
+		// Also reactivate customer
+		_, _ = b.db.Exec(`UPDATE customers SET status = 'active' WHERE username = ? AND deleted_at IS NULL`, username)
+	}
+	b.sendMessage(chatID, fmt.Sprintf("✅ Extended `%s` subscription by *%d* day(s)", username, days), "Markdown")
+}
+
+func (b *Bot) cmdBroadcast(chatID int64, message string) {
+	if message == "" {
+		b.sendMessage(chatID, "Message cannot be empty", "")
+		return
+	}
+	count := 0
+	for _, adminChat := range b.cfg.AdminChats {
+		b.sendMessage(adminChat, "📢 *Broadcast*\n\n"+message, "Markdown")
+		count++
+	}
+	b.sendMessage(chatID, fmt.Sprintf("✅ Broadcast sent to %d admin chat(s)", count), "")
+}
+
+func (b *Bot) cmdOnline(chatID int64) {
+	rows, err := b.db.Query(
+		`SELECT username, COUNT(*) as sessions, COALESCE(SUM(acctinputoctets+acctoutputoctets), 0) as bytes
+		 FROM radacct WHERE acctstoptime IS NULL
+		 GROUP BY username ORDER BY sessions DESC LIMIT 20`)
+	if err != nil {
+		b.sendMessage(chatID, "Error fetching online users", "")
+		return
+	}
+	defer rows.Close()
+
+	var sb strings.Builder
+	sb.WriteString("🟢 *Online Users*\n\n")
+	total := 0
+	for rows.Next() {
+		var username string
+		var sessions int
+		var totalBytes int64
+		if rows.Scan(&username, &sessions, &totalBytes) == nil {
+			sb.WriteString(fmt.Sprintf("• `%s` — %d session(s) — %s\n", username, sessions, formatBytesBot(totalBytes)))
+			total++
+		}
+	}
+	if total == 0 {
+		sb.WriteString("No users currently online.")
+	} else {
+		sb.WriteString(fmt.Sprintf("\n*Total: %d user(s)*", total))
+	}
+	b.sendMessage(chatID, sb.String(), "Markdown")
+}
+
+func (b *Bot) cmdBackup(chatID int64) {
+	b.sendMessage(chatID, "💾 Generating backup...\n\nPlease use the admin panel Settings > Backup to download the full JSON backup. Telegram file sending is not supported in this version.", "Markdown")
+}
+
+func (b *Bot) cmdNodes(chatID int64) {
+	rows, err := b.db.Query(
+		`SELECT n.name, n.status, n.public_ip, COALESCE(n.last_seen_at, n.created_at)
+		 FROM nodes n ORDER BY n.id`)
+	if err != nil {
+		b.sendMessage(chatID, "Error fetching nodes", "")
+		return
+	}
+	defer rows.Close()
+
+	var sb strings.Builder
+	sb.WriteString("🖥 *Nodes*\n\n")
+	count := 0
+	for rows.Next() {
+		var name, status, ip string
+		var lastSeen sql.NullTime
+		if rows.Scan(&name, &status, &ip, &lastSeen) == nil {
+			icon := "🟢"
+			if status == "offline" {
+				icon = "🔴"
+			} else if status == "stale" {
+				icon = "🟡"
+			}
+			seenStr := "never"
+			if lastSeen.Valid {
+				seenStr = lastSeen.Time.Format("01-02 15:04")
+			}
+			sb.WriteString(fmt.Sprintf("%s *%s* (%s)\n   IP: `%s` | Last seen: %s\n\n", icon, name, status, ip, seenStr))
+			count++
+		}
+	}
+	if count == 0 {
+		sb.WriteString("No nodes configured.")
+	}
+	b.sendMessage(chatID, sb.String(), "Markdown")
+}
+
+// NotifyPayment sends a payment notification to admin chats.
+func (b *Bot) NotifyPayment(username string, amount float64, method string) {
+	msg := fmt.Sprintf("💰 *New Payment*\n\nUser: `%s`\nAmount: %.2f\nMethod: %s\nStatus: pending",
+		username, amount, method)
+	b.Notify(msg)
+}
+
+// NotifyNodeDown sends a node-down notification.
+func (b *Bot) NotifyNodeDown(nodeName, nodeIP string) {
+	msg := fmt.Sprintf("🔴 *Node Offline*\n\nNode: *%s*\nIP: `%s`\nDetected: %s",
+		nodeName, nodeIP, time.Now().Format("15:04:05"))
+	b.Notify(msg)
+}
+
+// NotifyExpiryWarning sends a subscription expiry warning to admins.
+func (b *Bot) NotifyExpiryWarning(username string, daysLeft int) {
+	msg := fmt.Sprintf("⏰ *Expiry Warning*\n\nUser: `%s`\nDays remaining: %d",
+		username, daysLeft)
+	b.Notify(msg)
 }
 
 // ========== Telegram API Calls ==========

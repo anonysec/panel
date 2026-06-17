@@ -145,7 +145,7 @@ function handleChangeLang(event: Event) {
       </div>
       <button
         class="collapse-btn"
-        :title="collapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+        :title="collapsed ? t('sidebar.expand') : t('sidebar.collapse')"
         @click="handleCollapseToggle"
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -228,17 +228,18 @@ function handleChangeLang(event: Event) {
         <select
           class="lang-select"
           :value="locale"
-          title="Language"
+          :title="t('label.language')"
           @change="handleChangeLang"
         >
           <option value="en">EN</option>
           <option value="fa">FA</option>
           <option value="zh">ZH</option>
+          <option value="ru">RU</option>
         </select>
         <button
           class="icon-btn"
           @click="handleToggleTheme"
-          :title="isDark ? 'Light mode' : 'Dark mode'"
+          :title="isDark ? t('label.light_mode') : t('label.dark_mode')"
         >
           <!-- Sun icon (dark mode active, click for light) -->
           <svg v-if="isDark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -252,7 +253,7 @@ function handleChangeLang(event: Event) {
         </button>
         <button
           class="icon-btn"
-          title="Logout"
+          :title="t('label.logout')"
           @click="handleLogout"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

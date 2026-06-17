@@ -1,6 +1,6 @@
 import { ref, watch } from 'vue'
 
-export type Locale = 'en' | 'fa' | 'zh'
+export type Locale = 'en' | 'fa' | 'zh' | 'ru'
 
 const STORAGE_KEY = 'koris-lang'
 const RTL_LOCALES: Locale[] = ['fa']
@@ -10,13 +10,14 @@ const messages: Record<Locale, Record<string, string>> = {
   en: {},
   fa: {},
   zh: {},
+  ru: {},
 }
 
 /** Read persisted locale from localStorage, defaulting to 'en' */
 function getPersistedLocale(): Locale {
   if (typeof window === 'undefined') return 'en'
   const stored = localStorage.getItem(STORAGE_KEY)
-  if (stored === 'en' || stored === 'fa' || stored === 'zh') {
+  if (stored === 'en' || stored === 'fa' || stored === 'zh' || stored === 'ru') {
     return stored
   }
   return 'en'

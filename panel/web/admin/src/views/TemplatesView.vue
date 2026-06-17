@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useTemplatesStore, type UserTemplate, type CreateTemplatePayload, type UpdateTemplatePayload } from '@/stores/templates'
 import { usePlansStore } from '@/stores/plans'
+import { useI18n } from '@koris/composables/useI18n'
 import KDataTable from '@koris/ui/KDataTable.vue'
 import KButton from '@koris/ui/KButton.vue'
 import KFormField from '@koris/ui/KFormField.vue'
@@ -11,6 +12,7 @@ import KTextarea from '@koris/ui/KTextarea.vue'
 import KStatusPill from '@koris/ui/KStatusPill.vue'
 import KEmptyState from '@koris/ui/KEmptyState.vue'
 
+const { t } = useI18n()
 const store = useTemplatesStore()
 const plansStore = usePlansStore()
 
@@ -30,19 +32,19 @@ const form = ref({
   radius_replies: '[]',
 })
 
-const tableColumns = [
-  { key: 'name', label: 'Name', sortable: true },
-  { key: 'plan_id', label: 'Plan', sortable: true },
-  { key: 'status', label: 'Status', sortable: true },
-  { key: 'connection_limit', label: 'Conn. Limit', sortable: true, align: 'right' as const },
-  { key: 'created_by', label: 'Created By', sortable: true },
-  { key: 'actions', label: 'Actions', align: 'center' as const },
-]
+const tableColumns = computed(() => [
+  { key: 'name', label: t('templates.col_name'), sortable: true },
+  { key: 'plan_id', label: t('templates.col_plan'), sortable: true },
+  { key: 'status', label: t('templates.col_status'), sortable: true },
+  { key: 'connection_limit', label: t('templates.col_conn_limit'), sortable: true, align: 'right' as const },
+  { key: 'created_by', label: t('templates.col_created_by'), sortable: true },
+  { key: 'actions', label: t('payments.col_actions'), align: 'center' as const },
+])
 
-const statusOptions = [
-  { label: 'Active', value: 'active' },
-  { label: 'Disabled', value: 'disabled' },
-]
+const statusOptions = computed(() => [
+  { label: t('status.active'), value: 'active' },
+  { label: t('status.disabled'), value: 'disabled' },
+])
 
 function resetForm() {
   form.value = {
@@ -148,46 +150,46 @@ onMounted(() => {
   <div class="page templates-view">
     <!-- Header -->
     <header class="page-header">
-      <KButton variant="primary" icon="+" @click="openCreate">Create Template</KButton>
+      <KButton variant="primary" icon="+" @click="openCreate">{{ t('templates.create_template') }}</KButton>
     </header>
 
     <!-- Create/Edit Form -->
     <div v-if="showForm" class="template-form-panel">
-      <h4 class="form-title">{{ editingId ? 'Edit Template' : 'New Template' }}</h4>
+      <h4 class="form-title">{{ editingId ? t('templates.edit_template') : t('templates.new_template') }}</h4>
       <form class="template-form" @submit.prevent="handleSubmit">
         <div class="form-grid">
-          <KFormField name="tpl-name" label="Name" required>
+          <KFormField name="tpl-name" :label="t('templates.name')" required>
             <template #default="{ fieldId }">
-              <KInput :id="fieldId" v-model="form.name" placeholder="Template name" />
+              <KInput :id="fieldId" v-model="form.name" :placeholder="t('templates.name_placeholder')" />
             </template>
           </KFormField>
-          <KFormField name="tpl-plan" label="Plan">
+          <KFormField name="tpl-plan" :label="t('templates.plan')">
             <template #default="{ fieldId }">
               <KSelect
                 :id="fieldId"
                 v-model="form.plan_id"
                 :options="plansStore.list.map(p => ({ label: p.name, value: String(p.id) }))"
-                placeholder="Select plan (optional)"
+                :placeholder="t('templates.select_plan')"
               />
             </template>
           </KFormField>
-          <KFormField name="tpl-status" label="Status" required>
+          <KFormField name="tpl-status" :label="t('templates.status')" required>
             <template #default="{ fieldId }">
               <KSelect
                 :id="fieldId"
                 v-model="form.status"
                 :options="statusOptions"
-                placeholder="Select status"
+                :placeholder="t('templates.select_status')"
               />
             </template>
           </KFormField>
-          <KFormField name="tpl-conn-limit" label="Connection Limit">
+          <KFormField name="tpl-conn-limit" :label="t('templates.conn_limit')">
             <template #default="{ fieldId }">
-              <KInput :id="fieldId" v-model="form.connection_limit" type="number" placeholder="0 = unlimited" />
+              <KInput :id="fieldId" v-model="form.connection_limit" type="number" :placeholder="t('templates.unlimited_placeholder')" />
             </template>
           </KFormField>
         </div>
-        <KFormField name="tpl-radius-checks" label="RADIUS Checks (JSON)">
+        <KFormField name="tpl-radius-checks" :label="t('templates.radius_checks')">
           <template #default="{ fieldId }">
             <KTextarea
               :id="fieldId"
@@ -197,7 +199,7 @@ onMounted(() => {
             />
           </template>
         </KFormField>
-        <KFormField name="tpl-radius-replies" label="RADIUS Replies (JSON)">
+        <KFormField name="tpl-radius-replies" :label="t('templates.radius_replies')">
           <template #default="{ fieldId }">
             <KTextarea
               :id="fieldId"
@@ -208,9 +210,9 @@ onMounted(() => {
           </template>
         </KFormField>
         <div class="form-actions">
-          <KButton variant="ghost" @click="resetForm">Cancel</KButton>
+          <KButton variant="ghost" @click="resetForm">{{ t('btn.cancel') }}</KButton>
           <KButton type="submit" variant="primary" :loading="saving">
-            {{ editingId ? 'Update' : 'Create' }}
+            {{ editingId ? t('templates.update') : t('btn.create') }}
           </KButton>
         </div>
       </form>
@@ -219,13 +221,13 @@ onMounted(() => {
     <!-- Delete Confirmation Dialog -->
     <div v-if="showDeleteConfirm" class="confirm-overlay" @click.self="cancelDelete">
       <div class="confirm-dialog">
-        <h4 class="confirm-title">Delete Template</h4>
+        <h4 class="confirm-title">{{ t('templates.delete_template') }}</h4>
         <p class="confirm-message">
-          Are you sure you want to delete <strong>{{ deleteTargetName }}</strong>? Customers previously created from this template will not be affected.
+          {{ t('templates.delete_confirm_msg') }} <strong>{{ deleteTargetName }}</strong>
         </p>
         <div class="confirm-actions">
-          <KButton variant="ghost" @click="cancelDelete">Cancel</KButton>
-          <KButton variant="danger" @click="executeDelete">Delete</KButton>
+          <KButton variant="ghost" @click="cancelDelete">{{ t('btn.cancel') }}</KButton>
+          <KButton variant="danger" @click="executeDelete">{{ t('btn.delete') }}</KButton>
         </div>
       </div>
     </div>
@@ -234,8 +236,8 @@ onMounted(() => {
     <KEmptyState
       v-if="!store.loading && store.list.length === 0"
       icon="📋"
-      title="No Templates"
-      description="Create your first user template to quickly provision customers with predefined configurations."
+      :title="t('templates.no_templates')"
+      :description="t('templates.no_templates_desc')"
     />
 
     <!-- Data Table -->
@@ -253,12 +255,12 @@ onMounted(() => {
         <KStatusPill :status="value" size="sm" />
       </template>
       <template #cell-connection_limit="{ value }">
-        {{ value === 0 ? 'Unlimited' : value }}
+        {{ value === 0 ? t('templates.unlimited') : value }}
       </template>
       <template #cell-actions="{ row }">
         <div class="action-btns">
-          <KButton variant="ghost" size="sm" @click.stop="openEdit(row)">Edit</KButton>
-          <KButton variant="danger" size="sm" @click.stop="confirmDelete(row)">Delete</KButton>
+          <KButton variant="ghost" size="sm" @click.stop="openEdit(row)">{{ t('btn.edit') }}</KButton>
+          <KButton variant="danger" size="sm" @click.stop="confirmDelete(row)">{{ t('btn.delete') }}</KButton>
         </div>
       </template>
     </KDataTable>

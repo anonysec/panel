@@ -2,10 +2,13 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useTicketsStore } from '@/stores/tickets'
+import { useI18n } from '@koris/composables/useI18n'
 import KButton from '@koris/ui/KButton.vue'
 import KTextarea from '@koris/ui/KTextarea.vue'
 import KStatusPill from '@koris/ui/KStatusPill.vue'
 import KSkeleton from '@koris/ui/KSkeleton.vue'
+
+const { t } = useI18n()
 
 const props = defineProps<{ id: string }>()
 const router = useRouter()
@@ -56,7 +59,7 @@ onMounted(() => {
       <!-- Ticket Header -->
       <header class="ticket-header">
         <div class="ticket-header__left">
-          <KButton variant="ghost" size="sm" @click="router.back()">← Back</KButton>
+          <KButton variant="ghost" size="sm" @click="router.back()">{{ t('tickets.back') }}</KButton>
           <div class="ticket-header__info">
             <h2 class="ticket-header__subject">{{ ticket.subject }}</h2>
             <div class="ticket-header__meta">
@@ -75,13 +78,13 @@ onMounted(() => {
             variant="danger"
             size="sm"
             @click="handleClose"
-          >Close Ticket</KButton>
+          >{{ t('tickets.close_ticket') }}</KButton>
           <KButton
             v-else
             variant="primary"
             size="sm"
             @click="handleReopen"
-          >Reopen</KButton>
+          >{{ t('tickets.reopen') }}</KButton>
         </div>
       </header>
 
@@ -100,20 +103,20 @@ onMounted(() => {
             <p class="message__text">{{ msg.message }}</p>
           </div>
         </div>
-        <p v-if="messages.length === 0" class="text-muted text-center">No messages yet.</p>
+        <p v-if="messages.length === 0" class="text-muted text-center">{{ t('tickets.no_messages') }}</p>
       </section>
 
       <!-- Reply Form -->
       <form v-if="ticket.status !== 'closed'" class="reply-form" @submit.prevent="sendReply">
         <KTextarea
           v-model="replyText"
-          placeholder="Type your reply..."
+          :placeholder="t('tickets.type_reply')"
           rows="3"
           aria-label="Reply message"
         />
         <div class="reply-form__actions">
           <KButton type="submit" variant="primary" :loading="sending" :disabled="!replyText.trim()">
-            Send Reply
+            {{ t('tickets.send_reply') }}
           </KButton>
         </div>
       </form>
@@ -121,8 +124,8 @@ onMounted(() => {
 
     <!-- Not Found -->
     <div v-else class="empty-state">
-      <p class="text-muted">Ticket not found.</p>
-      <KButton variant="ghost" @click="router.back()">Go Back</KButton>
+      <p class="text-muted">{{ t('tickets.not_found') }}</p>
+      <KButton variant="ghost" @click="router.back()">{{ t('tickets.go_back') }}</KButton>
     </div>
   </div>
 </template>

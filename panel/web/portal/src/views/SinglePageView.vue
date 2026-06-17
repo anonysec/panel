@@ -23,7 +23,7 @@ const usageStore = useUsageStore()
 const ticketsStore = usePortalTicketsStore()
 const { get, loading: profilesLoading } = useApi()
 const { copy, copied } = useClipboard()
-const { t } = useI18n()
+const { t, locale: currentLang } = useI18n()
 
 // ---- VPN Profiles ----
 interface VpnProfile {
@@ -45,6 +45,15 @@ interface ProfilesResponse {
 
 const profiles = ref<VpnProfile[]>([])
 const subUrl = ref('')
+
+// ---- App Links ----
+interface AppLink {
+  name: string
+  url: string
+  platform: string
+  icon: string
+}
+const appLinks = ref<AppLink[]>([])
 
 // ---- Support ----
 const showCreateForm = ref(false)
@@ -88,10 +97,13 @@ const statusVariant = computed(() => {
 
 const formattedExpiry = computed(() => {
   if (!expiresAt.value) return t('portal.noExpiry')
-  return new Intl.DateTimeFormat('en', {
+  const localeMap: Record<string, string> = { en: 'en-US', fa: 'fa-IR', zh: 'zh-CN', ru: 'ru-RU' }
+  const dtLocale = localeMap[currentLang.value] || 'en-US'
+  return new Intl.DateTimeFormat(dtLocale, {
     year: 'numeric',
     month: 'short',
     day: '2-digit',
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
   }).format(new Date(expiresAt.value))
 })
 
@@ -112,6 +124,13 @@ onMounted(async () => {
     profiles.value = res.profiles || []
   } catch {
     // keep empty state
+  }
+
+  try {
+    const linksRes = await get<{ ok: boolean; links: AppLink[] }>('/api/portal/app-links')
+    if (linksRes.links) appLinks.value = linksRes.links
+  } catch {
+    // no app links
   }
 
   if (auth.user?.sub_token) {
@@ -288,6 +307,28 @@ function handleBackToList() {
           </div>
         </div>
       </template>
+    </section>
+
+    <!-- ===== Section: Download Apps ===== -->
+    <section v-if="appLinks.length" class="sp__section">
+      <h2 class="sp__section-title">
+        <svg viewBox="0 0 20 20" fill="currentColor" width="20" height="20"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+        {{ t('portal.apps.title') }}
+      </h2>
+      <p class="sp__apps-desc">{{ t('portal.apps.desc') }}</p>
+      <div class="sp__apps-grid">
+        <a
+          v-for="link in appLinks"
+          :key="link.url"
+          :href="link.url"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="sp__app-card"
+        >
+          <span class="sp__app-icon">{{ link.icon }}</span>
+          <span class="sp__app-name">{{ link.name }}</span>
+        </a>
+      </div>
     </section>
 
     <!-- ===== Section: Support ===== -->
@@ -558,6 +599,44 @@ function handleBackToList() {
 .sp__profile-dl {
   text-decoration: none;
   flex-shrink: 0;
+}
+
+/* App Downloads */
+.sp__apps-desc {
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+  margin-bottom: var(--space-4);
+}
+.sp__apps-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: var(--space-3);
+}
+.sp__app-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  text-decoration: none;
+  color: var(--color-text);
+  transition: border-color 0.15s, transform 0.15s;
+  min-height: 80px;
+}
+.sp__app-card:hover {
+  border-color: var(--color-primary);
+  transform: translateY(-2px);
+}
+.sp__app-icon {
+  font-size: 1.8rem;
+}
+.sp__app-name {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  text-align: center;
 }
 
 /* Support */

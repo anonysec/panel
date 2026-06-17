@@ -47,6 +47,7 @@ const PROTOCOL_DEFAULTS: Record<string, any> = {
     extra_json: {
       transport: 'udp', cipher: 'AES-256-GCM', tls_mode: 'tls-crypt', dns1: '8.8.8.8', dns2: '8.8.4.4',
       comp_lzo: false, push_routes: '', fragment: 0, mssfix: 0, keepalive: '10 120', topology: 'subnet', verb: 3, custom_directives: '',
+      outbound: { enabled: false, type: 'vless', address: '', uuid: '', tls: true, path: '', sni: '' },
     },
   },
   l2tp: {
@@ -54,6 +55,7 @@ const PROTOCOL_DEFAULTS: Record<string, any> = {
     extra_json: {
       ipsec_mode: 'ipsec', psk: '', auth_method: 'CHAP', dns1: '8.8.8.8', dns2: '8.8.4.4',
       refuse_chap: false, refuse_pap: true, lcp_echo_interval: 30, lcp_echo_failure: 4, idle_timeout: 0, require_mschap_v2: true,
+      outbound: { enabled: false, type: 'vless', address: '', uuid: '', tls: true, path: '', sni: '' },
     },
   },
   ikev2: {
@@ -61,6 +63,7 @@ const PROTOCOL_DEFAULTS: Record<string, any> = {
     extra_json: {
       auth_type: 'psk', psk: '', cert_id: '', dns1: '8.8.8.8', dns2: '8.8.4.4',
       dpd_interval: 30, dpd_timeout: 150, rekey_time: '4h', ike_proposals: 'aes256-sha256-modp2048', esp_proposals: 'aes256-sha256', left_id: '', right_id: '%any', fragment_size: 0,
+      outbound: { enabled: false, type: 'vless', address: '', uuid: '', tls: true, path: '', sni: '' },
     },
   },
   ssh: {
@@ -68,6 +71,7 @@ const PROTOCOL_DEFAULTS: Record<string, any> = {
     extra_json: {
       listen_address: '0.0.0.0', key_type: 'ed25519',
       max_sessions: 10, idle_timeout: 0, shell_access: false, allowed_keys: '',
+      outbound: { enabled: false, type: 'vless', address: '', uuid: '', tls: true, path: '', sni: '' },
     },
   },
 }
@@ -100,11 +104,16 @@ function formatBps(bps: number): string {
 
 function getServiceStatus(node: any, protocol: string): string {
   const metrics = node.status_metrics
+  // Check node_services array first (SSH is only stored there)
+  if (node.services && Array.isArray(node.services)) {
+    const svc = node.services.find((s: any) => s.service === protocol)
+    if (svc && svc.status) return svc.status
+  }
+  // Fall back to status_metrics for openvpn/l2tp/ikev2
   if (!metrics) return 'unknown'
   if (protocol === 'openvpn') return metrics.openvpn_status || 'unknown'
   if (protocol === 'l2tp') return metrics.l2tp_status || 'unknown'
   if (protocol === 'ikev2') return metrics.ikev2_status || 'unknown'
-  if (protocol === 'ssh') return metrics.ssh_status || 'unknown'
   return 'unknown'
 }
 
@@ -326,6 +335,13 @@ function removeAllowedKey(index: number) {
   configForm.value.extra_json.allowed_keys = current.join('\n')
 }
 
+// ─── Outbound Helpers ────────────────────────────────────────────────────────
+function initOutbound() {
+  if (!configForm.value.extra_json.outbound) {
+    configForm.value.extra_json.outbound = { enabled: false, type: 'vless', address: '', uuid: '', tls: true, path: '', sni: '' }
+  }
+}
+
 async function saveConfig() {
   if (!editingConfig.value) return
   savingConfig.value = true
@@ -445,7 +461,7 @@ onMounted(() => {
 
     <!-- New Token Display -->
     <div v-if="newToken" class="token-banner">
-      <p><strong>Node Token:</strong> <code>{{ newToken }}</code></p>
+      <p><strong>{{ t('nodes.node_token') }}:</strong> <code>{{ newToken }}</code></p>
       <p class="text-muted text-sm">{{ t('nodes.token_save_warning') }}</p>
       <KButton variant="ghost" size="sm" @click="newToken = null">{{ t('nodes.dismiss') }}</KButton>
     </div>
@@ -987,6 +1003,59 @@ onMounted(() => {
                       </div>
                     </div>
 
+                    <!-- Outbound / Tunnel Group -->
+                    <div class="form-group">
+                      <h5 class="form-group__title">{{ t('nodes.outbound') }}</h5>
+                      <p class="form-group__desc">{{ t('nodes.outbound_desc') }}</p>
+                      <div class="protocol-form__grid">
+                        <KFormField :name="`${proto}-outbound-enabled`" :label="t('nodes.outbound_enabled')" :hint="t('nodes.hint_outbound')">
+                          <template #default>
+                            <label class="toggle-switch">
+                              <input type="checkbox" :checked="configForm.extra_json.outbound?.enabled ?? false" @change="initOutbound(); configForm.extra_json.outbound.enabled = ($event.target as HTMLInputElement).checked" />
+                              <span class="toggle-switch__slider" />
+                            </label>
+                          </template>
+                        </KFormField>
+                        <template v-if="configForm.extra_json.outbound?.enabled">
+                          <KFormField :name="`${proto}-outbound-type`" :label="t('nodes.outbound_type')">
+                            <template #default="{ fieldId }">
+                              <KSelect :id="fieldId" v-model="configForm.extra_json.outbound.type" :options="[{ label: 'VLESS', value: 'vless' }, { label: 'VMess', value: 'vmess' }, { label: 'Trojan', value: 'trojan' }, { label: 'Shadowsocks', value: 'shadowsocks' }, { label: 'SOCKS5', value: 'socks5' }]" />
+                            </template>
+                          </KFormField>
+                          <KFormField :name="`${proto}-outbound-address`" :label="t('nodes.outbound_address')">
+                            <template #default="{ fieldId }">
+                              <KInput :id="fieldId" v-model="configForm.extra_json.outbound.address" placeholder="proxy.example.com:443" />
+                            </template>
+                          </KFormField>
+                          <KFormField :name="`${proto}-outbound-uuid`" :label="t('nodes.outbound_uuid')">
+                            <template #default="{ fieldId }">
+                              <KInput :id="fieldId" v-model="configForm.extra_json.outbound.uuid" :placeholder="t('nodes.placeholder_uuid_or_password')" type="password" />
+                            </template>
+                          </KFormField>
+                          <KFormField :name="`${proto}-outbound-tls`" :label="t('nodes.outbound_tls')">
+                            <template #default>
+                              <label class="toggle-switch">
+                                <input type="checkbox" :checked="configForm.extra_json.outbound.tls" @change="configForm.extra_json.outbound.tls = ($event.target as HTMLInputElement).checked" />
+                                <span class="toggle-switch__slider" />
+                              </label>
+                            </template>
+                          </KFormField>
+                          <template v-if="['vless', 'vmess', 'trojan'].includes(configForm.extra_json.outbound.type)">
+                            <KFormField :name="`${proto}-outbound-path`" :label="t('nodes.outbound_path')">
+                              <template #default="{ fieldId }">
+                                <KInput :id="fieldId" v-model="configForm.extra_json.outbound.path" placeholder="/ws" />
+                              </template>
+                            </KFormField>
+                            <KFormField :name="`${proto}-outbound-sni`" :label="t('nodes.outbound_sni')">
+                              <template #default="{ fieldId }">
+                                <KInput :id="fieldId" v-model="configForm.extra_json.outbound.sni" placeholder="sni.example.com" />
+                              </template>
+                            </KFormField>
+                          </template>
+                        </template>
+                      </div>
+                    </div>
+
                     <div class="protocol-form__actions">
                       <KButton variant="ghost" size="sm" @click="showConfigPreview = !showConfigPreview">
                         {{ showConfigPreview ? t('nodes.hide_preview') : t('nodes.show_preview') }}
@@ -1149,6 +1218,12 @@ onMounted(() => {
   color: var(--color-muted);
   text-transform: uppercase;
   letter-spacing: 0.03em;
+}
+.form-group__desc {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+  line-height: 1.5;
 }
 .form-group__full-width {
   grid-column: 1 / -1;

@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -429,6 +430,45 @@ func executeTask(task Task, cfg *config.Config, envFile string, log *logger.Logg
 			return "failed", map[string]any{"username": username}, err.Error()
 		}
 		return "succeeded", map[string]any{"username": username, "result": result}, ""
+	case "vpn.apply_outbound":
+		extraJSONRaw, _ := json.Marshal(payload["extra_json"])
+		protocol := fmt.Sprint(payload["protocol"])
+		configDir := "/etc/openvpn/server"
+		if protocol == "ikev2" || protocol == "strongswan" {
+			configDir = "/etc/strongswan"
+		} else if protocol == "ssh" {
+			configDir = "/etc/ssh"
+		}
+		outCfg := parseOutboundConfig(json.RawMessage(extraJSONRaw))
+		if outCfg == nil {
+			return "succeeded", map[string]any{"message": "outbound not configured or disabled"}, ""
+		}
+		switch protocol {
+		case "openvpn":
+			directives, err := applyOutboundOpenVPN(outCfg, configDir)
+			if err != nil {
+				return "failed", map[string]any{}, err.Error()
+			}
+			// Write directives to include file
+			includeFile := filepath.Join(configDir, "outbound.conf")
+			if err := os.WriteFile(includeFile, []byte(strings.Join(directives, "\n")+"\n"), 0644); err != nil {
+				return "failed", map[string]any{}, err.Error()
+			}
+			return "succeeded", map[string]any{"protocol": protocol, "directives": directives}, ""
+		case "ikev2", "strongswan":
+			if err := applyOutboundIKEv2(outCfg, configDir); err != nil {
+				return "failed", map[string]any{}, err.Error()
+			}
+			return "succeeded", map[string]any{"protocol": protocol, "message": "outbound routing script installed"}, ""
+		case "ssh":
+			proxyCmd, err := applyOutboundSSH(outCfg, configDir)
+			if err != nil {
+				return "failed", map[string]any{}, err.Error()
+			}
+			return "succeeded", map[string]any{"protocol": protocol, "proxy_command": proxyCmd}, ""
+		default:
+			return "failed", map[string]any{}, "unsupported protocol for outbound: " + protocol
+		}
 	case "agent.reload_config":
 		changes, err := cfg.Reload(envFile)
 		if err != nil {

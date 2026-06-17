@@ -53,6 +53,10 @@ const messages: Record<Locale, Record<string, string>> = {
 
     // Support section
     'portal.support.title': 'Help & Support',
+
+    // Apps section
+    'portal.apps.title': 'Download Apps',
+    'portal.apps.desc': 'Get the app for your device to connect easily.',
     'portal.support.newTicket': 'Ask for Help',
     'portal.support.subject': 'What is the problem?',
     'portal.support.subjectPlaceholder': 'Short description...',
@@ -120,6 +124,10 @@ const messages: Record<Locale, Record<string, string>> = {
 
     // Support section
     'portal.support.title': 'کمک و پشتیبانی',
+
+    // Apps section
+    'portal.apps.title': 'دانلود اپلیکیشن',
+    'portal.apps.desc': 'اپ مناسب دستگاه خود را دانلود کنید تا راحت وصل شوید.',
     'portal.support.newTicket': 'درخواست کمک',
     'portal.support.subject': 'مشکل چیست؟',
     'portal.support.subjectPlaceholder': 'توضیح کوتاه...',
@@ -187,6 +195,10 @@ const messages: Record<Locale, Record<string, string>> = {
 
     // Support section
     'portal.support.title': '帮助与支持',
+
+    // Apps section
+    'portal.apps.title': '下载应用',
+    'portal.apps.desc': '下载适合您设备的应用，轻松连接。',
     'portal.support.newTicket': '寻求帮助',
     'portal.support.subject': '问题是什么？',
     'portal.support.subjectPlaceholder': '简短描述...',
@@ -204,6 +216,77 @@ const messages: Record<Locale, Record<string, string>> = {
     'portal.support.closed': '已关闭',
     'portal.support.noTickets': '暂无消息',
     'portal.support.noTicketsDesc': '如需帮助，请点击上方按钮。',
+  },
+  ru: {
+    // Nav / Shell
+    'portal.nav.dashboard': 'Панель',
+    'portal.nav.support': 'Поддержка',
+    'portal.nav.vpn': 'Мой VPN',
+    'portal.nav.profile': 'Настройки профиля',
+    'portal.nav.logout': 'Выход',
+    'portal.nav.language': 'Язык',
+    'portal.nav.theme': 'Сменить тему',
+
+    // Welcome
+    'portal.hello': 'Привет',
+    'portal.welcome': 'Все что нужно - прямо здесь.',
+
+    // Account section
+    'portal.account.title': 'Мой аккаунт',
+    'portal.account.plan': 'Тариф',
+    'portal.account.status': 'Статус',
+    'portal.account.status_active': 'Активен',
+    'portal.account.status_expired': 'Истек',
+    'portal.account.status_disabled': 'Отключен',
+    'portal.account.status_inactive': 'Неактивен',
+    'portal.account.expires': 'Истекает',
+    'portal.account.daysLeft': 'Осталось дней',
+    'portal.account.days': 'дней',
+    'portal.account.connection': 'Подключение',
+    'portal.account.online': 'Онлайн',
+    'portal.account.offline': 'Офлайн',
+
+    // Usage section
+    'portal.usage.title': 'Использование данных',
+    'portal.usage.remaining': 'осталось',
+    'portal.usage.used': 'использовано',
+    'portal.unlimitedData': 'Безлимит',
+    'portal.noExpiry': 'Без срока',
+
+    // VPN section
+    'portal.vpn.title': 'Мой VPN',
+    'portal.vpn.subUrl': 'Ссылка подписки',
+    'portal.vpn.subUrlDesc': 'Вставьте эту ссылку в VPN-приложение для автоматического подключения.',
+    'portal.vpn.copy': 'Копировать',
+    'portal.vpn.copied': 'Скопировано!',
+    'portal.vpn.download': 'Скачать',
+    'portal.vpn.unavailable': 'Н/Д',
+    'portal.vpn.noProfiles': 'Пока нет файлов VPN',
+    'portal.vpn.noProfilesDesc': 'Файлы подключения появятся здесь, когда будут готовы.',
+
+    // Apps section
+    'portal.apps.title': 'Скачать приложения',
+    'portal.apps.desc': 'Скачайте приложение для вашего устройства.',
+
+    // Support section
+    'portal.support.title': 'Помощь и поддержка',
+    'portal.support.newTicket': 'Задать вопрос',
+    'portal.support.subject': 'В чем проблема?',
+    'portal.support.subjectPlaceholder': 'Краткое описание...',
+    'portal.support.message': 'Расскажите подробнее',
+    'portal.support.messagePlaceholder': 'Опишите что произошло...',
+    'portal.support.cancel': 'Отмена',
+    'portal.support.create': 'Отправить',
+    'portal.support.ticketCreated': 'Сообщение отправлено! Мы скоро ответим.',
+    'portal.support.replySent': 'Ответ отправлен.',
+    'portal.support.send': 'Отправить',
+    'portal.support.yourReply': 'Ваш ответ',
+    'portal.support.replyPlaceholder': 'Введите сообщение...',
+    'portal.support.backToList': 'Назад',
+    'portal.support.open': 'Открыт',
+    'portal.support.closed': 'Закрыт',
+    'portal.support.noTickets': 'Пока нет сообщений',
+    'portal.support.noTicketsDesc': 'Если нужна помощь, нажмите кнопку выше.',
   },
 }
 

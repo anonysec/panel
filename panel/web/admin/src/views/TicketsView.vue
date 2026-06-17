@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useTicketsStore } from '@/stores/tickets'
+import { useI18n } from '@koris/composables/useI18n'
 import KButton from '@koris/ui/KButton.vue'
 import KFormField from '@koris/ui/KFormField.vue'
 import KInput from '@koris/ui/KInput.vue'
@@ -10,6 +11,7 @@ import KTextarea from '@koris/ui/KTextarea.vue'
 import KStatusPill from '@koris/ui/KStatusPill.vue'
 import KEmptyState from '@koris/ui/KEmptyState.vue'
 
+const { t } = useI18n()
 const router = useRouter()
 const store = useTicketsStore()
 const creating = ref(false)
@@ -56,12 +58,12 @@ onMounted(() => {
     <div class="tickets-layout">
       <!-- Left: Tickets Table -->
       <section class="tickets-table-section">
-        <h4 class="section-title">Open Tickets</h4>
+        <h4 class="section-title">{{ t('tickets.open_tickets') }}</h4>
         <KEmptyState
           v-if="!store.loading && store.openTickets.length === 0"
           icon="🎫"
-          title="No Open Tickets"
-          description="All caught up! No tickets need attention."
+          :title="t('tickets.no_open_tickets')"
+          :description="t('tickets.all_caught_up')"
         />
         <div v-else class="tickets-list">
           <div
@@ -90,7 +92,7 @@ onMounted(() => {
 
         <!-- Closed Tickets -->
         <div v-if="store.closedTickets.length > 0" class="closed-section">
-          <h4 class="section-title">Closed Tickets ({{ store.closedTickets.length }})</h4>
+          <h4 class="section-title">{{ t('tickets.closed_tickets') }} ({{ store.closedTickets.length }})</h4>
           <div class="tickets-list tickets-list--closed">
             <div
               v-for="ticket in store.closedTickets.slice(0, 5)"
@@ -114,39 +116,39 @@ onMounted(() => {
       <!-- Right: Create Ticket Form -->
       <aside class="tickets-sidebar">
         <div class="panel">
-          <h4 class="panel-title">Create Ticket</h4>
+          <h4 class="panel-title">{{ t('tickets.create_ticket') }}</h4>
           <form class="ticket-form" @submit.prevent="submitTicket">
-            <KFormField name="ticket-user" label="Username" required>
+            <KFormField name="ticket-user" :label="t('tickets.username')" required>
               <template #default="{ fieldId }">
                 <KInput :id="fieldId" v-model="ticketForm.username" placeholder="customer_username" />
               </template>
             </KFormField>
-            <KFormField name="ticket-subject" label="Subject" required>
+            <KFormField name="ticket-subject" :label="t('tickets.subject')" required>
               <template #default="{ fieldId }">
-                <KInput :id="fieldId" v-model="ticketForm.subject" placeholder="Ticket subject" />
+                <KInput :id="fieldId" v-model="ticketForm.subject" :placeholder="t('tickets.subject_placeholder')" />
               </template>
             </KFormField>
-            <KFormField name="ticket-priority" label="Priority">
+            <KFormField name="ticket-priority" :label="t('tickets.priority')">
               <template #default="{ fieldId }">
                 <KSelect
                   :id="fieldId"
                   v-model="ticketForm.priority"
                   :options="[
-                    { label: 'Low', value: 'low' },
-                    { label: 'Normal', value: 'normal' },
-                    { label: 'High', value: 'high' },
-                    { label: 'Urgent', value: 'urgent' },
+                    { label: t('tickets.priority_low'), value: 'low' },
+                    { label: t('tickets.priority_normal'), value: 'normal' },
+                    { label: t('tickets.priority_high'), value: 'high' },
+                    { label: t('tickets.priority_urgent'), value: 'urgent' },
                   ]"
                 />
               </template>
             </KFormField>
-            <KFormField name="ticket-message" label="Message" required>
+            <KFormField name="ticket-message" :label="t('tickets.message')" required>
               <template #default="{ fieldId }">
-                <KTextarea :id="fieldId" v-model="ticketForm.message" rows="4" placeholder="Describe the issue..." />
+                <KTextarea :id="fieldId" v-model="ticketForm.message" rows="4" :placeholder="t('tickets.message_placeholder')" />
               </template>
             </KFormField>
             <KButton type="submit" variant="primary" :loading="creating" full-width>
-              Create Ticket
+              {{ t('tickets.create_ticket') }}
             </KButton>
           </form>
         </div>
