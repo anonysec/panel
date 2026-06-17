@@ -280,6 +280,15 @@ const messages: Record<Locale, Record<string, string>> = {
     'notifications.empty': 'No notifications yet',
     'notifications.mark_read': 'Mark as read',
     'notifications.mark_all_read': 'Mark all read',
+    // Dashboard
+    'dashboard.data_usage': 'Data Usage',
+    'dashboard.user_status': 'User Status',
+    'dashboard.recent_users': 'Recent Users',
+    'dashboard.node_health': 'Node Health',
+    'dashboard.live_sessions': 'Live Sessions',
+    'dashboard.total_downloaded': 'Total Downloaded',
+    'dashboard.total_uploaded': 'Total Uploaded',
+    'dashboard.chart_loading': 'Chart data loading...',
   },
   fa: {
     // Navigation
@@ -557,6 +566,15 @@ const messages: Record<Locale, Record<string, string>> = {
     'notifications.empty': 'هنوز اعلانی وجود ندارد',
     'notifications.mark_read': 'علامت‌گذاری به عنوان خوانده شده',
     'notifications.mark_all_read': 'همه را خوانده علامت بزن',
+    // Dashboard
+    'dashboard.data_usage': 'مصرف داده',
+    'dashboard.user_status': 'وضعیت کاربران',
+    'dashboard.recent_users': 'کاربران اخیر',
+    'dashboard.node_health': 'سلامت نودها',
+    'dashboard.live_sessions': 'نشست‌های فعال',
+    'dashboard.total_downloaded': 'کل دانلود',
+    'dashboard.total_uploaded': 'کل آپلود',
+    'dashboard.chart_loading': 'در حال بارگذاری نمودار...',
   },
   zh: {
     // Navigation
@@ -834,6 +852,15 @@ const messages: Record<Locale, Record<string, string>> = {
     'notifications.empty': '暂无通知',
     'notifications.mark_read': '标记已读',
     'notifications.mark_all_read': '全部标记已读',
+    // Dashboard
+    'dashboard.data_usage': '数据用量',
+    'dashboard.user_status': '用户状态',
+    'dashboard.recent_users': '最近用户',
+    'dashboard.node_health': '节点状态',
+    'dashboard.live_sessions': '实时会话',
+    'dashboard.total_downloaded': '总下载量',
+    'dashboard.total_uploaded': '总上传量',
+    'dashboard.chart_loading': '图表数据加载中...',
   }
 }
 

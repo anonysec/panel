@@ -698,4 +698,79 @@ function handleBackToList() {
     grid-template-columns: 1fr;
   }
 }
+
+/* ===== RTL support ===== */
+[dir="rtl"] .sp__welcome {
+  text-align: right;
+}
+[dir="rtl"] .sp__section {
+  text-align: right;
+}
+[dir="rtl"] .sp__section-title {
+  flex-direction: row-reverse;
+  text-align: right;
+}
+[dir="rtl"] .sp__account-item {
+  text-align: right;
+}
+[dir="rtl"] .sp__usage-content {
+  flex-direction: row-reverse;
+}
+[dir="rtl"] .sp__usage-info {
+  text-align: right;
+}
+[dir="rtl"] .sp__progress-labels {
+  flex-direction: row-reverse;
+}
+[dir="rtl"] .sp__profile-card {
+  flex-direction: row-reverse;
+}
+[dir="rtl"] .sp__profile-info {
+  text-align: right;
+}
+[dir="rtl"] .sp__sub-url-row {
+  flex-direction: row-reverse;
+}
+[dir="rtl"] .sp__sub-url-label {
+  text-align: right;
+}
+[dir="rtl"] .sp__sub-url-desc {
+  text-align: right;
+}
+[dir="rtl"] .sp__sub-url-input {
+  direction: ltr;
+  text-align: left;
+}
+[dir="rtl"] .sp__ticket-row {
+  flex-direction: row-reverse;
+}
+[dir="rtl"] .sp__ticket-row-info {
+  flex-direction: row-reverse;
+  text-align: right;
+}
+[dir="rtl"] .sp__ticket-header {
+  flex-direction: row-reverse;
+}
+[dir="rtl"] .sp__form-actions {
+  flex-direction: row-reverse;
+}
+[dir="rtl"] .sp__back-btn {
+  flex-direction: row-reverse;
+}
+[dir="rtl"] .sp__new-ticket-btn {
+  flex-direction: row-reverse;
+}
+[dir="rtl"] .sp__notice {
+  text-align: right;
+}
+
+@media (max-width: 640px) {
+  [dir="rtl"] .sp__usage-content {
+    flex-direction: column-reverse;
+    text-align: center;
+  }
+  [dir="rtl"] .sp__sub-url-row {
+    flex-direction: column-reverse;
+  }
+}
 </style>

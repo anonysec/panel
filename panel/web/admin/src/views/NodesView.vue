@@ -1266,4 +1266,26 @@ onMounted(() => {
 .chip-input-row :deep(input) {
   flex: 1;
 }
+
+/* RTL support */
+[dir="rtl"] .page-header { flex-direction: row-reverse; }
+[dir="rtl"] .node-card { direction: rtl; text-align: right; }
+[dir="rtl"] .node-card__title { flex-direction: row-reverse; }
+[dir="rtl"] .node-card__actions { flex-direction: row-reverse; }
+[dir="rtl"] .metric-row { flex-direction: row-reverse; }
+[dir="rtl"] .metric-row__val { text-align: left; }
+[dir="rtl"] .metric-row__label { text-align: right; }
+[dir="rtl"] .protocol-card__header { flex-direction: row-reverse; }
+[dir="rtl"] .protocol-card__info { flex-direction: row-reverse; }
+[dir="rtl"] .protocol-card__meta { flex-direction: row-reverse; }
+[dir="rtl"] .protocol-card__controls { margin-left: 0; margin-right: auto; flex-direction: row-reverse; }
+[dir="rtl"] .protocol-form__actions { flex-direction: row-reverse; }
+[dir="rtl"] .form-actions { flex-direction: row-reverse; }
+[dir="rtl"] .form-group__title { text-align: right; }
+[dir="rtl"] .field--danger { border-left: none; padding-left: 0; border-right: 3px solid rgba(239, 68, 68, 0.5); padding-right: var(--space-2); }
+[dir="rtl"] .chip-input-row { flex-direction: row-reverse; }
+[dir="rtl"] .config-preview { text-align: right; }
+[dir="rtl"] .config-preview__title { text-align: right; }
+[dir="rtl"] .panel-title { text-align: right; }
+[dir="rtl"] .token-banner { text-align: right; }
 </style>

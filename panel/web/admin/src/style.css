@@ -306,6 +306,84 @@ kbd{font-size:10px;padding:2px 5px;border-radius:4px;background:var(--surface-2)
 [dir="rtl"] .toast{right:auto;left:16px}
 [dir="rtl"] .notif-dropdown{right:auto;left:0}
 
+/* RTL - Comprehensive component coverage */
+[dir="rtl"] body{text-align:right}
+[dir="rtl"] .topbar{flex-direction:row-reverse}
+[dir="rtl"] .main{text-align:right}
+
+/* RTL - Buttons with icons */
+[dir="rtl"] .btn-primary,[dir="rtl"] .btn-ghost,[dir="rtl"] .btn-danger{direction:rtl}
+[dir="rtl"] .icon-btn .notif-dot{right:auto;left:8px}
+
+/* RTL - Node cards comprehensive */
+[dir="rtl"] .node-grid{direction:rtl}
+[dir="rtl"] .node-metrics span{text-align:center}
+
+/* RTL - Stat cards */
+[dir="rtl"] .stat-card .ic{margin-left:12px;margin-right:0}
+[dir="rtl"] .stat-card .lbl{text-align:right}
+[dir="rtl"] .stat-card .trend{text-align:right}
+
+/* RTL - Tables */
+[dir="rtl"] td{text-align:right}
+[dir="rtl"] .table-wrap{direction:rtl}
+
+/* RTL - Modal */
+[dir="rtl"] .modal{direction:rtl;text-align:right}
+[dir="rtl"] .modal-close{margin-left:0;margin-right:auto}
+
+/* RTL - Toast animation */
+[dir="rtl"] .toast .toast-close{margin-left:0;margin-right:auto}
+@keyframes slideInRtl{from{opacity:0;transform:translateX(-20px)}to{opacity:1;transform:none}}
+[dir="rtl"] .toast{animation-name:slideInRtl}
+
+/* RTL - Form elements */
+[dir="rtl"] label{text-align:right}
+[dir="rtl"] input,[dir="rtl"] select,[dir="rtl"] textarea{text-align:right}
+[dir="rtl"] input[type="number"],[dir="rtl"] input[type="tel"]{direction:ltr;text-align:left}
+
+/* RTL - Grid layouts */
+[dir="rtl"] .grid{direction:rtl}
+[dir="rtl"] .g2{direction:rtl}
+[dir="rtl"] .g4{direction:rtl}
+
+/* RTL - Command palette */
+[dir="rtl"] .cmd-input-row{flex-direction:row-reverse}
+[dir="rtl"] .cmd-item{flex-direction:row-reverse}
+[dir="rtl"] .cmd-item-text{text-align:right}
+
+/* RTL - Notifications dropdown */
+[dir="rtl"] .notif-head{flex-direction:row-reverse}
+[dir="rtl"] .notif-item{flex-direction:row-reverse}
+[dir="rtl"] .notif-text{text-align:right}
+
+/* RTL - Pill alignment */
+[dir="rtl"] .pill{direction:rtl}
+
+/* RTL - Auth screen */
+[dir="rtl"] .auth-screen{direction:rtl}
+[dir="rtl"] .auth-left{text-align:right}
+[dir="rtl"] .auth-right{border-left:none;border-right:1px solid var(--border);text-align:right}
+
+/* RTL - Empty state */
+[dir="rtl"] .empty-state{text-align:center}
+
+/* RTL - Alert */
+[dir="rtl"] .alert{text-align:right}
+
+/* RTL - Sidebar footer */
+[dir="rtl"] .sidebar-foot{flex-direction:row-reverse}
+[dir="rtl"] .sidebar-foot .meta{text-align:right}
+
+/* RTL - Donut chart */
+[dir="rtl"] .donut-wrap{direction:rtl}
+
+/* RTL - Settings */
+[dir="rtl"] .settings-layout{grid-template-columns:1fr 200px}
+
+/* RTL - Bulk toolbar */
+[dir="rtl"] .bulk-toolbar .bulk-toolbar__clear{margin-left:0;margin-right:auto}
+
 /* Responsive */
 @media(max-width:1100px){.g4{grid-template-columns:repeat(2,1fr)}.g2{grid-template-columns:1fr}.settings-layout{grid-template-columns:1fr}}
 @media(max-width:768px){.g4{grid-template-columns:1fr}#app{flex-direction:column;height:auto;overflow:auto}.sidebar{width:100%;height:auto;flex-direction:row;flex-wrap:wrap;overflow-x:auto;padding:10px}.main{height:auto;overflow:visible;padding:16px}.auth-screen{grid-template-columns:1fr}.two-col{grid-template-columns:1fr}.node-metrics{grid-template-columns:repeat(3,1fr)}}

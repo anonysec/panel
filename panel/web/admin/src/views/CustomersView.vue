@@ -636,4 +636,16 @@ onMounted(() => {
     animation: none;
   }
 }
+
+/* RTL support */
+[dir="rtl"] .page-header { flex-direction: row-reverse; }
+[dir="rtl"] .filter-row { flex-direction: row-reverse; }
+[dir="rtl"] .status-tabs { flex-direction: row-reverse; }
+[dir="rtl"] .bulk-toolbar { flex-direction: row-reverse; }
+[dir="rtl"] .bulk-toolbar__actions { flex-direction: row-reverse; }
+[dir="rtl"] .bulk-toolbar__clear { margin-left: 0; margin-right: auto; }
+[dir="rtl"] .main-tabs { flex-direction: row-reverse; }
+[dir="rtl"] .username-cell { flex-direction: row-reverse; }
+[dir="rtl"] .username-cell__text { text-align: right; }
+[dir="rtl"] .archived-description { text-align: right; }
 </style>

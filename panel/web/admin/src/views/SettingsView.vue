@@ -408,4 +408,17 @@ onMounted(async () => {
   .export-item { flex-direction: column; align-items: flex-start; gap: var(--space-2); }
   .threshold-input-group { flex-wrap: wrap; }
 }
+
+/* RTL support */
+[dir="rtl"] .settings-view { text-align: right; }
+[dir="rtl"] .settings-form { text-align: right; }
+[dir="rtl"] .section-title { text-align: right; }
+[dir="rtl"] .subsection-title { text-align: right; }
+[dir="rtl"] .cert-item { flex-direction: row-reverse; }
+[dir="rtl"] .cert-item__label { text-align: right; }
+[dir="rtl"] .export-item { flex-direction: row-reverse; }
+[dir="rtl"] .export-item__label { text-align: right; }
+[dir="rtl"] .threshold-row { flex-direction: row-reverse; }
+[dir="rtl"] .threshold-input-group { flex-direction: row-reverse; }
+[dir="rtl"] .backup-section { text-align: right; }
 </style>

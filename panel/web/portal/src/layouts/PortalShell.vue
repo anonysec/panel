@@ -299,4 +299,33 @@ const langLabels: Record<Locale, string> = {
     padding: var(--space-3);
   }
 }
+
+/* RTL support */
+[dir="rtl"] .portal-header {
+  flex-direction: row-reverse;
+}
+[dir="rtl"] .portal-header__brand {
+  flex-direction: row-reverse;
+}
+[dir="rtl"] .portal-header__actions {
+  margin-left: 0;
+  margin-right: auto;
+  flex-direction: row-reverse;
+}
+[dir="rtl"] .portal-header__user-toggle {
+  flex-direction: row-reverse;
+}
+[dir="rtl"] .portal-header__dropdown {
+  right: auto;
+  left: 0;
+}
+[dir="rtl"] .portal-header__dropdown-item {
+  text-align: right;
+}
+[dir="rtl"] .portal-header__dropdown-header {
+  text-align: right;
+}
+[dir="rtl"] .portal-main {
+  text-align: right;
+}
 </style>
