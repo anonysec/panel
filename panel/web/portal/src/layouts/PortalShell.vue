@@ -339,19 +339,4 @@ const langLabels: Record<Locale, string> = {
   }
 }
 
-/* RTL support - Using data-dir attribute to prevent layout flip.
-   Only position/margin overrides needed. */
-:global([data-dir="rtl"]) .portal-main {
-  text-align: right;
-}
-[data-dir="rtl"] .portal-header__dropdown {
-  right: auto;
-  left: 0;
-}
-[data-dir="rtl"] .portal-header__dropdown-item {
-  text-align: right;
-}
-[data-dir="rtl"] .portal-header__dropdown-header {
-  text-align: right;
-}
 </style>

@@ -787,11 +787,4 @@ function handleBackToList() {
   }
 }
 
-/* ===== RTL support ===== */
-/* Using data-dir attribute to prevent layout flip.
-   Only subscription URL input needs explicit LTR direction. */
-[data-dir="rtl"] .sp__sub-url-input {
-  direction: ltr;
-  text-align: left;
-}
 </style>

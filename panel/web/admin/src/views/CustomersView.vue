@@ -637,8 +637,4 @@ onMounted(() => {
   }
 }
 
-/* RTL support */
-[data-dir="rtl"] .bulk-toolbar__clear { margin-left: 0; margin-right: auto; }
-[data-dir="rtl"] .username-cell__text { text-align: right; }
-[data-dir="rtl"] .archived-description { text-align: right; }
 </style>

@@ -299,58 +299,6 @@ kbd{font-size:10px;padding:2px 5px;border-radius:4px;background:var(--surface-2)
 .lang-select{width:auto;min-width:38px;min-height:28px;padding:3px 6px;font-size:10px;font-weight:600;border-radius:7px;background:var(--surface-2);border:1px solid var(--border);color:var(--muted);cursor:pointer;text-align:center}
 .lang-select:focus{border-color:var(--brand)}
 
-/* RTL support - Using data-dir attribute to prevent browser from automatically flipping layouts.
-   Only text-align:right is used; direction:rtl is NEVER set to prevent layout flip. */
-
-/* Sidebar border swap */
-[data-dir="rtl"] .sidebar{border-right:none;border-left:1px solid var(--border)}
-
-/* Content text-align for RTL - only text alignment, no direction on containers */
-[data-dir="rtl"] .sidebar{text-align:right}
-
-/* Text-level RTL - only text-align, no direction on any element to prevent layout flip */
-[data-dir="rtl"] p,[data-dir="rtl"] span,[data-dir="rtl"] h1,[data-dir="rtl"] h2,[data-dir="rtl"] h3,[data-dir="rtl"] h4,[data-dir="rtl"] h5,[data-dir="rtl"] h6,[data-dir="rtl"] label,[data-dir="rtl"] td,[data-dir="rtl"] th{text-align:right}
-[data-dir="rtl"] input,[data-dir="rtl"] textarea,[data-dir="rtl"] select{text-align:right}
-
-/* Badge margin swap */
-[data-dir="rtl"] .nav-item .badge{margin-left:0;margin-right:auto}
-
-/* Dlist value margin */
-[data-dir="rtl"] .dlist .row .v{margin-left:0;margin-right:auto}
-
-/* Protocol card controls margin */
-[data-dir="rtl"] .protocol-card__controls{margin-left:0;margin-right:auto}
-
-/* Toast position */
-[data-dir="rtl"] .toast{right:auto;left:16px}
-[data-dir="rtl"] .toast .toast-close{margin-left:0;margin-right:auto}
-@keyframes slideInRtl{from{opacity:0;transform:translateX(-20px)}to{opacity:1;transform:none}}
-[data-dir="rtl"] .toast{animation-name:slideInRtl}
-
-/* Notification dropdown position */
-[data-dir="rtl"] .notif-dropdown{right:auto;left:0}
-
-/* Notification dot position */
-[data-dir="rtl"] .icon-btn .notif-dot{right:auto;left:8px}
-
-/* Modal close button margin */
-[data-dir="rtl"] .modal-close{margin-left:0;margin-right:auto}
-
-/* Stat card icon margin swap */
-[data-dir="rtl"] .stat-card .ic{margin-left:12px;margin-right:0}
-
-/* Auth screen border swap */
-[data-dir="rtl"] .auth-right{border-left:none;border-right:1px solid var(--border)}
-
-/* Subscription URL input stays LTR */
-[data-dir="rtl"] .sp__sub-url-input{direction:ltr;text-align:left}
-
-/* Settings grid flip (nav moves to right side) */
-[data-dir="rtl"] .settings-layout{grid-template-columns:1fr 200px}
-
-/* Bulk toolbar clear margin */
-[data-dir="rtl"] .bulk-toolbar .bulk-toolbar__clear{margin-left:0;margin-right:auto}
-
 /* Responsive */
 @media(max-width:1100px){.g4{grid-template-columns:repeat(2,1fr)}.g2{grid-template-columns:1fr}.settings-layout{grid-template-columns:1fr}}
 @media(max-width:768px){.g4{grid-template-columns:1fr}#app{flex-direction:column;height:auto;overflow:auto}.sidebar{width:100%;height:auto;flex-direction:row;flex-wrap:wrap;overflow-x:auto;padding:10px}.main{height:auto;overflow:visible;padding:16px}.auth-screen{grid-template-columns:1fr}.two-col{grid-template-columns:1fr}.node-metrics{grid-template-columns:repeat(3,1fr)}}

@@ -511,31 +511,4 @@ function handleChangeLang(event: Event) {
   background: rgba(255, 255, 255, 0.97);
 }
 
-/* RTL support */
-:global([data-dir="rtl"]) .sidebar {
-  border-right: none;
-  border-left: 1px solid var(--color-border, var(--border, #28333f));
-}
-
-:global([data-dir="rtl"]) .collapse-btn {
-  right: auto;
-  left: -4px;
-}
-
-:global([data-dir="rtl"]) .brand-text {
-  text-align: right;
-}
-
-:global([data-dir="rtl"]) .nav-item {
-  text-align: right;
-}
-
-:global([data-dir="rtl"]) .badge {
-  margin-left: 0;
-  margin-right: auto;
-}
-
-:global([data-dir="rtl"]) .meta {
-  text-align: right;
-}
 </style>
