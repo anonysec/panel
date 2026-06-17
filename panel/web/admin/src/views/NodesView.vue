@@ -216,6 +216,56 @@ async function toggleProtocol(nodeId: number, protocol: string, currentConfig: a
   await store.loadNodeVpnConfigs(nodeId)
 }
 
+// ─── Reset to Defaults ───────────────────────────────────────────────────────
+function resetToDefaults() {
+  if (!editingConfig.value) return
+  const proto = editingConfig.value.protocol
+  const defaults = PROTOCOL_DEFAULTS[proto]
+  configForm.value = {
+    protocol: proto,
+    port: defaults.port,
+    network: defaults.network,
+    enabled: defaults.enabled,
+    mtu: defaults.mtu ?? null,
+    max_clients: defaults.max_clients ?? 0,
+    enable_logs: defaults.enable_logs ?? true,
+    conn_limit: defaults.conn_limit ?? 0,
+    extra_json: { ...defaults.extra_json },
+  }
+}
+
+// ─── Restart Service ─────────────────────────────────────────────────────────
+const restartingService = ref<string | null>(null)
+
+async function restartService(nodeId: number, protocol: string) {
+  restartingService.value = `${nodeId}-${protocol}`
+  try {
+    const success = await store.createNodeTask({
+      node_id: nodeId,
+      action: 'restart_service',
+      payload_json: { protocol },
+    })
+    if (success) {
+      toast.success(t('nodes.restart_success'))
+    } else {
+      toast.error(t('nodes.restart_error'))
+    }
+  } catch {
+    toast.error(t('nodes.restart_error'))
+  } finally {
+    restartingService.value = null
+  }
+}
+
+// ─── Danger field detection ──────────────────────────────────────────────────
+function isDangerField(proto: string, fieldName: string): boolean {
+  if (proto === 'ssh' && fieldName === 'shell_access') return true
+  if (proto === 'openvpn' && fieldName === 'comp_lzo') return true
+  if (proto === 'openvpn' && fieldName === 'tls_mode' && configForm.value?.extra_json?.tls_mode === 'none') return true
+  if (proto === 'l2tp' && fieldName === 'ipsec_mode' && configForm.value?.extra_json?.ipsec_mode === 'plain') return true
+  return false
+}
+
 // ─── Clear PSK when mode switches away from PSK-based auth ──────────────────
 watch(() => configForm.value?.extra_json?.ipsec_mode, (newMode, oldMode) => {
   if (oldMode === 'ipsec' && newMode === 'plain' && configForm.value?.extra_json) {
@@ -393,6 +443,14 @@ onMounted(() => {
                       <KButton variant="ghost" size="sm" @click="startEdit(node.id, proto, getNodeConfig(node.id, proto))">
                         {{ t('btn.edit') }}
                       </KButton>
+                      <KButton
+                        variant="ghost"
+                        size="sm"
+                        :loading="restartingService === `${node.id}-${proto}`"
+                        @click="restartService(node.id, proto)"
+                      >
+                        {{ t('nodes.restart_service') }}
+                      </KButton>
                     </div>
                   </div>
 
@@ -402,136 +460,51 @@ onMounted(() => {
                     v-if="editingConfig && editingConfig.nodeId === node.id && editingConfig.protocol === proto"
                     class="protocol-form"
                   >
-                    <div class="protocol-form__grid">
-                      <KFormField :name="`${proto}-port`" :label="t('label.port')" :hint="t('nodes.hint_port')">
-                        <template #default="{ fieldId }">
-                          <KInput :id="fieldId" v-model="configForm.port" type="number" placeholder="Port" />
-                        </template>
-                      </KFormField>
-                      <KFormField :name="`${proto}-network`" :label="t('label.network')" :hint="t('nodes.hint_network')">
-                        <template #default="{ fieldId }">
-                          <KInput :id="fieldId" v-model="configForm.network" placeholder="10.8.0.0/24" />
-                        </template>
-                      </KFormField>
+                    <!-- Networking Group -->
+                    <div class="form-group">
+                      <h5 class="form-group__title">{{ t('nodes.group_networking') }}</h5>
+                      <div class="protocol-form__grid">
+                        <KFormField :name="`${proto}-port`" :label="t('label.port')" :hint="t('nodes.hint_port')">
+                          <template #default="{ fieldId }">
+                            <KInput :id="fieldId" v-model="configForm.port" type="number" placeholder="Port" />
+                          </template>
+                        </KFormField>
+                        <KFormField :name="`${proto}-network`" :label="t('label.network')" :hint="t('nodes.hint_network')">
+                          <template #default="{ fieldId }">
+                            <KInput :id="fieldId" v-model="configForm.network" placeholder="10.8.0.0/24" />
+                          </template>
+                        </KFormField>
+                        <KFormField v-if="proto !== 'ssh'" :name="`${proto}-mtu`" :label="t('nodes.mtu')">
+                          <template #default="{ fieldId }">
+                            <KInput :id="fieldId" v-model="configForm.mtu" type="number" placeholder="1500" />
+                          </template>
+                        </KFormField>
 
-                      <!-- OpenVPN specific fields -->
-                      <template v-if="proto === 'openvpn'">
-                        <KFormField :name="`${proto}-transport`" :label="t('nodes.transport')" :hint="t('nodes.hint_transport')">
-                          <template #default="{ fieldId }">
-                            <KSelect :id="fieldId" v-model="configForm.extra_json.transport" :options="[{ label: 'UDP', value: 'udp' }, { label: 'TCP', value: 'tcp' }]" />
-                          </template>
-                        </KFormField>
-                        <KFormField :name="`${proto}-cipher`" :label="t('nodes.cipher')" :hint="t('nodes.hint_cipher')">
-                          <template #default="{ fieldId }">
-                            <KSelect :id="fieldId" v-model="configForm.extra_json.cipher" :options="[{ label: 'AES-256-GCM', value: 'AES-256-GCM' }, { label: 'AES-128-GCM', value: 'AES-128-GCM' }, { label: 'CHACHA20-POLY1305', value: 'CHACHA20-POLY1305' }]" />
-                          </template>
-                        </KFormField>
-                        <KFormField :name="`${proto}-tls`" :label="t('nodes.tls_mode')" :hint="t('nodes.hint_tls_mode')">
-                          <template #default="{ fieldId }">
-                            <KSelect :id="fieldId" v-model="configForm.extra_json.tls_mode" :options="[{ label: 'tls-crypt', value: 'tls-crypt' }, { label: 'tls-auth', value: 'tls-auth' }, { label: 'none', value: 'none' }]" />
-                          </template>
-                        </KFormField>
-                        <KFormField :name="`${proto}-dns1`" :label="t('nodes.dns1')" :hint="t('nodes.hint_dns')">
-                          <template #default="{ fieldId }">
-                            <KInput :id="fieldId" v-model="configForm.extra_json.dns1" placeholder="8.8.8.8" />
-                          </template>
-                        </KFormField>
-                        <KFormField :name="`${proto}-dns2`" :label="t('nodes.dns2')">
-                          <template #default="{ fieldId }">
-                            <KInput :id="fieldId" v-model="configForm.extra_json.dns2" placeholder="8.8.4.4" />
-                          </template>
-                        </KFormField>
-                      </template>
-
-
-                      <!-- L2TP specific fields -->
-                      <template v-if="proto === 'l2tp'">
-                        <KFormField :name="`${proto}-ipsec`" :label="t('nodes.mode')" :hint="t('nodes.hint_ipsec_mode')">
-                          <template #default="{ fieldId }">
-                            <KSelect :id="fieldId" v-model="configForm.extra_json.ipsec_mode" :options="[{ label: 'L2TP/IPSec', value: 'ipsec' }, { label: 'Plain L2TP', value: 'plain' }]" />
-                          </template>
-                        </KFormField>
-                        <KFormField v-if="configForm.extra_json.ipsec_mode === 'ipsec'" :name="`${proto}-psk`" :label="t('nodes.psk')" :hint="t('nodes.hint_psk')">
-                          <template #default="{ fieldId }">
-                            <KInput :id="fieldId" v-model="configForm.extra_json.psk" type="password" placeholder="PSK" />
-                          </template>
-                        </KFormField>
-                        <KFormField :name="`${proto}-auth`" :label="t('nodes.auth_method')" :hint="t('nodes.hint_auth_method')">
-                          <template #default="{ fieldId }">
-                            <KSelect :id="fieldId" v-model="configForm.extra_json.auth_method" :options="[{ label: 'CHAP', value: 'CHAP' }, { label: 'PAP', value: 'PAP' }, { label: 'MS-CHAPv2', value: 'MS-CHAPv2' }]" />
-                          </template>
-                        </KFormField>
-                        <KFormField :name="`${proto}-dns1`" :label="t('nodes.dns1')" :hint="t('nodes.hint_dns')">
-                          <template #default="{ fieldId }">
-                            <KInput :id="fieldId" v-model="configForm.extra_json.dns1" placeholder="8.8.8.8" />
-                          </template>
-                        </KFormField>
-                        <KFormField :name="`${proto}-dns2`" :label="t('nodes.dns2')">
-                          <template #default="{ fieldId }">
-                            <KInput :id="fieldId" v-model="configForm.extra_json.dns2" placeholder="8.8.4.4" />
-                          </template>
-                        </KFormField>
-                      </template>
-
-                      <!-- IKEv2 specific fields -->
-                      <template v-if="proto === 'ikev2'">
-                        <KFormField :name="`${proto}-authtype`" :label="t('nodes.auth_type')" :hint="t('nodes.hint_auth_type')">
-                          <template #default="{ fieldId }">
-                            <KSelect :id="fieldId" v-model="configForm.extra_json.auth_type" :options="[{ label: 'PSK', value: 'psk' }, { label: 'Certificate', value: 'certificate' }]" />
-                          </template>
-                        </KFormField>
-                        <KFormField v-if="configForm.extra_json.auth_type === 'psk'" :name="`${proto}-psk`" :label="t('nodes.psk')" :hint="t('nodes.hint_psk')">
-                          <template #default="{ fieldId }">
-                            <KInput :id="fieldId" v-model="configForm.extra_json.psk" type="password" placeholder="PSK" />
-                          </template>
-                        </KFormField>
-                        <KFormField v-if="configForm.extra_json.auth_type === 'certificate'" :name="`${proto}-certid`" :label="t('nodes.cert_id')" :hint="t('nodes.hint_cert_id')">
-                          <template #default="{ fieldId }">
-                            <KInput :id="fieldId" v-model="configForm.extra_json.cert_id" placeholder="Certificate identifier" />
-                          </template>
-                        </KFormField>
-                        <KFormField :name="`${proto}-dns1`" :label="t('nodes.dns1')" :hint="t('nodes.hint_dns')">
-                          <template #default="{ fieldId }">
-                            <KInput :id="fieldId" v-model="configForm.extra_json.dns1" placeholder="8.8.8.8" />
-                          </template>
-                        </KFormField>
-                        <KFormField :name="`${proto}-dns2`" :label="t('nodes.dns2')">
-                          <template #default="{ fieldId }">
-                            <KInput :id="fieldId" v-model="configForm.extra_json.dns2" placeholder="8.8.4.4" />
-                          </template>
-                        </KFormField>
-                      </template>
-
-                      <!-- SSH specific fields -->
-                      <template v-if="proto === 'ssh'">
-                        <KFormField :name="`${proto}-listen`" :label="t('nodes.listen_address')" :hint="t('nodes.hint_listen_address')">
-                          <template #default="{ fieldId }">
-                            <KInput :id="fieldId" v-model="configForm.extra_json.listen_address" placeholder="0.0.0.0" />
-                          </template>
-                        </KFormField>
-                        <KFormField :name="`${proto}-keytype`" :label="t('nodes.key_type')" :hint="t('nodes.hint_key_type')">
-                          <template #default="{ fieldId }">
-                            <KSelect :id="fieldId" v-model="configForm.extra_json.key_type" :options="[{ label: 'ed25519', value: 'ed25519' }, { label: 'rsa', value: 'rsa' }, { label: 'ecdsa', value: 'ecdsa' }]" />
-                          </template>
-                        </KFormField>
-                      </template>
-                    </div>
-
-                    <!-- Protocol Options (collapsible) -->
-                    <details class="protocol-options">
-                      <summary class="protocol-options__title">{{ t('nodes.protocol_options') }}</summary>
-                      <div class="protocol-form__grid protocol-options__grid">
-
-                        <!-- OpenVPN Protocol Options -->
+                        <!-- OpenVPN networking -->
                         <template v-if="proto === 'openvpn'">
+                          <KFormField :name="`${proto}-transport`" :label="t('nodes.transport')" :hint="t('nodes.hint_transport')">
+                            <template #default="{ fieldId }">
+                              <KSelect :id="fieldId" v-model="configForm.extra_json.transport" :options="[{ label: 'UDP', value: 'udp' }, { label: 'TCP', value: 'tcp' }]" />
+                            </template>
+                          </KFormField>
                           <KFormField :name="`${proto}-topology`" :label="t('nodes.topology')">
                             <template #default="{ fieldId }">
                               <KSelect :id="fieldId" v-model="configForm.extra_json.topology" :options="[{ label: 'subnet', value: 'subnet' }, { label: 'net30', value: 'net30' }, { label: 'p2p', value: 'p2p' }]" />
                             </template>
                           </KFormField>
-                          <KFormField :name="`${proto}-keepalive`" :label="t('nodes.keepalive')">
+                          <KFormField :name="`${proto}-dns1`" :label="t('nodes.dns1')" :hint="t('nodes.hint_dns')">
                             <template #default="{ fieldId }">
-                              <KInput :id="fieldId" v-model="configForm.extra_json.keepalive" placeholder="10 120" />
+                              <KInput :id="fieldId" v-model="configForm.extra_json.dns1" placeholder="8.8.8.8" />
+                            </template>
+                          </KFormField>
+                          <KFormField :name="`${proto}-dns2`" :label="t('nodes.dns2')">
+                            <template #default="{ fieldId }">
+                              <KInput :id="fieldId" v-model="configForm.extra_json.dns2" placeholder="8.8.4.4" />
+                            </template>
+                          </KFormField>
+                          <KFormField :name="`${proto}-push-routes`" :label="t('nodes.push_routes')" class="form-group__full-width">
+                            <template #default="{ fieldId }">
+                              <KTextarea :id="fieldId" v-model="configForm.extra_json.push_routes" :rows="2" placeholder="192.168.1.0/24, 10.0.0.0/8" />
                             </template>
                           </KFormField>
                           <KFormField :name="`${proto}-fragment`" :label="t('nodes.fragment')">
@@ -544,60 +517,90 @@ onMounted(() => {
                               <KInput :id="fieldId" v-model="configForm.extra_json.mssfix" type="number" placeholder="0" />
                             </template>
                           </KFormField>
-                          <KFormField :name="`${proto}-verb`" :label="t('nodes.verbosity')">
+                        </template>
+
+
+                        <!-- L2TP networking -->
+                        <template v-if="proto === 'l2tp'">
+                          <KFormField :name="`${proto}-dns1`" :label="t('nodes.dns1')" :hint="t('nodes.hint_dns')">
                             <template #default="{ fieldId }">
-                              <KInput :id="fieldId" v-model="configForm.extra_json.verb" type="number" placeholder="3" />
+                              <KInput :id="fieldId" v-model="configForm.extra_json.dns1" placeholder="8.8.8.8" />
                             </template>
                           </KFormField>
-                          <KFormField :name="`${proto}-comp-lzo`" :label="t('nodes.comp_lzo')">
-                            <template #default>
-                              <label class="toggle-switch">
-                                <input
-                                  type="checkbox"
-                                  :checked="configForm.extra_json.comp_lzo"
-                                  @change="configForm.extra_json.comp_lzo = ($event.target as HTMLInputElement).checked"
-                                />
-                                <span class="toggle-switch__slider" />
-                              </label>
-                            </template>
-                          </KFormField>
-                          <KFormField :name="`${proto}-push-routes`" :label="t('nodes.push_routes')" class="protocol-options__full-width">
+                          <KFormField :name="`${proto}-dns2`" :label="t('nodes.dns2')">
                             <template #default="{ fieldId }">
-                              <KTextarea :id="fieldId" v-model="configForm.extra_json.push_routes" :rows="2" placeholder="192.168.1.0/24, 10.0.0.0/8" />
-                            </template>
-                          </KFormField>
-                          <KFormField :name="`${proto}-custom-directives`" :label="t('nodes.custom_directives')" class="protocol-options__full-width">
-                            <template #default="{ fieldId }">
-                              <KTextarea :id="fieldId" v-model="configForm.extra_json.custom_directives" :rows="3" placeholder="One directive per line" />
+                              <KInput :id="fieldId" v-model="configForm.extra_json.dns2" placeholder="8.8.4.4" />
                             </template>
                           </KFormField>
                         </template>
 
-                        <!-- L2TP Protocol Options -->
+                        <!-- IKEv2 networking -->
+                        <template v-if="proto === 'ikev2'">
+                          <KFormField :name="`${proto}-dns1`" :label="t('nodes.dns1')" :hint="t('nodes.hint_dns')">
+                            <template #default="{ fieldId }">
+                              <KInput :id="fieldId" v-model="configForm.extra_json.dns1" placeholder="8.8.8.8" />
+                            </template>
+                          </KFormField>
+                          <KFormField :name="`${proto}-dns2`" :label="t('nodes.dns2')">
+                            <template #default="{ fieldId }">
+                              <KInput :id="fieldId" v-model="configForm.extra_json.dns2" placeholder="8.8.4.4" />
+                            </template>
+                          </KFormField>
+                          <KFormField :name="`${proto}-fragment-size`" :label="t('nodes.fragment_size')">
+                            <template #default="{ fieldId }">
+                              <KInput :id="fieldId" v-model="configForm.extra_json.fragment_size" type="number" placeholder="0" />
+                            </template>
+                          </KFormField>
+                        </template>
+
+                        <!-- SSH networking -->
+                        <template v-if="proto === 'ssh'">
+                          <KFormField :name="`${proto}-listen`" :label="t('nodes.listen_address')" :hint="t('nodes.hint_listen_address')">
+                            <template #default="{ fieldId }">
+                              <KInput :id="fieldId" v-model="configForm.extra_json.listen_address" placeholder="0.0.0.0" />
+                            </template>
+                          </KFormField>
+                        </template>
+                      </div>
+                    </div>
+
+                    <!-- Security Group -->
+                    <div class="form-group">
+                      <h5 class="form-group__title">{{ t('nodes.group_security') }}</h5>
+                      <div class="protocol-form__grid">
+                        <template v-if="proto === 'openvpn'">
+                          <KFormField :name="`${proto}-cipher`" :label="t('nodes.cipher')" :hint="t('nodes.hint_cipher')">
+                            <template #default="{ fieldId }">
+                              <KSelect :id="fieldId" v-model="configForm.extra_json.cipher" :options="[{ label: 'AES-256-GCM', value: 'AES-256-GCM' }, { label: 'AES-128-GCM', value: 'AES-128-GCM' }, { label: 'CHACHA20-POLY1305', value: 'CHACHA20-POLY1305' }]" />
+                            </template>
+                          </KFormField>
+                          <KFormField :name="`${proto}-tls`" :label="t('nodes.tls_mode')" :hint="t('nodes.hint_tls_mode')" :class="{ 'field--danger': isDangerField(proto, 'tls_mode') }">
+                            <template #default="{ fieldId }">
+                              <KSelect :id="fieldId" v-model="configForm.extra_json.tls_mode" :options="[{ label: 'tls-crypt', value: 'tls-crypt' }, { label: 'tls-auth', value: 'tls-auth' }, { label: 'none', value: 'none' }]" />
+                            </template>
+                          </KFormField>
+                        </template>
+
                         <template v-if="proto === 'l2tp'">
-                          <KFormField :name="`${proto}-lcp-echo-interval`" :label="t('nodes.lcp_echo_interval')">
+                          <KFormField :name="`${proto}-ipsec`" :label="t('nodes.mode')" :hint="t('nodes.hint_ipsec_mode')" :class="{ 'field--danger': isDangerField(proto, 'ipsec_mode') }">
                             <template #default="{ fieldId }">
-                              <KInput :id="fieldId" v-model="configForm.extra_json.lcp_echo_interval" type="number" placeholder="30" />
+                              <KSelect :id="fieldId" v-model="configForm.extra_json.ipsec_mode" :options="[{ label: 'L2TP/IPSec', value: 'ipsec' }, { label: 'Plain L2TP', value: 'plain' }]" />
                             </template>
                           </KFormField>
-                          <KFormField :name="`${proto}-lcp-echo-failure`" :label="t('nodes.lcp_echo_failure')">
+                          <KFormField v-if="configForm.extra_json.ipsec_mode === 'ipsec'" :name="`${proto}-psk`" :label="t('nodes.psk')" :hint="t('nodes.hint_psk')">
                             <template #default="{ fieldId }">
-                              <KInput :id="fieldId" v-model="configForm.extra_json.lcp_echo_failure" type="number" placeholder="4" />
+                              <KInput :id="fieldId" v-model="configForm.extra_json.psk" type="password" placeholder="PSK" />
                             </template>
                           </KFormField>
-                          <KFormField :name="`${proto}-idle-timeout`" :label="t('nodes.idle_timeout')">
+                          <KFormField :name="`${proto}-auth`" :label="t('nodes.auth_method')" :hint="t('nodes.hint_auth_method')">
                             <template #default="{ fieldId }">
-                              <KInput :id="fieldId" v-model="configForm.extra_json.idle_timeout" type="number" placeholder="0" />
+                              <KSelect :id="fieldId" v-model="configForm.extra_json.auth_method" :options="[{ label: 'CHAP', value: 'CHAP' }, { label: 'PAP', value: 'PAP' }, { label: 'MS-CHAPv2', value: 'MS-CHAPv2' }]" />
                             </template>
                           </KFormField>
                           <KFormField :name="`${proto}-refuse-chap`" :label="t('nodes.refuse_chap')">
                             <template #default>
                               <label class="toggle-switch">
-                                <input
-                                  type="checkbox"
-                                  :checked="configForm.extra_json.refuse_chap"
-                                  @change="configForm.extra_json.refuse_chap = ($event.target as HTMLInputElement).checked"
-                                />
+                                <input type="checkbox" :checked="configForm.extra_json.refuse_chap" @change="configForm.extra_json.refuse_chap = ($event.target as HTMLInputElement).checked" />
                                 <span class="toggle-switch__slider" />
                               </label>
                             </template>
@@ -605,11 +608,7 @@ onMounted(() => {
                           <KFormField :name="`${proto}-refuse-pap`" :label="t('nodes.refuse_pap')">
                             <template #default>
                               <label class="toggle-switch">
-                                <input
-                                  type="checkbox"
-                                  :checked="configForm.extra_json.refuse_pap"
-                                  @change="configForm.extra_json.refuse_pap = ($event.target as HTMLInputElement).checked"
-                                />
+                                <input type="checkbox" :checked="configForm.extra_json.refuse_pap" @change="configForm.extra_json.refuse_pap = ($event.target as HTMLInputElement).checked" />
                                 <span class="toggle-switch__slider" />
                               </label>
                             </template>
@@ -617,32 +616,27 @@ onMounted(() => {
                           <KFormField :name="`${proto}-require-mschap-v2`" :label="t('nodes.require_mschapv2')">
                             <template #default>
                               <label class="toggle-switch">
-                                <input
-                                  type="checkbox"
-                                  :checked="configForm.extra_json.require_mschap_v2"
-                                  @change="configForm.extra_json.require_mschap_v2 = ($event.target as HTMLInputElement).checked"
-                                />
+                                <input type="checkbox" :checked="configForm.extra_json.require_mschap_v2" @change="configForm.extra_json.require_mschap_v2 = ($event.target as HTMLInputElement).checked" />
                                 <span class="toggle-switch__slider" />
                               </label>
                             </template>
                           </KFormField>
                         </template>
 
-                        <!-- IKEv2 Protocol Options -->
                         <template v-if="proto === 'ikev2'">
-                          <KFormField :name="`${proto}-dpd-interval`" :label="t('nodes.dpd_interval')">
+                          <KFormField :name="`${proto}-authtype`" :label="t('nodes.auth_type')" :hint="t('nodes.hint_auth_type')">
                             <template #default="{ fieldId }">
-                              <KInput :id="fieldId" v-model="configForm.extra_json.dpd_interval" type="number" placeholder="30" />
+                              <KSelect :id="fieldId" v-model="configForm.extra_json.auth_type" :options="[{ label: 'PSK', value: 'psk' }, { label: 'Certificate', value: 'certificate' }]" />
                             </template>
                           </KFormField>
-                          <KFormField :name="`${proto}-dpd-timeout`" :label="t('nodes.dpd_timeout')">
+                          <KFormField v-if="configForm.extra_json.auth_type === 'psk'" :name="`${proto}-psk`" :label="t('nodes.psk')" :hint="t('nodes.hint_psk')">
                             <template #default="{ fieldId }">
-                              <KInput :id="fieldId" v-model="configForm.extra_json.dpd_timeout" type="number" placeholder="150" />
+                              <KInput :id="fieldId" v-model="configForm.extra_json.psk" type="password" placeholder="PSK" />
                             </template>
                           </KFormField>
-                          <KFormField :name="`${proto}-rekey-time`" :label="t('nodes.rekey_time')">
+                          <KFormField v-if="configForm.extra_json.auth_type === 'certificate'" :name="`${proto}-certid`" :label="t('nodes.cert_id')" :hint="t('nodes.hint_cert_id')">
                             <template #default="{ fieldId }">
-                              <KInput :id="fieldId" v-model="configForm.extra_json.rekey_time" placeholder="4h" />
+                              <KInput :id="fieldId" v-model="configForm.extra_json.cert_id" placeholder="Certificate identifier" />
                             </template>
                           </KFormField>
                           <KFormField :name="`${proto}-ike-proposals`" :label="t('nodes.ike_proposals')">
@@ -665,14 +659,86 @@ onMounted(() => {
                               <KInput :id="fieldId" v-model="configForm.extra_json.right_id" placeholder="%any" />
                             </template>
                           </KFormField>
-                          <KFormField :name="`${proto}-fragment-size`" :label="t('nodes.fragment_size')">
+                        </template>
+
+                        <template v-if="proto === 'ssh'">
+                          <KFormField :name="`${proto}-keytype`" :label="t('nodes.key_type')" :hint="t('nodes.hint_key_type')">
                             <template #default="{ fieldId }">
-                              <KInput :id="fieldId" v-model="configForm.extra_json.fragment_size" type="number" placeholder="0" />
+                              <KSelect :id="fieldId" v-model="configForm.extra_json.key_type" :options="[{ label: 'ed25519', value: 'ed25519' }, { label: 'rsa', value: 'rsa' }, { label: 'ecdsa', value: 'ecdsa' }]" />
+                            </template>
+                          </KFormField>
+                          <KFormField :name="`${proto}-shell-access`" :label="t('nodes.shell_access')" :class="{ 'field--danger': isDangerField(proto, 'shell_access') }">
+                            <template #default>
+                              <label class="toggle-switch">
+                                <input type="checkbox" :checked="configForm.extra_json.shell_access" @change="configForm.extra_json.shell_access = ($event.target as HTMLInputElement).checked" />
+                                <span class="toggle-switch__slider" />
+                              </label>
+                            </template>
+                          </KFormField>
+                          <KFormField :name="`${proto}-allowed-keys`" :label="t('nodes.allowed_keys')" class="form-group__full-width">
+                            <template #default="{ fieldId }">
+                              <KTextarea :id="fieldId" v-model="configForm.extra_json.allowed_keys" :rows="3" placeholder="ssh-ed25519 AAAA..." />
                             </template>
                           </KFormField>
                         </template>
+                      </div>
+                    </div>
 
-                        <!-- SSH Protocol Options -->
+                    <!-- Performance Group -->
+                    <div class="form-group">
+                      <h5 class="form-group__title">{{ t('nodes.group_performance') }}</h5>
+                      <div class="protocol-form__grid">
+                        <KFormField :name="`${proto}-max-clients`" :label="t('nodes.max_clients')">
+                          <template #default="{ fieldId }">
+                            <KInput :id="fieldId" v-model="configForm.max_clients" type="number" placeholder="0" />
+                          </template>
+                        </KFormField>
+                        <KFormField :name="`${proto}-conn-limit`" :label="t('nodes.conn_limit')">
+                          <template #default="{ fieldId }">
+                            <KInput :id="fieldId" v-model="configForm.conn_limit" type="number" placeholder="0" />
+                          </template>
+                        </KFormField>
+                        <template v-if="proto === 'openvpn'">
+                          <KFormField :name="`${proto}-keepalive`" :label="t('nodes.keepalive')">
+                            <template #default="{ fieldId }">
+                              <KInput :id="fieldId" v-model="configForm.extra_json.keepalive" placeholder="10 120" />
+                            </template>
+                          </KFormField>
+                        </template>
+                        <template v-if="proto === 'l2tp'">
+                          <KFormField :name="`${proto}-lcp-echo-interval`" :label="t('nodes.lcp_echo_interval')">
+                            <template #default="{ fieldId }">
+                              <KInput :id="fieldId" v-model="configForm.extra_json.lcp_echo_interval" type="number" placeholder="30" />
+                            </template>
+                          </KFormField>
+                          <KFormField :name="`${proto}-lcp-echo-failure`" :label="t('nodes.lcp_echo_failure')">
+                            <template #default="{ fieldId }">
+                              <KInput :id="fieldId" v-model="configForm.extra_json.lcp_echo_failure" type="number" placeholder="4" />
+                            </template>
+                          </KFormField>
+                          <KFormField :name="`${proto}-idle-timeout`" :label="t('nodes.idle_timeout')">
+                            <template #default="{ fieldId }">
+                              <KInput :id="fieldId" v-model="configForm.extra_json.idle_timeout" type="number" placeholder="0" />
+                            </template>
+                          </KFormField>
+                        </template>
+                        <template v-if="proto === 'ikev2'">
+                          <KFormField :name="`${proto}-dpd-interval`" :label="t('nodes.dpd_interval')">
+                            <template #default="{ fieldId }">
+                              <KInput :id="fieldId" v-model="configForm.extra_json.dpd_interval" type="number" placeholder="30" />
+                            </template>
+                          </KFormField>
+                          <KFormField :name="`${proto}-dpd-timeout`" :label="t('nodes.dpd_timeout')">
+                            <template #default="{ fieldId }">
+                              <KInput :id="fieldId" v-model="configForm.extra_json.dpd_timeout" type="number" placeholder="150" />
+                            </template>
+                          </KFormField>
+                          <KFormField :name="`${proto}-rekey-time`" :label="t('nodes.rekey_time')">
+                            <template #default="{ fieldId }">
+                              <KInput :id="fieldId" v-model="configForm.extra_json.rekey_time" placeholder="4h" />
+                            </template>
+                          </KFormField>
+                        </template>
                         <template v-if="proto === 'ssh'">
                           <KFormField :name="`${proto}-max-sessions`" :label="t('nodes.max_sessions')">
                             <template #default="{ fieldId }">
@@ -684,67 +750,47 @@ onMounted(() => {
                               <KInput :id="fieldId" v-model="configForm.extra_json.idle_timeout" type="number" placeholder="0" />
                             </template>
                           </KFormField>
-                          <KFormField :name="`${proto}-shell-access`" :label="t('nodes.shell_access')">
-                            <template #default>
-                              <label class="toggle-switch">
-                                <input
-                                  type="checkbox"
-                                  :checked="configForm.extra_json.shell_access"
-                                  @change="configForm.extra_json.shell_access = ($event.target as HTMLInputElement).checked"
-                                />
-                                <span class="toggle-switch__slider" />
-                              </label>
-                            </template>
-                          </KFormField>
-                          <KFormField :name="`${proto}-allowed-keys`" :label="t('nodes.allowed_keys')" class="protocol-options__full-width">
-                            <template #default="{ fieldId }">
-                              <KTextarea :id="fieldId" v-model="configForm.extra_json.allowed_keys" :rows="3" placeholder="ssh-ed25519 AAAA..." />
-                            </template>
-                          </KFormField>
                         </template>
-
                       </div>
-                    </details>
+                    </div>
 
-                    <!-- Advanced Settings -->
-                    <details class="advanced-settings">
-                      <summary class="advanced-settings__title">{{ t('nodes.advanced') }}</summary>
-                      <div class="protocol-form__grid advanced-settings__grid">
-                        <!-- MTU: all protocols except SSH -->
-                        <KFormField v-if="proto !== 'ssh'" :name="`${proto}-mtu`" :label="t('nodes.mtu')">
-                          <template #default="{ fieldId }">
-                            <KInput :id="fieldId" v-model="configForm.mtu" type="number" placeholder="1500" />
-                          </template>
-                        </KFormField>
-                        <!-- Max Clients: all protocols -->
-                        <KFormField :name="`${proto}-max-clients`" :label="t('nodes.max_clients')">
-                          <template #default="{ fieldId }">
-                            <KInput :id="fieldId" v-model="configForm.max_clients" type="number" placeholder="0" />
-                          </template>
-                        </KFormField>
-                        <!-- Connection Limit: all protocols -->
-                        <KFormField :name="`${proto}-conn-limit`" :label="t('nodes.conn_limit')">
-                          <template #default="{ fieldId }">
-                            <KInput :id="fieldId" v-model="configForm.conn_limit" type="number" placeholder="0" />
-                          </template>
-                        </KFormField>
-                        <!-- Enable Logs: all protocols -->
+                    <!-- Logging & Advanced Group -->
+                    <div class="form-group">
+                      <h5 class="form-group__title">{{ t('nodes.group_logging') }}</h5>
+                      <div class="protocol-form__grid">
                         <KFormField :name="`${proto}-enable-logs`" :label="t('nodes.enable_logs')">
                           <template #default>
                             <label class="toggle-switch">
-                              <input
-                                type="checkbox"
-                                :checked="configForm.enable_logs"
-                                @change="configForm.enable_logs = ($event.target as HTMLInputElement).checked"
-                              />
+                              <input type="checkbox" :checked="configForm.enable_logs" @change="configForm.enable_logs = ($event.target as HTMLInputElement).checked" />
                               <span class="toggle-switch__slider" />
                             </label>
                           </template>
                         </KFormField>
+                        <template v-if="proto === 'openvpn'">
+                          <KFormField :name="`${proto}-verb`" :label="t('nodes.verbosity')">
+                            <template #default="{ fieldId }">
+                              <KInput :id="fieldId" v-model="configForm.extra_json.verb" type="number" placeholder="3" />
+                            </template>
+                          </KFormField>
+                          <KFormField :name="`${proto}-comp-lzo`" :label="t('nodes.comp_lzo')" :class="{ 'field--danger': isDangerField(proto, 'comp_lzo') }">
+                            <template #default>
+                              <label class="toggle-switch">
+                                <input type="checkbox" :checked="configForm.extra_json.comp_lzo" @change="configForm.extra_json.comp_lzo = ($event.target as HTMLInputElement).checked" />
+                                <span class="toggle-switch__slider" />
+                              </label>
+                            </template>
+                          </KFormField>
+                          <KFormField :name="`${proto}-custom-directives`" :label="t('nodes.custom_directives')" class="form-group__full-width">
+                            <template #default="{ fieldId }">
+                              <KTextarea :id="fieldId" v-model="configForm.extra_json.custom_directives" :rows="3" placeholder="One directive per line" />
+                            </template>
+                          </KFormField>
+                        </template>
                       </div>
-                    </details>
+                    </div>
 
                     <div class="protocol-form__actions">
+                      <KButton variant="ghost" size="sm" @click="resetToDefaults">{{ t('nodes.reset_defaults') }}</KButton>
                       <KButton variant="ghost" size="sm" @click="cancelEdit">{{ t('btn.cancel') }}</KButton>
                       <KButton variant="primary" size="sm" :loading="savingConfig" @click="saveConfig">{{ t('nodes.save_config') }}</KButton>
                     </div>
@@ -878,43 +924,34 @@ onMounted(() => {
   margin-top: var(--space-4);
 }
 
-/* Advanced Settings */
-.advanced-settings {
+/* Form Groups */
+.form-group {
   margin-top: var(--space-4);
-  border-top: 1px solid var(--color-border);
   padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
 }
-.advanced-settings__title {
+.form-group:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+.form-group__title {
+  margin: 0 0 var(--space-3);
   font-size: var(--text-sm);
   font-weight: var(--font-semibold);
   color: var(--color-muted);
-  cursor: pointer;
-  user-select: none;
-  padding: var(--space-1) 0;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
-.advanced-settings__grid {
-  margin-top: var(--space-3);
+.form-group__full-width {
+  grid-column: 1 / -1;
 }
 
-/* Protocol Options (collapsible) */
-.protocol-options {
-  margin-top: var(--space-4);
-  border-top: 1px solid var(--color-border);
-  padding-top: var(--space-3);
-}
-.protocol-options__title {
-  font-size: var(--text-sm);
-  font-weight: var(--font-semibold);
-  color: var(--color-muted);
-  cursor: pointer;
-  user-select: none;
-  padding: var(--space-1) 0;
-}
-.protocol-options__grid {
-  margin-top: var(--space-3);
-}
-.protocol-options__full-width {
-  grid-column: 1 / -1;
+/* Danger field indicator */
+.field--danger {
+  border-left: 3px solid rgba(239, 68, 68, 0.5);
+  padding-left: var(--space-2);
+  border-radius: var(--radius-sm);
 }
 
 .text-muted { color: var(--color-muted); }
@@ -922,9 +959,7 @@ onMounted(() => {
 
 /* Responsive: single column on mobile */
 @media (max-width: 640px) {
-  .protocol-form__grid,
-  .advanced-settings__grid,
-  .protocol-options__grid {
+  .protocol-form__grid {
     grid-template-columns: 1fr;
   }
   .form-grid {
@@ -941,6 +976,7 @@ onMounted(() => {
     margin-left: 0;
     width: 100%;
     justify-content: flex-end;
+    flex-wrap: wrap;
   }
 }
 </style>
