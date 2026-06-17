@@ -522,26 +522,17 @@ function handleChangeLang(event: Event) {
   left: -4px;
 }
 
-:global([dir="rtl"]) .brand {
-  flex-direction: row-reverse;
-}
-
 :global([dir="rtl"]) .brand-text {
   text-align: right;
 }
 
 :global([dir="rtl"]) .nav-item {
-  flex-direction: row-reverse;
   text-align: right;
 }
 
 :global([dir="rtl"]) .badge {
   margin-left: 0;
   margin-right: auto;
-}
-
-:global([dir="rtl"]) .sidebar-foot {
-  flex-direction: row-reverse;
 }
 
 :global([dir="rtl"]) .meta {

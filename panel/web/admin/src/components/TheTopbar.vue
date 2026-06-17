@@ -558,10 +558,6 @@ function formatTime(timestamp: string): string {
 }
 
 /* RTL support: topbar actions must always stay on the physical right side */
-:global([dir="rtl"]) .topbar {
-  flex-direction: row-reverse;
-}
-
 :global([dir="rtl"]) .topbar-right {
   margin-left: 0;
   margin-right: auto;
@@ -570,10 +566,6 @@ function formatTime(timestamp: string): string {
 
 :global([dir="rtl"]) .topbar-left {
   text-align: right;
-}
-
-:global([dir="rtl"]) .breadcrumb-list {
-  flex-direction: row-reverse;
 }
 
 :global([dir="rtl"]) .breadcrumb-separator {

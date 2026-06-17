@@ -270,15 +270,12 @@ function formatDuration(seconds: number): string {
 }
 
 /* RTL support */
-[dir="rtl"] .stat-card { flex-direction: row-reverse; }
 [dir="rtl"] .stat-card__body { text-align: right; }
 [dir="rtl"] .stat-card__label { text-align: right; }
 [dir="rtl"] .mini-table th { text-align: right; }
 [dir="rtl"] .mini-table td { text-align: right; }
-[dir="rtl"] .metric-bar { flex-direction: row-reverse; }
 [dir="rtl"] .metric-bar__value { text-align: left; }
 [dir="rtl"] .metric-bar__label { text-align: right; }
-[dir="rtl"] .node-health-card__header { flex-direction: row-reverse; }
 [dir="rtl"] .session-row { direction: rtl; }
 [dir="rtl"] .panel-title { text-align: right; }
 [dir="rtl"] .charts-row { direction: rtl; }
