@@ -432,11 +432,16 @@ onMounted(() => {
 /* Search */
 .search-bar { max-width: 320px; }
 
+/* Compact table rows */
+:deep(tbody td) {
+  padding: 8px 12px;
+}
+
 /* Username cell with avatar */
 .username-cell {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: 6px;
 }
 
 .username-cell__text {
@@ -485,8 +490,8 @@ onMounted(() => {
 :deep(.k-table__checkbox) {
   appearance: none;
   -webkit-appearance: none;
-  width: 1rem;
-  height: 1rem;
+  width: 14px;
+  height: 14px;
   border: 2px solid var(--color-border);
   border-radius: var(--radius-sm);
   background: var(--color-surface);

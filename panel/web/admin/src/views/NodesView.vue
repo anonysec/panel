@@ -403,12 +403,12 @@ onMounted(() => {
                     class="protocol-form"
                   >
                     <div class="protocol-form__grid">
-                      <KFormField :name="`${proto}-port`" :label="t('label.port')">
+                      <KFormField :name="`${proto}-port`" :label="t('label.port')" :hint="t('nodes.hint_port')">
                         <template #default="{ fieldId }">
                           <KInput :id="fieldId" v-model="configForm.port" type="number" placeholder="Port" />
                         </template>
                       </KFormField>
-                      <KFormField :name="`${proto}-network`" :label="t('label.network')">
+                      <KFormField :name="`${proto}-network`" :label="t('label.network')" :hint="t('nodes.hint_network')">
                         <template #default="{ fieldId }">
                           <KInput :id="fieldId" v-model="configForm.network" placeholder="10.8.0.0/24" />
                         </template>
@@ -416,22 +416,22 @@ onMounted(() => {
 
                       <!-- OpenVPN specific fields -->
                       <template v-if="proto === 'openvpn'">
-                        <KFormField :name="`${proto}-transport`" :label="t('nodes.transport')">
+                        <KFormField :name="`${proto}-transport`" :label="t('nodes.transport')" :hint="t('nodes.hint_transport')">
                           <template #default="{ fieldId }">
                             <KSelect :id="fieldId" v-model="configForm.extra_json.transport" :options="[{ label: 'UDP', value: 'udp' }, { label: 'TCP', value: 'tcp' }]" />
                           </template>
                         </KFormField>
-                        <KFormField :name="`${proto}-cipher`" :label="t('nodes.cipher')">
+                        <KFormField :name="`${proto}-cipher`" :label="t('nodes.cipher')" :hint="t('nodes.hint_cipher')">
                           <template #default="{ fieldId }">
                             <KSelect :id="fieldId" v-model="configForm.extra_json.cipher" :options="[{ label: 'AES-256-GCM', value: 'AES-256-GCM' }, { label: 'AES-128-GCM', value: 'AES-128-GCM' }, { label: 'CHACHA20-POLY1305', value: 'CHACHA20-POLY1305' }]" />
                           </template>
                         </KFormField>
-                        <KFormField :name="`${proto}-tls`" :label="t('nodes.tls_mode')">
+                        <KFormField :name="`${proto}-tls`" :label="t('nodes.tls_mode')" :hint="t('nodes.hint_tls_mode')">
                           <template #default="{ fieldId }">
                             <KSelect :id="fieldId" v-model="configForm.extra_json.tls_mode" :options="[{ label: 'tls-crypt', value: 'tls-crypt' }, { label: 'tls-auth', value: 'tls-auth' }, { label: 'none', value: 'none' }]" />
                           </template>
                         </KFormField>
-                        <KFormField :name="`${proto}-dns1`" :label="t('nodes.dns1')">
+                        <KFormField :name="`${proto}-dns1`" :label="t('nodes.dns1')" :hint="t('nodes.hint_dns')">
                           <template #default="{ fieldId }">
                             <KInput :id="fieldId" v-model="configForm.extra_json.dns1" placeholder="8.8.8.8" />
                           </template>
@@ -446,22 +446,22 @@ onMounted(() => {
 
                       <!-- L2TP specific fields -->
                       <template v-if="proto === 'l2tp'">
-                        <KFormField :name="`${proto}-ipsec`" :label="t('nodes.mode')">
+                        <KFormField :name="`${proto}-ipsec`" :label="t('nodes.mode')" :hint="t('nodes.hint_ipsec_mode')">
                           <template #default="{ fieldId }">
                             <KSelect :id="fieldId" v-model="configForm.extra_json.ipsec_mode" :options="[{ label: 'L2TP/IPSec', value: 'ipsec' }, { label: 'Plain L2TP', value: 'plain' }]" />
                           </template>
                         </KFormField>
-                        <KFormField v-if="configForm.extra_json.ipsec_mode === 'ipsec'" :name="`${proto}-psk`" :label="t('nodes.psk')">
+                        <KFormField v-if="configForm.extra_json.ipsec_mode === 'ipsec'" :name="`${proto}-psk`" :label="t('nodes.psk')" :hint="t('nodes.hint_psk')">
                           <template #default="{ fieldId }">
                             <KInput :id="fieldId" v-model="configForm.extra_json.psk" type="password" placeholder="PSK" />
                           </template>
                         </KFormField>
-                        <KFormField :name="`${proto}-auth`" :label="t('nodes.auth_method')">
+                        <KFormField :name="`${proto}-auth`" :label="t('nodes.auth_method')" :hint="t('nodes.hint_auth_method')">
                           <template #default="{ fieldId }">
                             <KSelect :id="fieldId" v-model="configForm.extra_json.auth_method" :options="[{ label: 'CHAP', value: 'CHAP' }, { label: 'PAP', value: 'PAP' }, { label: 'MS-CHAPv2', value: 'MS-CHAPv2' }]" />
                           </template>
                         </KFormField>
-                        <KFormField :name="`${proto}-dns1`" :label="t('nodes.dns1')">
+                        <KFormField :name="`${proto}-dns1`" :label="t('nodes.dns1')" :hint="t('nodes.hint_dns')">
                           <template #default="{ fieldId }">
                             <KInput :id="fieldId" v-model="configForm.extra_json.dns1" placeholder="8.8.8.8" />
                           </template>
@@ -475,22 +475,22 @@ onMounted(() => {
 
                       <!-- IKEv2 specific fields -->
                       <template v-if="proto === 'ikev2'">
-                        <KFormField :name="`${proto}-authtype`" :label="t('nodes.auth_type')">
+                        <KFormField :name="`${proto}-authtype`" :label="t('nodes.auth_type')" :hint="t('nodes.hint_auth_type')">
                           <template #default="{ fieldId }">
                             <KSelect :id="fieldId" v-model="configForm.extra_json.auth_type" :options="[{ label: 'PSK', value: 'psk' }, { label: 'Certificate', value: 'certificate' }]" />
                           </template>
                         </KFormField>
-                        <KFormField v-if="configForm.extra_json.auth_type === 'psk'" :name="`${proto}-psk`" :label="t('nodes.psk')">
+                        <KFormField v-if="configForm.extra_json.auth_type === 'psk'" :name="`${proto}-psk`" :label="t('nodes.psk')" :hint="t('nodes.hint_psk')">
                           <template #default="{ fieldId }">
                             <KInput :id="fieldId" v-model="configForm.extra_json.psk" type="password" placeholder="PSK" />
                           </template>
                         </KFormField>
-                        <KFormField v-if="configForm.extra_json.auth_type === 'certificate'" :name="`${proto}-certid`" :label="t('nodes.cert_id')">
+                        <KFormField v-if="configForm.extra_json.auth_type === 'certificate'" :name="`${proto}-certid`" :label="t('nodes.cert_id')" :hint="t('nodes.hint_cert_id')">
                           <template #default="{ fieldId }">
                             <KInput :id="fieldId" v-model="configForm.extra_json.cert_id" placeholder="Certificate identifier" />
                           </template>
                         </KFormField>
-                        <KFormField :name="`${proto}-dns1`" :label="t('nodes.dns1')">
+                        <KFormField :name="`${proto}-dns1`" :label="t('nodes.dns1')" :hint="t('nodes.hint_dns')">
                           <template #default="{ fieldId }">
                             <KInput :id="fieldId" v-model="configForm.extra_json.dns1" placeholder="8.8.8.8" />
                           </template>
@@ -504,12 +504,12 @@ onMounted(() => {
 
                       <!-- SSH specific fields -->
                       <template v-if="proto === 'ssh'">
-                        <KFormField :name="`${proto}-listen`" :label="t('nodes.listen_address')">
+                        <KFormField :name="`${proto}-listen`" :label="t('nodes.listen_address')" :hint="t('nodes.hint_listen_address')">
                           <template #default="{ fieldId }">
                             <KInput :id="fieldId" v-model="configForm.extra_json.listen_address" placeholder="0.0.0.0" />
                           </template>
                         </KFormField>
-                        <KFormField :name="`${proto}-keytype`" :label="t('nodes.key_type')">
+                        <KFormField :name="`${proto}-keytype`" :label="t('nodes.key_type')" :hint="t('nodes.hint_key_type')">
                           <template #default="{ fieldId }">
                             <KSelect :id="fieldId" v-model="configForm.extra_json.key_type" :options="[{ label: 'ed25519', value: 'ed25519' }, { label: 'rsa', value: 'rsa' }, { label: 'ecdsa', value: 'ecdsa' }]" />
                           </template>
