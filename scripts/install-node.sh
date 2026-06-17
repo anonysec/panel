@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# DEPRECATED: Use node-install.sh from the repository root instead.
+# This script is kept for backward compatibility but receives no updates.
+# Usage: bash <(curl -Ls https://raw.githubusercontent.com/anonysec/panel/main/node-install.sh)
 set -euo pipefail
 [ "$(id -u)" = 0 ] || { echo "run as root"; exit 1; }
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

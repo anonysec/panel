@@ -1,4 +1,7 @@
 #!/bin/bash
+# DEPRECATED: This script is no longer needed for the binary distribution model.
+# Use deploy.sh for CI/CD deployments. See SCRIPTS.md for details.
+#
 # deploy-report.sh — Posts deploy diagnostics to a GitHub Issue for remote debugging.
 
 # Source environment from common locations where the token might be stored

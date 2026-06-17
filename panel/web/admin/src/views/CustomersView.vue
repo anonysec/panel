@@ -12,7 +12,9 @@ import KInput from '@koris/ui/KInput.vue'
 import { useDebounceFn } from '@vueuse/core'
 import { useConfirm } from '@koris/composables/useConfirm'
 import { useToast } from '@koris/composables/useToast'
+import { useI18n } from '@koris/composables/useI18n'
 
+const { t } = useI18n()
 const router = useRouter()
 const store = useCustomersStore()
 const realtime = useRealtimeStore()
@@ -36,31 +38,31 @@ const isAllSelected = computed(() => {
 const hasSelection = computed(() => selectedIds.value.length > 0)
 
 /** Page-level navigation tabs: Customers | Archived | Resellers */
-const mainTabs = [
-  { key: 'customers', label: 'Customers' },
-  { key: 'archived', label: 'Archived' },
-  { key: 'resellers', label: 'Resellers' },
-]
+const mainTabs = computed(() => [
+  { key: 'customers', label: t('customers.tab_customers') },
+  { key: 'archived', label: t('customers.tab_archived') },
+  { key: 'resellers', label: t('customers.tab_resellers') },
+])
 
 /** Status filter tabs (only shown when main tab is "customers") */
-const statusTabs = [
-  { key: 'all', label: 'All' },
-  { key: 'active', label: 'Active' },
-  { key: 'online', label: 'Online' },
-  { key: 'limited', label: 'Limited' },
-  { key: 'disabled', label: 'Disabled' },
-  { key: 'expired', label: 'Expired' },
-]
+const statusTabs = computed(() => [
+  { key: 'all', label: t('customers.all') },
+  { key: 'active', label: t('customers.active') },
+  { key: 'online', label: t('customers.online') },
+  { key: 'limited', label: t('customers.limited') },
+  { key: 'disabled', label: t('customers.disabled') },
+  { key: 'expired', label: t('customers.expired') },
+])
 
-const columns = [
-  { key: 'username', label: 'Username', sortable: true },
-  { key: 'display_name', label: 'Display Name', sortable: true },
-  { key: 'status', label: 'Status', sortable: true },
-  { key: 'plan', label: 'Plan', sortable: true },
-  { key: 'credit', label: 'Credit', sortable: true, align: 'right' as const },
-  { key: 'created_at', label: 'Created', sortable: true },
-  { key: 'actions', label: 'Actions', sortable: false, align: 'center' as const, width: '80px' },
-]
+const columns = computed(() => [
+  { key: 'username', label: t('user.username'), sortable: true },
+  { key: 'display_name', label: t('user.display_name'), sortable: true },
+  { key: 'status', label: t('user.status'), sortable: true },
+  { key: 'plan', label: t('user.plan'), sortable: true },
+  { key: 'credit', label: t('user.balance'), sortable: true, align: 'right' as const },
+  { key: 'created_at', label: t('user.created'), sortable: true },
+  { key: 'actions', label: '', sortable: false, align: 'center' as const, width: '80px' },
+])
 
 /** Set of usernames currently online (from live sessions) */
 const onlineUsernames = computed(() => {
@@ -136,19 +138,19 @@ function handleNewUser() {
  */
 async function deleteCustomer(id: number, username: string) {
   const confirmed = await confirm({
-    title: 'Delete Customer',
-    message: `Are you sure you want to delete "${username}"? This action cannot be undone.`,
+    title: t('customers.confirm_delete_title'),
+    message: t('customers.confirm_delete_msg').replace('{name}', username),
     variant: 'danger',
-    icon: '⚠',
-    confirmText: 'Delete',
-    cancelText: 'Cancel',
+    icon: '\u26A0',
+    confirmText: t('btn.delete'),
+    cancelText: t('btn.cancel'),
   })
   if (!confirmed) return
   const success = await store.archiveCustomer(id)
   if (success) {
-    toast.success(`Customer "${username}" deleted successfully.`)
+    toast.success(t('customers.deleted_success').replace('{name}', username))
   } else {
-    toast.error(`Failed to delete "${username}".`)
+    toast.error(t('customers.deleted_error').replace('{name}', username))
   }
 }
 
@@ -176,12 +178,12 @@ async function executeBulkAction(action: BulkActionRequest['action']) {
 
   if (action === 'delete') {
     const confirmed = await confirm({
-      title: 'Delete Customers',
-      message: `Are you sure you want to delete ${selectedIds.value.length} customer${selectedIds.value.length > 1 ? 's' : ''}? This action cannot be undone.`,
+      title: t('customers.confirm_delete_title'),
+      message: t('customers.confirm_delete_msg').replace('{name}', String(selectedIds.value.length)),
       variant: 'danger',
-      icon: '⚠',
-      confirmText: 'Delete',
-      cancelText: 'Cancel',
+      icon: '\u26A0',
+      confirmText: t('btn.delete'),
+      cancelText: t('btn.cancel'),
     })
     if (!confirmed) return
   }
@@ -196,18 +198,17 @@ async function executeBulkAction(action: BulkActionRequest['action']) {
   if (response) {
     const succeededCount = response.succeeded.length
     const failedCount = response.failed.length
-    const actionLabel = action === 'traffic_reset' ? 'Traffic Reset' : action.charAt(0).toUpperCase() + action.slice(1)
 
     if (failedCount === 0) {
-      toast.success(`${actionLabel}: ${succeededCount} customer${succeededCount > 1 ? 's' : ''} updated successfully.`)
+      toast.success(t('customers.bulk_success').replace('{count}', String(succeededCount)))
     } else if (succeededCount === 0) {
-      toast.error(`${actionLabel} failed for all ${failedCount} customer${failedCount > 1 ? 's' : ''}.`)
+      toast.error(t('customers.bulk_error').replace('{count}', String(failedCount)))
     } else {
-      toast.warning(`${actionLabel}: ${succeededCount} succeeded, ${failedCount} failed.`)
+      toast.warning(t('customers.bulk_partial').replace('{succeeded}', String(succeededCount)).replace('{failed}', String(failedCount)))
     }
     clearSelection()
   } else {
-    toast.error('Bulk action failed. Please try again.')
+    toast.error(t('customers.bulk_error').replace('{count}', String(selectedIds.value.length)))
   }
 }
 
@@ -220,7 +221,7 @@ onMounted(() => {
   <div class="page customers-view">
     <!-- Header -->
     <header class="page-header">
-      <KButton variant="primary" icon="+" @click="handleNewUser">New User</KButton>
+      <KButton variant="primary" icon="+" @click="handleNewUser">{{ t('customers.new_user') }}</KButton>
     </header>
 
     <!-- Page-level sub-tab navigation: Customers | Archived | Resellers -->
@@ -238,42 +239,50 @@ onMounted(() => {
     <!-- Bulk Action Toolbar (visible when selection > 0) -->
     <Transition name="bulk-toolbar">
       <div v-if="hasSelection" class="bulk-toolbar" role="toolbar" aria-label="Bulk actions">
-        <span class="bulk-toolbar__count">{{ selectedIds.length }} selected</span>
+        <span class="bulk-toolbar__count">{{ selectedIds.length }} {{ t('customers.selected') }}</span>
         <div class="bulk-toolbar__actions">
-          <KButton variant="ghost" size="sm" @click="executeBulkAction('enable')">Enable</KButton>
-          <KButton variant="ghost" size="sm" @click="executeBulkAction('disable')">Disable</KButton>
-          <KButton variant="ghost" size="sm" @click="executeBulkAction('traffic_reset')">Traffic Reset</KButton>
-          <KButton variant="danger" size="sm" @click="executeBulkAction('delete')">Delete</KButton>
+          <KButton variant="ghost" size="sm" @click="executeBulkAction('enable')">{{ t('customers.enable') }}</KButton>
+          <KButton variant="ghost" size="sm" @click="executeBulkAction('disable')">{{ t('customers.disable') }}</KButton>
+          <KButton variant="ghost" size="sm" @click="executeBulkAction('traffic_reset')">{{ t('customers.traffic_reset') }}</KButton>
+          <KButton variant="danger" size="sm" @click="executeBulkAction('delete')">{{ t('customers.delete') }}</KButton>
         </div>
-        <button class="bulk-toolbar__clear" @click="clearSelection" aria-label="Clear selection">Clear</button>
+        <button class="bulk-toolbar__clear" @click="clearSelection" :aria-label="t('customers.clear')">{{ t('customers.clear') }}</button>
       </div>
     </Transition>
 
-    <!-- Status Filter Tabs (only visible on "Customers" main tab) -->
-    <nav v-if="currentMainTab === 'customers'" class="status-tabs" aria-label="Customer status filter">
-      <button
-        v-for="tab in statusTabs"
-        :key="tab.key"
-        :class="['status-tab', { 'status-tab--active': activeStatusTab === tab.key }]"
-        @click="setStatusFilter(tab.key)"
-      >
-        {{ tab.label }}
-      </button>
-    </nav>
-
-    <!-- Archived header (when viewing archived tab) -->
-    <div v-if="currentMainTab === 'archived'" class="archived-header">
-      <p class="archived-description">Deleted customers that have been archived. These users no longer have VPN access.</p>
+    <!-- Filter Row: Status tabs + Search on same line -->
+    <div v-if="currentMainTab === 'customers'" class="filter-row">
+      <nav class="status-tabs" aria-label="Customer status filter">
+        <button
+          v-for="tab in statusTabs"
+          :key="tab.key"
+          :class="['status-tab', { 'status-tab--active': activeStatusTab === tab.key }]"
+          @click="setStatusFilter(tab.key)"
+        >
+          {{ tab.label }}
+        </button>
+      </nav>
+      <div class="filter-row__search">
+        <KInput
+          :model-value="searchQuery"
+          :placeholder="t('customers.search')"
+          aria-label="Search customers"
+          @update:model-value="onSearchInput"
+        />
+      </div>
     </div>
 
-    <!-- Search -->
-    <div class="search-bar">
-      <KInput
-        :model-value="searchQuery"
-        :placeholder="currentMainTab === 'archived' ? 'Search archived...' : 'Search customers...'"
-        aria-label="Search customers"
-        @update:model-value="onSearchInput"
-      />
+    <!-- Archived header + search (when viewing archived tab) -->
+    <div v-if="currentMainTab === 'archived'" class="archived-section">
+      <p class="archived-description">{{ t('customers.archived_desc') }}</p>
+      <div class="filter-row__search">
+        <KInput
+          :model-value="searchQuery"
+          :placeholder="t('customers.search_archived')"
+          aria-label="Search archived customers"
+          @update:model-value="onSearchInput"
+        />
+      </div>
     </div>
 
     <!-- Data Table -->
@@ -310,8 +319,8 @@ onMounted(() => {
       <template #cell-actions="{ row }">
         <button
           class="action-btn action-btn--delete"
-          title="Delete customer"
-          aria-label="Delete customer"
+          :title="t('btn.delete')"
+          :aria-label="t('btn.delete')"
           @click.stop="deleteCustomer(row.id, row.username)"
         >
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -412,15 +421,56 @@ onMounted(() => {
   transform: translateY(-8px);
 }
 
-/* Status filter tabs */
-.status-tabs { display: flex; gap: var(--space-1); border-bottom: 1px solid var(--color-border); padding-bottom: var(--space-2); overflow-x: auto; }
-.status-tab { padding: var(--space-2) var(--space-3); border: none; background: none; color: var(--color-muted); font-size: var(--text-sm); font-weight: var(--font-medium); cursor: pointer; border-radius: var(--radius-sm); transition: all var(--duration-fast); }
-.status-tab:hover { color: var(--color-text); background: var(--color-surface-2); }
-.status-tab--active { color: var(--color-primary); background: rgba(37, 99, 235, 0.1); }
+/* Filter row: status tabs + search side by side */
+.filter-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
 
-/* Archived header */
-.archived-header {
-  padding: var(--space-2) 0;
+.filter-row__search {
+  flex-shrink: 0;
+  width: 240px;
+}
+
+/* Status filter tabs - compact pill style */
+.status-tabs {
+  display: flex;
+  gap: var(--space-1);
+  overflow-x: auto;
+  flex: 1;
+  min-width: 0;
+}
+
+.status-tab {
+  padding: var(--space-1) var(--space-3);
+  border: none;
+  background: none;
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
+  cursor: pointer;
+  border-radius: 9999px;
+  white-space: nowrap;
+  transition: all var(--duration-fast);
+}
+
+.status-tab:hover {
+  color: var(--color-text);
+  background: var(--color-surface-2);
+}
+
+.status-tab--active {
+  color: var(--color-primary);
+  background: rgba(37, 99, 235, 0.1);
+  font-weight: var(--font-semibold);
+}
+
+/* Archived section */
+.archived-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
 }
 
 .archived-description {
@@ -428,9 +478,6 @@ onMounted(() => {
   font-size: var(--text-sm);
   color: var(--color-muted);
 }
-
-/* Search */
-.search-bar { max-width: 320px; }
 
 /* Compact table rows */
 :deep(tbody td) {
@@ -549,6 +596,32 @@ onMounted(() => {
 
 .text-success { color: var(--color-success, #22c55e); }
 .text-danger { color: var(--color-danger, #ef4444); }
+
+/* Responsive: stack filter row on mobile */
+@media (max-width: 640px) {
+  .filter-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-3);
+  }
+
+  .filter-row__search {
+    width: 100%;
+  }
+
+  .status-tabs {
+    padding-bottom: var(--space-2);
+  }
+
+  .bulk-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .bulk-toolbar__actions {
+    flex: 1 1 100%;
+    order: 3;
+  }
+}
 
 @media (prefers-reduced-motion: reduce) {
   .bulk-toolbar-enter-active,

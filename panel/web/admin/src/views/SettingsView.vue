@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useNodesStore } from '@/stores/nodes'
 import { useApi } from '@koris/composables/useApi'
 import { useToast } from '@koris/composables/useToast'
 import { useI18n } from '@koris/composables/useI18n'
+import type { Locale } from '@koris/composables/useI18n'
 import KTabs from '@koris/ui/KTabs.vue'
 import KFormField from '@koris/ui/KFormField.vue'
 import KInput from '@koris/ui/KInput.vue'
@@ -13,7 +14,7 @@ import KStatusPill from '@koris/ui/KStatusPill.vue'
 
 const props = defineProps<{ tab?: string }>()
 
-const { t } = useI18n()
+const { t, locale: currentLocale, setLocale } = useI18n()
 const nodesStore = useNodesStore()
 const { get, put, patch } = useApi()
 const toast = useToast()
@@ -30,9 +31,22 @@ const tabs = computed(() => [
 
 // ─── Panel Settings ─────────────────────────────────────────────────────────
 const panelName = ref('')
-const panelLang = ref('en')
+const panelLang = ref<string>(currentLocale.value)
 const loadingSettings = ref(false)
 const savingSettings = ref(false)
+
+// Sync panelLang with global locale (bidirectional)
+watch(panelLang, (newLang) => {
+  if (newLang !== currentLocale.value) {
+    setLocale(newLang as Locale)
+  }
+})
+
+watch(currentLocale, (newLocale) => {
+  if (newLocale !== panelLang.value) {
+    panelLang.value = newLocale
+  }
+})
 
 async function loadPanelSettings(): Promise<void> {
   loadingSettings.value = true

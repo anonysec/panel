@@ -5,7 +5,7 @@ import type { Breadcrumb } from '@koris/types/components'
 import { useI18n } from '@koris/composables/useI18n'
 import { useRealtimeStore } from '@/stores/realtime'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const router = useRouter()
 const realtimeStore = useRealtimeStore()
 
@@ -66,13 +66,21 @@ function formatTime(timestamp: string): string {
     const date = new Date(timestamp)
     const now = new Date()
     const diff = now.getTime() - date.getTime()
-    const minutes = Math.floor(diff / 60000)
-    if (minutes < 1) return 'just now'
-    if (minutes < 60) return `${minutes}m ago`
+    const seconds = Math.floor(diff / 1000)
+    const minutes = Math.floor(seconds / 60)
     const hours = Math.floor(minutes / 60)
-    if (hours < 24) return `${hours}h ago`
     const days = Math.floor(hours / 24)
-    return `${days}d ago`
+
+    // Map locale codes to BCP 47 tags for Intl.RelativeTimeFormat
+    const localeMap: Record<string, string> = { en: 'en', fa: 'fa', zh: 'zh' }
+    const bcp47 = localeMap[locale.value] || 'en'
+
+    const rtf = new Intl.RelativeTimeFormat(bcp47, { numeric: 'auto', style: 'short' })
+
+    if (minutes < 1) return rtf.format(0, 'second')
+    if (minutes < 60) return rtf.format(-minutes, 'minute')
+    if (hours < 24) return rtf.format(-hours, 'hour')
+    return rtf.format(-days, 'day')
   } catch {
     return ''
   }

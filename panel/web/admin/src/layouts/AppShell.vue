@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useRealtimeStore } from '@/stores/realtime'
 import { useTheme } from '@koris/composables/useTheme'
 import { useI18n } from '@koris/composables/useI18n'
+import type { Locale } from '@koris/composables/useI18n'
 import { openCommandPalette } from '@/composables/useCommandPalette'
 import TheSidebar from '@/components/TheSidebar.vue'
 import TheTopbar from '@/components/TheTopbar.vue'
@@ -15,7 +16,7 @@ const route = useRoute()
 const authStore = useAuthStore()
 const realtimeStore = useRealtimeStore()
 const { toggle: toggleTheme } = useTheme()
-const { t } = useI18n()
+const { t, setLocale } = useI18n()
 
 // Panel version (fetched from API)
 const panelVersion = ref('dev')
@@ -39,6 +40,10 @@ const sidebarCollapsed = ref(false)
 
 function handleCollapseToggle() {
   sidebarCollapsed.value = !sidebarCollapsed.value
+}
+
+function handleChangeLang(locale: string) {
+  setLocale(locale as Locale)
 }
 
 // Derive current route name for sidebar highlighting
@@ -101,6 +106,7 @@ function handleNotifications() {
       :user="{ username: authStore.username, role: authStore.role }"
       @navigate="handleNavigate"
       @collapse-toggle="handleCollapseToggle"
+      @change-lang="handleChangeLang"
       @logout="handleLogout"
       @toggle-theme="toggleTheme"
     />

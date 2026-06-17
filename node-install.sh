@@ -40,6 +40,14 @@ echo ""
 [[ -z "$PANEL_URL" ]] && fatal "Panel URL required."
 PANEL_URL="${PANEL_URL%/}"
 
+# Verify panel is reachable before continuing
+info "Checking panel connectivity..."
+HEALTH_RESPONSE=$(curl -fsSL --max-time 10 "$PANEL_URL/api/health" 2>/dev/null) || true
+if [[ -z "$HEALTH_RESPONSE" ]] || ! echo "$HEALTH_RESPONSE" | grep -qi "ok"; then
+    fatal "Cannot reach panel at $PANEL_URL - verify the URL and ensure the panel is running."
+fi
+info "Panel is reachable."
+
 [[ -z "${NODE_TOKEN:-}" ]] && read -rp "$(echo -e "${cyan}Node Token: ${plain}")" NODE_TOKEN
 [[ -z "$NODE_TOKEN" ]] && fatal "Node Token required."
 
@@ -53,15 +61,74 @@ export DEBIAN_FRONTEND=noninteractive
 case "$OS" in
     ubuntu|debian)
         apt-get update -qq >/dev/null 2>&1
-        apt-get install -y -qq git curl openssl golang-go iproute2 \
+        apt-get install -y -qq git curl openssl iproute2 \
             openvpn easy-rsa strongswan xl2tpd >/dev/null 2>&1
         ;;
     centos|almalinux|rocky|rhel|fedora)
-        dnf install -y -q git curl openssl golang iproute \
+        dnf install -y -q git curl openssl iproute \
             openvpn easy-rsa strongswan xl2tpd >/dev/null 2>&1
         ;;
     *) fatal "Unsupported OS: $OS" ;;
 esac
+
+# Ensure Go >= 1.21 is available
+GO_REQUIRED_MAJOR=1
+GO_REQUIRED_MINOR=21
+install_go() {
+    local ARCH
+    case "$(uname -m)" in
+        x86_64)        ARCH="amd64" ;;
+        aarch64|arm64) ARCH="arm64" ;;
+        armv7l)        ARCH="armv6l" ;;
+        *)             ARCH="amd64" ;;
+    esac
+    local GO_VERSION="1.22.5"
+    local GO_URL="https://go.dev/dl/go${GO_VERSION}.linux-${ARCH}.tar.gz"
+    local GO_TARBALL="/tmp/go${GO_VERSION}.linux-${ARCH}.tar.gz"
+    info "Downloading Go ${GO_VERSION} for ${ARCH}..."
+    curl -fsSL -o "$GO_TARBALL" "$GO_URL"
+
+    # Verify SHA256 checksum if sha256sum is available (best-effort)
+    if command -v sha256sum &>/dev/null; then
+        local EXPECTED_HASH
+        EXPECTED_HASH=$(curl -fsSL "https://go.dev/dl/?mode=json&include=all" 2>/dev/null \
+            | grep -A 5 "go${GO_VERSION}.linux-${ARCH}" \
+            | grep -oP '"sha256":\s*"\K[a-f0-9]+' || true)
+        if [[ -n "$EXPECTED_HASH" ]]; then
+            local ACTUAL_HASH
+            ACTUAL_HASH=$(sha256sum "$GO_TARBALL" | awk '{print $1}')
+            if [[ "$ACTUAL_HASH" != "$EXPECTED_HASH" ]]; then
+                rm -f "$GO_TARBALL"
+                fatal "Go binary checksum mismatch! Expected: $EXPECTED_HASH, Got: $ACTUAL_HASH"
+            fi
+            info "Go binary checksum verified."
+        else
+            warn "Could not fetch Go checksum for verification. Proceeding with install."
+        fi
+    fi
+
+    rm -rf /usr/local/go
+    tar -C /usr/local -xzf "$GO_TARBALL"
+    rm -f "$GO_TARBALL"
+    export PATH="/usr/local/go/bin:$PATH"
+}
+
+if command -v go &>/dev/null; then
+    GO_VER=$(go version | grep -oP '\d+\.\d+' | head -1)
+    GO_MAJOR=$(echo "$GO_VER" | cut -d. -f1)
+    GO_MINOR=$(echo "$GO_VER" | cut -d. -f2)
+    if [[ "$GO_MAJOR" -lt "$GO_REQUIRED_MAJOR" ]] || \
+       { [[ "$GO_MAJOR" -eq "$GO_REQUIRED_MAJOR" ]] && [[ "$GO_MINOR" -lt "$GO_REQUIRED_MINOR" ]]; }; then
+        warn "Go ${GO_VER} found but >= ${GO_REQUIRED_MAJOR}.${GO_REQUIRED_MINOR} required."
+        install_go
+    else
+        info "Go ${GO_VER} found (meets requirement)."
+    fi
+else
+    install_go
+fi
+# Ensure Go is on PATH for this session
+export PATH="/usr/local/go/bin:$PATH"
 
 info "Downloading source..."
 if [[ -d "$INSTALL_DIR/.git" ]]; then
@@ -81,7 +148,9 @@ chmod +x /usr/local/bin/panel-node
 # Detect node public IP
 NODE_IP=$(curl -fsS4 --max-time 3 https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}')
 
-# Generate a unique RADIUS secret for this node
+# RADIUS_SECRET: Used for RADIUS authentication between this node's VPN services
+# and the panel's FreeRADIUS server. The panel auto-configures this secret for the
+# node when it first connects. It must remain consistent across restarts.
 RADIUS_SECRET="$(openssl rand -hex 16)"
 
 # Config
@@ -108,6 +177,26 @@ systemctl daemon-reload
 systemctl enable --now node-agent >/dev/null 2>&1
 systemctl restart node-agent
 sleep 2
+
+# Post-install health check
+info "Verifying node agent status..."
+AGENT_STATUS=$(systemctl is-active node-agent 2>/dev/null || echo "inactive")
+if [[ "$AGENT_STATUS" != "active" ]]; then
+    warn "node-agent service is not active (status: $AGENT_STATUS)."
+    warn "Troubleshooting: check logs with 'journalctl -u node-agent -n 50'"
+    warn "Try restarting: systemctl restart node-agent"
+fi
+
+# Verify panel registration
+info "Checking panel registration..."
+REG_RESPONSE=$(curl -fsSL --max-time 5 -H "X-Node-Token: $NODE_TOKEN" "$PANEL_URL/api/node/agent/version" 2>/dev/null) || true
+if [[ -z "$REG_RESPONSE" ]]; then
+    warn "Could not verify panel registration. The node may need a moment to register."
+    warn "Check panel dashboard under Nodes to see if this node appears."
+    warn "If it does not appear, verify NODE_TOKEN is correct and restart: systemctl restart node-agent"
+else
+    info "Panel registration verified successfully."
+fi
 
 # CLI
 cp "$INSTALL_DIR/koris.sh" /usr/local/bin/koris 2>/dev/null || true
