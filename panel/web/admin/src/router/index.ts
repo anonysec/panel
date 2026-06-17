@@ -20,6 +20,7 @@ const router = createRouter({
         { path: 'nodes', name: 'nodes', component: () => import('@/views/NodesView.vue') },
         { path: 'templates', name: 'templates', component: () => import('@/views/TemplatesView.vue') },
         { path: 'settings/:tab?', name: 'settings', component: () => import('@/views/SettingsView.vue'), props: true },
+        { path: 'notifications', name: 'notifications', component: () => import('@/views/NotificationsView.vue') },
       ]
     },
     { path: '/login', name: 'login', component: () => import('@/views/LoginView.vue') },

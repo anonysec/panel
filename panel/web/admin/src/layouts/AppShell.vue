@@ -71,7 +71,7 @@ async function handleLogout() {
 
 function handleNotifications() {
   realtimeStore.markAllRead()
-  router.push({ name: 'tickets' })
+  router.push({ name: 'notifications' })
 }
 </script>
 

@@ -13,6 +13,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'nav.plans': 'Plans',
     'nav.settings': 'Settings',
     'nav.tickets': 'Tickets',
+    'nav.notifications': 'Notifications',
     // Page titles
     'page.dashboard': 'Dashboard',
     'page.transactions': 'Transactions',
@@ -183,6 +184,11 @@ const messages: Record<Locale, Record<string, string>> = {
     'nodes.enable_logs': 'Enable Logs',
     // Topbar
     'topbar.search': 'Search...',
+    // Notifications
+    'notifications.title': 'Notifications',
+    'notifications.empty': 'No notifications yet',
+    'notifications.mark_read': 'Mark as read',
+    'notifications.mark_all_read': 'Mark all read',
   },
   fa: {
     // Navigation
@@ -193,6 +199,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'nav.plans': 'پلن‌ها',
     'nav.settings': 'تنظیمات',
     'nav.tickets': 'تیکت‌ها',
+    'nav.notifications': 'اعلان‌ها',
     // Page titles
     'page.dashboard': 'داشبورد',
     'page.transactions': 'تراکنش‌ها',
@@ -363,6 +370,11 @@ const messages: Record<Locale, Record<string, string>> = {
     'nodes.enable_logs': 'فعال‌سازی لاگ',
     // Topbar
     'topbar.search': 'جستجو...',
+    // Notifications
+    'notifications.title': 'اعلان‌ها',
+    'notifications.empty': 'هنوز اعلانی وجود ندارد',
+    'notifications.mark_read': 'علامت‌گذاری به عنوان خوانده شده',
+    'notifications.mark_all_read': 'همه را خوانده علامت بزن',
   },
   zh: {
     // Navigation
@@ -373,6 +385,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'nav.plans': '套餐',
     'nav.settings': '设置',
     'nav.tickets': '工单',
+    'nav.notifications': '通知',
     // Page titles
     'page.dashboard': '仪表盘',
     'page.transactions': '交易记录',
@@ -543,6 +556,11 @@ const messages: Record<Locale, Record<string, string>> = {
     'nodes.enable_logs': '启用日志',
     // Topbar
     'topbar.search': '搜索...',
+    // Notifications
+    'notifications.title': '通知',
+    'notifications.empty': '暂无通知',
+    'notifications.mark_read': '标记已读',
+    'notifications.mark_all_read': '全部标记已读',
   }
 }
 

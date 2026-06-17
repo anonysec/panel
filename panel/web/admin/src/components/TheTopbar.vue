@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import type { Breadcrumb } from '@koris/types/components'
 import { useI18n } from '@koris/composables/useI18n'
-import type { Locale } from '@koris/composables/useI18n'
+import { useRealtimeStore } from '@/stores/realtime'
 
-const { t, locale, setLocale } = useI18n()
+const { t } = useI18n()
+const router = useRouter()
+const realtimeStore = useRealtimeStore()
 
 export interface Props {
   title: string
@@ -31,6 +34,49 @@ const shortcutLabel = computed(() => {
     (/mac/i.test(navigator.platform) || /macintosh/i.test(navigator.userAgent))
   return isMac ? 'Cmd+K' : 'Ctrl+K'
 })
+
+// Notification dropdown hover state
+const showNotifDropdown = ref(false)
+let hideTimeout: ReturnType<typeof setTimeout> | null = null
+
+function onBellEnter() {
+  if (hideTimeout) {
+    clearTimeout(hideTimeout)
+    hideTimeout = null
+  }
+  showNotifDropdown.value = true
+}
+
+function onBellLeave() {
+  hideTimeout = setTimeout(() => {
+    showNotifDropdown.value = false
+  }, 200)
+}
+
+function onBellClick() {
+  showNotifDropdown.value = false
+  router.push({ name: 'notifications' })
+}
+
+// Get recent notifications (last 5)
+const recentNotifications = computed(() => realtimeStore.notifications.slice(0, 5))
+
+function formatTime(timestamp: string): string {
+  try {
+    const date = new Date(timestamp)
+    const now = new Date()
+    const diff = now.getTime() - date.getTime()
+    const minutes = Math.floor(diff / 60000)
+    if (minutes < 1) return 'just now'
+    if (minutes < 60) return `${minutes}m ago`
+    const hours = Math.floor(minutes / 60)
+    if (hours < 24) return `${hours}h ago`
+    const days = Math.floor(hours / 24)
+    return `${days}d ago`
+  } catch {
+    return ''
+  }
+}
 </script>
 
 <template>
@@ -98,36 +144,73 @@ const shortcutLabel = computed(() => {
         <kbd class="search-shortcut">{{ shortcutLabel }}</kbd>
       </button>
 
-      <!-- Language Switcher -->
-      <div class="lang-switcher" role="group" aria-label="Language switcher">
-        <button
-          v-for="lang in (['en', 'fa', 'zh'] as Locale[])"
-          :key="lang"
-          :class="['lang-btn', { 'lang-btn--active': locale === lang }]"
-          @click="setLocale(lang)"
-        >
-          {{ lang === 'en' ? 'EN' : lang === 'fa' ? 'FA' : 'ZH' }}
-        </button>
-      </div>
-
-      <!-- Notification bell -->
-      <button
-        class="icon-btn"
-        title="Notifications"
-        aria-label="Notifications"
-        @click="emit('open-notifications')"
+      <!-- Notification bell with badge and dropdown -->
+      <div
+        class="notif-bell-wrapper"
+        @mouseenter="onBellEnter"
+        @mouseleave="onBellLeave"
       >
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          aria-hidden="true"
+        <button
+          class="icon-btn"
+          :title="t('nav.notifications')"
+          :aria-label="t('nav.notifications')"
+          @click="onBellClick"
         >
-          <path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
-          <path d="M13.7 21a2 2 0 01-3.4 0" />
-        </svg>
-      </button>
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            aria-hidden="true"
+          >
+            <path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+            <path d="M13.7 21a2 2 0 01-3.4 0" />
+          </svg>
+          <span v-if="notificationCount > 0" class="notif-badge">
+            {{ notificationCount > 99 ? '99+' : notificationCount }}
+          </span>
+        </button>
+
+        <!-- Hover dropdown -->
+        <div v-if="showNotifDropdown" class="notif-dropdown">
+          <div class="notif-head">
+            <b>{{ t('nav.notifications') }}</b>
+            <button
+              v-if="notificationCount > 0"
+              class="notif-mark-all"
+              @click.stop="realtimeStore.markAllRead()"
+            >
+              {{ t('notifications.mark_all_read') }}
+            </button>
+          </div>
+          <div class="notif-list">
+            <div
+              v-for="notif in recentNotifications"
+              :key="notif.id"
+              class="notif-item"
+              :class="{ 'notif-item--unread': !notif.read }"
+            >
+              <div class="notif-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                  <path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+                </svg>
+              </div>
+              <div class="notif-text">
+                <b>{{ notif.message }}</b>
+                <span>{{ formatTime(notif.timestamp) }}</span>
+              </div>
+            </div>
+            <div v-if="recentNotifications.length === 0" class="notif-empty">
+              {{ t('notifications.empty') }}
+            </div>
+          </div>
+          <div v-if="recentNotifications.length > 0" class="notif-footer">
+            <button class="notif-view-all" @click="onBellClick">
+              {{ t('btn.view_all') }}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -267,6 +350,11 @@ const shortcutLabel = computed(() => {
   flex-shrink: 0;
 }
 
+/* Notification bell wrapper */
+.notif-bell-wrapper {
+  position: relative;
+}
+
 /* Icon button */
 .icon-btn {
   width: 38px;
@@ -298,37 +386,147 @@ const shortcutLabel = computed(() => {
   height: 16px;
 }
 
-/* Language Switcher */
-.lang-switcher {
+/* Notification badge */
+.notif-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
   display: flex;
   align-items: center;
+  justify-content: center;
+  line-height: 1;
+  border: 2px solid var(--color-surface, #0b1120);
+}
+
+/* Notification dropdown (scoped overrides for positioning) */
+.notif-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 320px;
+  background: var(--color-surface, #0b1120);
   border: 1px solid var(--color-border, #28333f);
-  border-radius: var(--radius-md, 8px);
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+  z-index: 100;
   overflow: hidden;
 }
 
-.lang-btn {
-  padding: var(--space-1, 4px) var(--space-2, 8px);
-  border: none;
-  background: var(--color-surface, #0b1120);
-  color: var(--color-muted, #8b98a5);
-  font-size: var(--text-xs, 11px);
-  font-weight: var(--font-medium, 500);
-  cursor: pointer;
-  transition: all var(--duration-fast, 0.12s);
+.notif-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-border, #28333f);
 }
 
-.lang-btn:not(:last-child) {
-  border-right: 1px solid var(--color-border, #28333f);
-}
-
-.lang-btn:hover {
+.notif-head b {
+  font-size: 13px;
   color: var(--color-text, #e6edf3);
+}
+
+.notif-mark-all {
+  font-size: 11px;
+  color: var(--color-primary, #2563eb);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.notif-mark-all:hover {
+  text-decoration: underline;
+}
+
+.notif-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.notif-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.notif-item:hover {
   background: var(--color-surface-2, #1e2630);
 }
 
-.lang-btn--active {
+.notif-item + .notif-item {
+  border-top: 1px solid var(--color-border, #28333f);
+}
+
+.notif-item--unread {
+  background: rgba(37, 99, 235, 0.05);
+}
+
+.notif-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: var(--color-surface-2, #1e2630);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--color-muted, #8b98a5);
+}
+
+.notif-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.notif-text b {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--color-text, #e6edf3);
+}
+
+.notif-text span {
+  display: block;
+  font-size: 11px;
+  color: var(--color-muted, #8b98a5);
+  margin-top: 2px;
+}
+
+.notif-empty {
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--color-muted, #8b98a5);
+  font-size: 12.5px;
+}
+
+.notif-footer {
+  border-top: 1px solid var(--color-border, #28333f);
+  padding: 8px 16px;
+  text-align: center;
+}
+
+.notif-view-all {
+  font-size: 12px;
   color: var(--color-primary, #2563eb);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm, 4px);
+}
+
+.notif-view-all:hover {
   background: rgba(37, 99, 235, 0.1);
 }
 
@@ -343,6 +541,11 @@ const shortcutLabel = computed(() => {
     width: 36px;
     padding: 0;
     justify-content: center;
+  }
+
+  .notif-dropdown {
+    width: 280px;
+    right: -8px;
   }
 }
 </style>
