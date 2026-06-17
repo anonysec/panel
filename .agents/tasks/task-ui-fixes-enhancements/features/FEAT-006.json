@@ -1,0 +1,30 @@
+{
+  "id": "FEAT-006",
+  "type": "fix",
+  "description": "Review fix pass: Fix 6 issues identified in 2025-06-17 review - notification bell dead-end, VPN Cores i18n gap (~30 labels), Telegram settings uncontrolled form, import backup label clarification, confirm dialog hardcoded strings, and token banner/empty-state hardcoded strings.",
+  "status": "in_progress",
+  "steps": [
+    "Fix handleNotifications in AppShell.vue to navigate to 'tickets' route instead of removed 'audit-logs' tab",
+    "Add ~35 i18n keys for VPN Cores protocol field labels to i18n.ts (EN, FA, ZH) and use t() in NodesView.vue template",
+    "Wire Telegram settings form: add telegramToken/telegramChatId refs, v-model bindings, load from GET /api/panel-settings, save with PATCH /api/panel-settings",
+    "Clarify import backup label text",
+    "Add i18n keys for handleDeleteNode confirm dialog and use t()",
+    "Add i18n keys for token banner and empty states, use t() in template"
+  ],
+  "acceptance_criteria": [
+    "Notification bell navigates to tickets route",
+    "All VPN Cores form field labels use t() with proper translations in EN/FA/ZH",
+    "Telegram form has v-model bindings and functional save that calls PATCH /api/panel-settings",
+    "Import backup button shows clear 'coming soon' label",
+    "Confirm dialog for delete node uses t() translated strings",
+    "Token banner and empty states use t() translated strings",
+    "vue-tsc --noEmit passes",
+    "vite build succeeds"
+  ],
+  "verification": [
+    "cd panel/web/admin && npx vue-tsc --noEmit",
+    "cd panel/web/admin && npx vite build"
+  ],
+  "blocked_reason": null,
+  "findings": null
+}

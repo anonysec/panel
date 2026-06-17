@@ -70,9 +70,8 @@ async function handleLogout() {
 }
 
 function handleNotifications() {
-  // Navigate to settings audit logs which shows system events
-  // TODO: Replace with proper notification dropdown component
-  router.push({ name: 'settings', params: { tab: 'audit-logs' } })
+  realtimeStore.markAllRead()
+  router.push({ name: 'tickets' })
 }
 </script>
 

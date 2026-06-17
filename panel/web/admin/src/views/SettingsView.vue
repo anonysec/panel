@@ -114,6 +114,38 @@ async function saveThresholds(): Promise<void> {
   }
 }
 
+// ─── Telegram Bot Settings ───────────────────────────────────────────────────
+const telegramToken = ref('')
+const telegramChatId = ref('')
+const savingTelegram = ref(false)
+
+async function loadTelegramSettings(): Promise<void> {
+  try {
+    const res = await get<{ ok: boolean; settings: Record<string, string> }>('/api/panel-settings')
+    if (res.settings) {
+      telegramToken.value = res.settings.telegram_token || ''
+      telegramChatId.value = res.settings.telegram_chat_id || ''
+    }
+  } catch {
+    // Use defaults on error
+  }
+}
+
+async function saveTelegramSettings(): Promise<void> {
+  savingTelegram.value = true
+  try {
+    await patch<{ ok: boolean }>('/api/panel-settings', {
+      telegram_token: telegramToken.value,
+      telegram_chat_id: telegramChatId.value,
+    })
+    toast.success('Telegram settings saved successfully.')
+  } catch {
+    toast.error('Failed to save Telegram settings.')
+  } finally {
+    savingTelegram.value = false
+  }
+}
+
 // ─── Backup ─────────────────────────────────────────────────────────────────
 const importFileInput = ref<HTMLInputElement | null>(null)
 
@@ -147,7 +179,7 @@ function handleImportFile(event: Event): void {
 }
 
 onMounted(async () => {
-  await Promise.all([loadPanelSettings(), loadThresholds()])
+  await Promise.all([loadPanelSettings(), loadThresholds(), loadTelegramSettings()])
 })
 </script>
 
@@ -247,18 +279,18 @@ onMounted(async () => {
       <template #telegram>
         <div class="settings-panel">
           <h4 class="section-title">{{ t('settings.telegram') }}</h4>
-          <form class="settings-form">
+          <form class="settings-form" @submit.prevent="saveTelegramSettings">
             <KFormField name="tg-token" :label="t('settings.telegram_token')" hint="Get this from @BotFather">
               <template #default="{ fieldId }">
-                <KInput :id="fieldId" placeholder="123456:ABC-DEF..." type="password" />
+                <KInput :id="fieldId" v-model="telegramToken" placeholder="123456:ABC-DEF..." type="password" />
               </template>
             </KFormField>
             <KFormField name="tg-chat" :label="t('settings.telegram_chat')">
               <template #default="{ fieldId }">
-                <KInput :id="fieldId" placeholder="-1001234567890" />
+                <KInput :id="fieldId" v-model="telegramChatId" placeholder="-1001234567890" />
               </template>
             </KFormField>
-            <KButton variant="primary" size="sm">{{ t('settings.save_telegram') }}</KButton>
+            <KButton type="submit" variant="primary" size="sm" :loading="savingTelegram">{{ t('settings.save_telegram') }}</KButton>
           </form>
         </div>
       </template>

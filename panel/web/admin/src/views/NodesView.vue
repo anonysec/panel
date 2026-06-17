@@ -132,19 +132,19 @@ async function toggleNode(id: number, currentStatus: string) {
 
 async function handleDeleteNode(id: number, name: string) {
   const confirmed = await confirm({
-    title: 'Delete Node',
-    message: `Are you sure you want to delete "${name}"? This will remove the node and all related configurations.`,
+    title: t('nodes.confirm_delete_title'),
+    message: t('nodes.confirm_delete_msg').replace('{name}', name),
     variant: 'danger',
     icon: '⚠',
-    confirmText: 'Delete',
-    cancelText: 'Cancel',
+    confirmText: t('btn.delete'),
+    cancelText: t('btn.cancel'),
   })
   if (!confirmed) return
   const success = await store.deleteNode(id)
   if (success) {
-    toast.success(`Node "${name}" deleted successfully.`)
+    toast.success(t('nodes.deleted_success').replace('{name}', name))
   } else {
-    toast.error(`Failed to delete node "${name}".`)
+    toast.error(t('nodes.deleted_error').replace('{name}', name))
   }
 }
 
@@ -251,8 +251,8 @@ onMounted(() => {
     <!-- New Token Display -->
     <div v-if="newToken" class="token-banner">
       <p><strong>Node Token:</strong> <code>{{ newToken }}</code></p>
-      <p class="text-muted text-sm">Save this token — it won't be shown again.</p>
-      <KButton variant="ghost" size="sm" @click="newToken = null">Dismiss</KButton>
+      <p class="text-muted text-sm">{{ t('nodes.token_save_warning') }}</p>
+      <KButton variant="ghost" size="sm" @click="newToken = null">{{ t('nodes.dismiss') }}</KButton>
     </div>
 
     <!-- Add Node Form -->
@@ -294,8 +294,8 @@ onMounted(() => {
           <KEmptyState
             v-else-if="store.list.length === 0"
             icon="🖥️"
-            title="No Nodes"
-            description="Add your first VPN node to get started."
+            :title="t('nodes.no_nodes')"
+            :description="t('nodes.no_nodes_desc')"
           />
           <div v-else class="nodes-grid">
             <div v-for="node in store.list" :key="node.id" class="node-card">
@@ -353,8 +353,8 @@ onMounted(() => {
           <KEmptyState
             v-if="store.list.length === 0"
             icon="⚡"
-            title="No Nodes"
-            description="Add nodes first to view their protocol cores."
+            :title="t('nodes.no_nodes')"
+            :description="t('nodes.no_nodes_cores')"
           />
           <div v-else class="cores-grid">
             <div v-for="node in store.list" :key="node.id" class="core-node-section">
@@ -416,27 +416,27 @@ onMounted(() => {
 
                       <!-- OpenVPN specific fields -->
                       <template v-if="proto === 'openvpn'">
-                        <KFormField :name="`${proto}-transport`" label="Transport">
+                        <KFormField :name="`${proto}-transport`" :label="t('nodes.transport')">
                           <template #default="{ fieldId }">
                             <KSelect :id="fieldId" v-model="configForm.extra_json.transport" :options="[{ label: 'UDP', value: 'udp' }, { label: 'TCP', value: 'tcp' }]" />
                           </template>
                         </KFormField>
-                        <KFormField :name="`${proto}-cipher`" label="Cipher">
+                        <KFormField :name="`${proto}-cipher`" :label="t('nodes.cipher')">
                           <template #default="{ fieldId }">
                             <KSelect :id="fieldId" v-model="configForm.extra_json.cipher" :options="[{ label: 'AES-256-GCM', value: 'AES-256-GCM' }, { label: 'AES-128-GCM', value: 'AES-128-GCM' }, { label: 'CHACHA20-POLY1305', value: 'CHACHA20-POLY1305' }]" />
                           </template>
                         </KFormField>
-                        <KFormField :name="`${proto}-tls`" label="TLS Mode">
+                        <KFormField :name="`${proto}-tls`" :label="t('nodes.tls_mode')">
                           <template #default="{ fieldId }">
                             <KSelect :id="fieldId" v-model="configForm.extra_json.tls_mode" :options="[{ label: 'tls-crypt', value: 'tls-crypt' }, { label: 'tls-auth', value: 'tls-auth' }, { label: 'none', value: 'none' }]" />
                           </template>
                         </KFormField>
-                        <KFormField :name="`${proto}-dns1`" label="DNS 1">
+                        <KFormField :name="`${proto}-dns1`" :label="t('nodes.dns1')">
                           <template #default="{ fieldId }">
                             <KInput :id="fieldId" v-model="configForm.extra_json.dns1" placeholder="8.8.8.8" />
                           </template>
                         </KFormField>
-                        <KFormField :name="`${proto}-dns2`" label="DNS 2">
+                        <KFormField :name="`${proto}-dns2`" :label="t('nodes.dns2')">
                           <template #default="{ fieldId }">
                             <KInput :id="fieldId" v-model="configForm.extra_json.dns2" placeholder="8.8.4.4" />
                           </template>
@@ -446,27 +446,27 @@ onMounted(() => {
 
                       <!-- L2TP specific fields -->
                       <template v-if="proto === 'l2tp'">
-                        <KFormField :name="`${proto}-ipsec`" label="Mode">
+                        <KFormField :name="`${proto}-ipsec`" :label="t('nodes.mode')">
                           <template #default="{ fieldId }">
                             <KSelect :id="fieldId" v-model="configForm.extra_json.ipsec_mode" :options="[{ label: 'L2TP/IPSec', value: 'ipsec' }, { label: 'Plain L2TP', value: 'plain' }]" />
                           </template>
                         </KFormField>
-                        <KFormField v-if="configForm.extra_json.ipsec_mode === 'ipsec'" :name="`${proto}-psk`" label="Pre-Shared Key">
+                        <KFormField v-if="configForm.extra_json.ipsec_mode === 'ipsec'" :name="`${proto}-psk`" :label="t('nodes.psk')">
                           <template #default="{ fieldId }">
                             <KInput :id="fieldId" v-model="configForm.extra_json.psk" type="password" placeholder="PSK" />
                           </template>
                         </KFormField>
-                        <KFormField :name="`${proto}-auth`" label="Auth Method">
+                        <KFormField :name="`${proto}-auth`" :label="t('nodes.auth_method')">
                           <template #default="{ fieldId }">
                             <KSelect :id="fieldId" v-model="configForm.extra_json.auth_method" :options="[{ label: 'CHAP', value: 'CHAP' }, { label: 'PAP', value: 'PAP' }, { label: 'MS-CHAPv2', value: 'MS-CHAPv2' }]" />
                           </template>
                         </KFormField>
-                        <KFormField :name="`${proto}-dns1`" label="DNS 1">
+                        <KFormField :name="`${proto}-dns1`" :label="t('nodes.dns1')">
                           <template #default="{ fieldId }">
                             <KInput :id="fieldId" v-model="configForm.extra_json.dns1" placeholder="8.8.8.8" />
                           </template>
                         </KFormField>
-                        <KFormField :name="`${proto}-dns2`" label="DNS 2">
+                        <KFormField :name="`${proto}-dns2`" :label="t('nodes.dns2')">
                           <template #default="{ fieldId }">
                             <KInput :id="fieldId" v-model="configForm.extra_json.dns2" placeholder="8.8.4.4" />
                           </template>
@@ -475,27 +475,27 @@ onMounted(() => {
 
                       <!-- IKEv2 specific fields -->
                       <template v-if="proto === 'ikev2'">
-                        <KFormField :name="`${proto}-authtype`" label="Auth Type">
+                        <KFormField :name="`${proto}-authtype`" :label="t('nodes.auth_type')">
                           <template #default="{ fieldId }">
                             <KSelect :id="fieldId" v-model="configForm.extra_json.auth_type" :options="[{ label: 'PSK', value: 'psk' }, { label: 'Certificate', value: 'certificate' }]" />
                           </template>
                         </KFormField>
-                        <KFormField v-if="configForm.extra_json.auth_type === 'psk'" :name="`${proto}-psk`" label="Pre-Shared Key">
+                        <KFormField v-if="configForm.extra_json.auth_type === 'psk'" :name="`${proto}-psk`" :label="t('nodes.psk')">
                           <template #default="{ fieldId }">
                             <KInput :id="fieldId" v-model="configForm.extra_json.psk" type="password" placeholder="PSK" />
                           </template>
                         </KFormField>
-                        <KFormField v-if="configForm.extra_json.auth_type === 'certificate'" :name="`${proto}-certid`" label="Certificate ID">
+                        <KFormField v-if="configForm.extra_json.auth_type === 'certificate'" :name="`${proto}-certid`" :label="t('nodes.cert_id')">
                           <template #default="{ fieldId }">
                             <KInput :id="fieldId" v-model="configForm.extra_json.cert_id" placeholder="Certificate identifier" />
                           </template>
                         </KFormField>
-                        <KFormField :name="`${proto}-dns1`" label="DNS 1">
+                        <KFormField :name="`${proto}-dns1`" :label="t('nodes.dns1')">
                           <template #default="{ fieldId }">
                             <KInput :id="fieldId" v-model="configForm.extra_json.dns1" placeholder="8.8.8.8" />
                           </template>
                         </KFormField>
-                        <KFormField :name="`${proto}-dns2`" label="DNS 2">
+                        <KFormField :name="`${proto}-dns2`" :label="t('nodes.dns2')">
                           <template #default="{ fieldId }">
                             <KInput :id="fieldId" v-model="configForm.extra_json.dns2" placeholder="8.8.4.4" />
                           </template>
@@ -504,12 +504,12 @@ onMounted(() => {
 
                       <!-- SSH specific fields -->
                       <template v-if="proto === 'ssh'">
-                        <KFormField :name="`${proto}-listen`" label="Listen Address">
+                        <KFormField :name="`${proto}-listen`" :label="t('nodes.listen_address')">
                           <template #default="{ fieldId }">
                             <KInput :id="fieldId" v-model="configForm.extra_json.listen_address" placeholder="0.0.0.0" />
                           </template>
                         </KFormField>
-                        <KFormField :name="`${proto}-keytype`" label="Key Type">
+                        <KFormField :name="`${proto}-keytype`" :label="t('nodes.key_type')">
                           <template #default="{ fieldId }">
                             <KSelect :id="fieldId" v-model="configForm.extra_json.key_type" :options="[{ label: 'ed25519', value: 'ed25519' }, { label: 'rsa', value: 'rsa' }, { label: 'ecdsa', value: 'ecdsa' }]" />
                           </template>
@@ -524,32 +524,32 @@ onMounted(() => {
 
                         <!-- OpenVPN Protocol Options -->
                         <template v-if="proto === 'openvpn'">
-                          <KFormField :name="`${proto}-topology`" label="Topology">
+                          <KFormField :name="`${proto}-topology`" :label="t('nodes.topology')">
                             <template #default="{ fieldId }">
                               <KSelect :id="fieldId" v-model="configForm.extra_json.topology" :options="[{ label: 'subnet', value: 'subnet' }, { label: 'net30', value: 'net30' }, { label: 'p2p', value: 'p2p' }]" />
                             </template>
                           </KFormField>
-                          <KFormField :name="`${proto}-keepalive`" label="Keepalive">
+                          <KFormField :name="`${proto}-keepalive`" :label="t('nodes.keepalive')">
                             <template #default="{ fieldId }">
                               <KInput :id="fieldId" v-model="configForm.extra_json.keepalive" placeholder="10 120" />
                             </template>
                           </KFormField>
-                          <KFormField :name="`${proto}-fragment`" label="Fragment (0 = disabled)">
+                          <KFormField :name="`${proto}-fragment`" :label="t('nodes.fragment')">
                             <template #default="{ fieldId }">
                               <KInput :id="fieldId" v-model="configForm.extra_json.fragment" type="number" placeholder="0" />
                             </template>
                           </KFormField>
-                          <KFormField :name="`${proto}-mssfix`" label="MSS Fix (0 = disabled)">
+                          <KFormField :name="`${proto}-mssfix`" :label="t('nodes.mssfix')">
                             <template #default="{ fieldId }">
                               <KInput :id="fieldId" v-model="configForm.extra_json.mssfix" type="number" placeholder="0" />
                             </template>
                           </KFormField>
-                          <KFormField :name="`${proto}-verb`" label="Verbosity (0-11)">
+                          <KFormField :name="`${proto}-verb`" :label="t('nodes.verbosity')">
                             <template #default="{ fieldId }">
                               <KInput :id="fieldId" v-model="configForm.extra_json.verb" type="number" placeholder="3" />
                             </template>
                           </KFormField>
-                          <KFormField :name="`${proto}-comp-lzo`" label="Comp-LZO">
+                          <KFormField :name="`${proto}-comp-lzo`" :label="t('nodes.comp_lzo')">
                             <template #default>
                               <label class="toggle-switch">
                                 <input
@@ -561,12 +561,12 @@ onMounted(() => {
                               </label>
                             </template>
                           </KFormField>
-                          <KFormField :name="`${proto}-push-routes`" label="Push Routes (comma-separated)" class="protocol-options__full-width">
+                          <KFormField :name="`${proto}-push-routes`" :label="t('nodes.push_routes')" class="protocol-options__full-width">
                             <template #default="{ fieldId }">
                               <KTextarea :id="fieldId" v-model="configForm.extra_json.push_routes" :rows="2" placeholder="192.168.1.0/24, 10.0.0.0/8" />
                             </template>
                           </KFormField>
-                          <KFormField :name="`${proto}-custom-directives`" label="Custom Directives" class="protocol-options__full-width">
+                          <KFormField :name="`${proto}-custom-directives`" :label="t('nodes.custom_directives')" class="protocol-options__full-width">
                             <template #default="{ fieldId }">
                               <KTextarea :id="fieldId" v-model="configForm.extra_json.custom_directives" :rows="3" placeholder="One directive per line" />
                             </template>
@@ -575,22 +575,22 @@ onMounted(() => {
 
                         <!-- L2TP Protocol Options -->
                         <template v-if="proto === 'l2tp'">
-                          <KFormField :name="`${proto}-lcp-echo-interval`" label="LCP Echo Interval">
+                          <KFormField :name="`${proto}-lcp-echo-interval`" :label="t('nodes.lcp_echo_interval')">
                             <template #default="{ fieldId }">
                               <KInput :id="fieldId" v-model="configForm.extra_json.lcp_echo_interval" type="number" placeholder="30" />
                             </template>
                           </KFormField>
-                          <KFormField :name="`${proto}-lcp-echo-failure`" label="LCP Echo Failure">
+                          <KFormField :name="`${proto}-lcp-echo-failure`" :label="t('nodes.lcp_echo_failure')">
                             <template #default="{ fieldId }">
                               <KInput :id="fieldId" v-model="configForm.extra_json.lcp_echo_failure" type="number" placeholder="4" />
                             </template>
                           </KFormField>
-                          <KFormField :name="`${proto}-idle-timeout`" label="Idle Timeout (0 = disabled)">
+                          <KFormField :name="`${proto}-idle-timeout`" :label="t('nodes.idle_timeout')">
                             <template #default="{ fieldId }">
                               <KInput :id="fieldId" v-model="configForm.extra_json.idle_timeout" type="number" placeholder="0" />
                             </template>
                           </KFormField>
-                          <KFormField :name="`${proto}-refuse-chap`" label="Refuse CHAP">
+                          <KFormField :name="`${proto}-refuse-chap`" :label="t('nodes.refuse_chap')">
                             <template #default>
                               <label class="toggle-switch">
                                 <input
@@ -602,7 +602,7 @@ onMounted(() => {
                               </label>
                             </template>
                           </KFormField>
-                          <KFormField :name="`${proto}-refuse-pap`" label="Refuse PAP">
+                          <KFormField :name="`${proto}-refuse-pap`" :label="t('nodes.refuse_pap')">
                             <template #default>
                               <label class="toggle-switch">
                                 <input
@@ -614,7 +614,7 @@ onMounted(() => {
                               </label>
                             </template>
                           </KFormField>
-                          <KFormField :name="`${proto}-require-mschap-v2`" label="Require MS-CHAPv2">
+                          <KFormField :name="`${proto}-require-mschap-v2`" :label="t('nodes.require_mschapv2')">
                             <template #default>
                               <label class="toggle-switch">
                                 <input
@@ -630,42 +630,42 @@ onMounted(() => {
 
                         <!-- IKEv2 Protocol Options -->
                         <template v-if="proto === 'ikev2'">
-                          <KFormField :name="`${proto}-dpd-interval`" label="DPD Interval (sec)">
+                          <KFormField :name="`${proto}-dpd-interval`" :label="t('nodes.dpd_interval')">
                             <template #default="{ fieldId }">
                               <KInput :id="fieldId" v-model="configForm.extra_json.dpd_interval" type="number" placeholder="30" />
                             </template>
                           </KFormField>
-                          <KFormField :name="`${proto}-dpd-timeout`" label="DPD Timeout (sec)">
+                          <KFormField :name="`${proto}-dpd-timeout`" :label="t('nodes.dpd_timeout')">
                             <template #default="{ fieldId }">
                               <KInput :id="fieldId" v-model="configForm.extra_json.dpd_timeout" type="number" placeholder="150" />
                             </template>
                           </KFormField>
-                          <KFormField :name="`${proto}-rekey-time`" label="Rekey Time">
+                          <KFormField :name="`${proto}-rekey-time`" :label="t('nodes.rekey_time')">
                             <template #default="{ fieldId }">
                               <KInput :id="fieldId" v-model="configForm.extra_json.rekey_time" placeholder="4h" />
                             </template>
                           </KFormField>
-                          <KFormField :name="`${proto}-ike-proposals`" label="IKE Proposals">
+                          <KFormField :name="`${proto}-ike-proposals`" :label="t('nodes.ike_proposals')">
                             <template #default="{ fieldId }">
                               <KInput :id="fieldId" v-model="configForm.extra_json.ike_proposals" placeholder="aes256-sha256-modp2048" />
                             </template>
                           </KFormField>
-                          <KFormField :name="`${proto}-esp-proposals`" label="ESP Proposals">
+                          <KFormField :name="`${proto}-esp-proposals`" :label="t('nodes.esp_proposals')">
                             <template #default="{ fieldId }">
                               <KInput :id="fieldId" v-model="configForm.extra_json.esp_proposals" placeholder="aes256-sha256" />
                             </template>
                           </KFormField>
-                          <KFormField :name="`${proto}-left-id`" label="Left ID">
+                          <KFormField :name="`${proto}-left-id`" :label="t('nodes.left_id')">
                             <template #default="{ fieldId }">
                               <KInput :id="fieldId" v-model="configForm.extra_json.left_id" placeholder="Server identity" />
                             </template>
                           </KFormField>
-                          <KFormField :name="`${proto}-right-id`" label="Right ID">
+                          <KFormField :name="`${proto}-right-id`" :label="t('nodes.right_id')">
                             <template #default="{ fieldId }">
                               <KInput :id="fieldId" v-model="configForm.extra_json.right_id" placeholder="%any" />
                             </template>
                           </KFormField>
-                          <KFormField :name="`${proto}-fragment-size`" label="Fragment Size (0 = disabled)">
+                          <KFormField :name="`${proto}-fragment-size`" :label="t('nodes.fragment_size')">
                             <template #default="{ fieldId }">
                               <KInput :id="fieldId" v-model="configForm.extra_json.fragment_size" type="number" placeholder="0" />
                             </template>
@@ -674,17 +674,17 @@ onMounted(() => {
 
                         <!-- SSH Protocol Options -->
                         <template v-if="proto === 'ssh'">
-                          <KFormField :name="`${proto}-max-sessions`" label="Max Sessions">
+                          <KFormField :name="`${proto}-max-sessions`" :label="t('nodes.max_sessions')">
                             <template #default="{ fieldId }">
                               <KInput :id="fieldId" v-model="configForm.extra_json.max_sessions" type="number" placeholder="10" />
                             </template>
                           </KFormField>
-                          <KFormField :name="`${proto}-idle-timeout`" label="Idle Timeout (0 = disabled)">
+                          <KFormField :name="`${proto}-idle-timeout`" :label="t('nodes.idle_timeout')">
                             <template #default="{ fieldId }">
                               <KInput :id="fieldId" v-model="configForm.extra_json.idle_timeout" type="number" placeholder="0" />
                             </template>
                           </KFormField>
-                          <KFormField :name="`${proto}-shell-access`" label="Shell Access">
+                          <KFormField :name="`${proto}-shell-access`" :label="t('nodes.shell_access')">
                             <template #default>
                               <label class="toggle-switch">
                                 <input
@@ -696,7 +696,7 @@ onMounted(() => {
                               </label>
                             </template>
                           </KFormField>
-                          <KFormField :name="`${proto}-allowed-keys`" label="Allowed Keys (one per line)" class="protocol-options__full-width">
+                          <KFormField :name="`${proto}-allowed-keys`" :label="t('nodes.allowed_keys')" class="protocol-options__full-width">
                             <template #default="{ fieldId }">
                               <KTextarea :id="fieldId" v-model="configForm.extra_json.allowed_keys" :rows="3" placeholder="ssh-ed25519 AAAA..." />
                             </template>
@@ -711,25 +711,25 @@ onMounted(() => {
                       <summary class="advanced-settings__title">{{ t('nodes.advanced') }}</summary>
                       <div class="protocol-form__grid advanced-settings__grid">
                         <!-- MTU: all protocols except SSH -->
-                        <KFormField v-if="proto !== 'ssh'" :name="`${proto}-mtu`" label="MTU">
+                        <KFormField v-if="proto !== 'ssh'" :name="`${proto}-mtu`" :label="t('nodes.mtu')">
                           <template #default="{ fieldId }">
                             <KInput :id="fieldId" v-model="configForm.mtu" type="number" placeholder="1500" />
                           </template>
                         </KFormField>
                         <!-- Max Clients: all protocols -->
-                        <KFormField :name="`${proto}-max-clients`" label="Max Clients (0 = unlimited)">
+                        <KFormField :name="`${proto}-max-clients`" :label="t('nodes.max_clients')">
                           <template #default="{ fieldId }">
                             <KInput :id="fieldId" v-model="configForm.max_clients" type="number" placeholder="0" />
                           </template>
                         </KFormField>
                         <!-- Connection Limit: all protocols -->
-                        <KFormField :name="`${proto}-conn-limit`" label="Conn Limit (0 = unlimited)">
+                        <KFormField :name="`${proto}-conn-limit`" :label="t('nodes.conn_limit')">
                           <template #default="{ fieldId }">
                             <KInput :id="fieldId" v-model="configForm.conn_limit" type="number" placeholder="0" />
                           </template>
                         </KFormField>
                         <!-- Enable Logs: all protocols -->
-                        <KFormField :name="`${proto}-enable-logs`" label="Enable Logs">
+                        <KFormField :name="`${proto}-enable-logs`" :label="t('nodes.enable_logs')">
                           <template #default>
                             <label class="toggle-switch">
                               <input
