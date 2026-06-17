@@ -14,6 +14,9 @@ const messages: Record<Locale, Record<string, string>> = {
     'nav.settings': 'Settings',
     'nav.tickets': 'Tickets',
     'nav.notifications': 'Notifications',
+    'nav.group_overview': 'Overview',
+    'nav.group_manage': 'Manage',
+    'nav.group_system': 'System',
     // Page titles
     'page.dashboard': 'Dashboard',
     'page.transactions': 'Transactions',
@@ -200,6 +203,9 @@ const messages: Record<Locale, Record<string, string>> = {
     'nav.settings': 'تنظیمات',
     'nav.tickets': 'تیکت‌ها',
     'nav.notifications': 'اعلان‌ها',
+    'nav.group_overview': 'نمای کلی',
+    'nav.group_manage': 'مدیریت',
+    'nav.group_system': 'سیستم',
     // Page titles
     'page.dashboard': 'داشبورد',
     'page.transactions': 'تراکنش‌ها',
@@ -386,6 +392,9 @@ const messages: Record<Locale, Record<string, string>> = {
     'nav.settings': '设置',
     'nav.tickets': '工单',
     'nav.notifications': '通知',
+    'nav.group_overview': '概览',
+    'nav.group_manage': '管理',
+    'nav.group_system': '系统',
     // Page titles
     'page.dashboard': '仪表盘',
     'page.transactions': '交易记录',

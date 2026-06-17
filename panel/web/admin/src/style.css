@@ -286,6 +286,26 @@ kbd{font-size:10px;padding:2px 5px;border-radius:4px;background:var(--surface-2)
 [dir="rtl"] .brand{flex-direction:row-reverse}
 [dir="rtl"] .brand-text{text-align:right}
 
+/* RTL - Additional layout fixes */
+[dir="rtl"] .portal-nav__links{flex-direction:row-reverse}
+[dir="rtl"] .topbar-left{text-align:right}
+[dir="rtl"] .topbar-left h2{text-align:right}
+[dir="rtl"] .topbar-left p{text-align:right}
+[dir="rtl"] .form-grid{direction:rtl}
+[dir="rtl"] .form-stack{direction:rtl}
+[dir="rtl"] .form-actions{flex-direction:row-reverse}
+[dir="rtl"] .protocol-card__controls{margin-left:0;margin-right:auto}
+[dir="rtl"] .bulk-toolbar{flex-direction:row-reverse}
+[dir="rtl"] .search-bar{flex-direction:row-reverse}
+[dir="rtl"] .two-col{direction:rtl}
+[dir="rtl"] .settings-layout{direction:rtl}
+[dir="rtl"] .settings-nav button{text-align:right}
+[dir="rtl"] .node-card{direction:rtl;text-align:right}
+[dir="rtl"] .stat-card{direction:rtl;text-align:right}
+[dir="rtl"] .pagination{flex-direction:row-reverse}
+[dir="rtl"] .toast{right:auto;left:16px}
+[dir="rtl"] .notif-dropdown{right:auto;left:0}
+
 /* Responsive */
 @media(max-width:1100px){.g4{grid-template-columns:repeat(2,1fr)}.g2{grid-template-columns:1fr}.settings-layout{grid-template-columns:1fr}}
 @media(max-width:768px){.g4{grid-template-columns:1fr}#app{flex-direction:column;height:auto;overflow:auto}.sidebar{width:100%;height:auto;flex-direction:row;flex-wrap:wrap;overflow-x:auto;padding:10px}.main{height:auto;overflow:visible;padding:16px}.auth-screen{grid-template-columns:1fr}.two-col{grid-template-columns:1fr}.node-metrics{grid-template-columns:repeat(3,1fr)}}

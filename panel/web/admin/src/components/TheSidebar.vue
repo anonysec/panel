@@ -49,7 +49,7 @@ interface NavGroup {
 
 const navGroups = computed<NavGroup[]>(() => [
   {
-    title: 'Overview',
+    title: t('nav.group_overview'),
     items: [
       {
         route: 'overview',
@@ -64,7 +64,7 @@ const navGroups = computed<NavGroup[]>(() => [
     ],
   },
   {
-    title: 'Manage',
+    title: t('nav.group_manage'),
     items: [
       {
         route: 'customers',
@@ -90,7 +90,7 @@ const navGroups = computed<NavGroup[]>(() => [
     ],
   },
   {
-    title: 'System',
+    title: t('nav.group_system'),
     items: [
       {
         route: 'settings',
@@ -508,5 +508,42 @@ function handleChangeLang(event: Event) {
 :deep([data-theme="light"]) .sidebar,
 :global([data-theme="light"]) .sidebar {
   background: rgba(255, 255, 255, 0.97);
+}
+
+/* RTL support */
+:global([dir="rtl"]) .sidebar {
+  border-right: none;
+  border-left: 1px solid var(--color-border, var(--border, #28333f));
+}
+
+:global([dir="rtl"]) .collapse-btn {
+  right: auto;
+  left: -4px;
+}
+
+:global([dir="rtl"]) .brand {
+  flex-direction: row-reverse;
+}
+
+:global([dir="rtl"]) .brand-text {
+  text-align: right;
+}
+
+:global([dir="rtl"]) .nav-item {
+  flex-direction: row-reverse;
+  text-align: right;
+}
+
+:global([dir="rtl"]) .badge {
+  margin-left: 0;
+  margin-right: auto;
+}
+
+:global([dir="rtl"]) .sidebar-foot {
+  flex-direction: row-reverse;
+}
+
+:global([dir="rtl"]) .meta {
+  text-align: right;
 }
 </style>

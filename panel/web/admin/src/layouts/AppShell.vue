@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useRealtimeStore } from '@/stores/realtime'
@@ -16,6 +16,23 @@ const authStore = useAuthStore()
 const realtimeStore = useRealtimeStore()
 const { toggle: toggleTheme } = useTheme()
 const { t } = useI18n()
+
+// Panel version (fetched from API)
+const panelVersion = ref('dev')
+
+onMounted(async () => {
+  try {
+    const res = await fetch('/api/health')
+    if (res.ok) {
+      const data = await res.json()
+      if (data.version) {
+        panelVersion.value = data.version
+      }
+    }
+  } catch {
+    // Fallback to 'dev' silently
+  }
+})
 
 // Sidebar state
 const sidebarCollapsed = ref(false)
@@ -80,6 +97,7 @@ function handleNotifications() {
     <TheSidebar
       :collapsed="sidebarCollapsed"
       :current-route="currentRoute"
+      :version="panelVersion"
       :user="{ username: authStore.username, role: authStore.role }"
       @navigate="handleNavigate"
       @collapse-toggle="handleCollapseToggle"
