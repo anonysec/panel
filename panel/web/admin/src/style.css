@@ -299,61 +299,61 @@ kbd{font-size:10px;padding:2px 5px;border-radius:4px;background:var(--surface-2)
 .lang-select{width:auto;min-width:38px;min-height:28px;padding:3px 6px;font-size:10px;font-weight:600;border-radius:7px;background:var(--surface-2);border:1px solid var(--border);color:var(--muted);cursor:pointer;text-align:center}
 .lang-select:focus{border-color:var(--brand)}
 
-/* RTL support - Browser handles flex row reversal automatically when dir="rtl" is set.
-   Only explicit overrides for borders, margins, positions, and number inputs are needed. */
+/* RTL support - Using data-dir attribute to prevent browser from automatically flipping layouts.
+   Only content areas get direction:rtl; structural layout remains LTR. */
 
 /* Sidebar border swap */
-[dir="rtl"] .sidebar{border-right:none;border-left:1px solid var(--border)}
+[data-dir="rtl"] .sidebar{border-right:none;border-left:1px solid var(--border)}
 
 /* Content direction for RTL - text flows right-to-left inside containers */
-[dir="rtl"] .main{direction:rtl;text-align:right}
-[dir="rtl"] .sidebar{direction:rtl;text-align:right}
+[data-dir="rtl"] .main{direction:rtl;text-align:right}
+[data-dir="rtl"] .sidebar{direction:rtl;text-align:right}
 
 /* Badge margin swap */
-[dir="rtl"] .nav-item .badge{margin-left:0;margin-right:auto}
+[data-dir="rtl"] .nav-item .badge{margin-left:0;margin-right:auto}
 
 /* Dlist value margin */
-[dir="rtl"] .dlist .row .v{margin-left:0;margin-right:auto}
+[data-dir="rtl"] .dlist .row .v{margin-left:0;margin-right:auto}
 
 /* Protocol card controls margin */
-[dir="rtl"] .protocol-card__controls{margin-left:0;margin-right:auto}
+[data-dir="rtl"] .protocol-card__controls{margin-left:0;margin-right:auto}
 
 /* Toast position */
-[dir="rtl"] .toast{right:auto;left:16px}
-[dir="rtl"] .toast .toast-close{margin-left:0;margin-right:auto}
+[data-dir="rtl"] .toast{right:auto;left:16px}
+[data-dir="rtl"] .toast .toast-close{margin-left:0;margin-right:auto}
 @keyframes slideInRtl{from{opacity:0;transform:translateX(-20px)}to{opacity:1;transform:none}}
-[dir="rtl"] .toast{animation-name:slideInRtl}
+[data-dir="rtl"] .toast{animation-name:slideInRtl}
 
 /* Notification dropdown position */
-[dir="rtl"] .notif-dropdown{right:auto;left:0}
+[data-dir="rtl"] .notif-dropdown{right:auto;left:0}
 
 /* Notification dot position */
-[dir="rtl"] .icon-btn .notif-dot{right:auto;left:8px}
+[data-dir="rtl"] .icon-btn .notif-dot{right:auto;left:8px}
 
 /* Modal close button margin */
-[dir="rtl"] .modal-close{margin-left:0;margin-right:auto}
+[data-dir="rtl"] .modal-close{margin-left:0;margin-right:auto}
 
 /* Stat card icon margin swap */
-[dir="rtl"] .stat-card .ic{margin-left:12px;margin-right:0}
+[data-dir="rtl"] .stat-card .ic{margin-left:12px;margin-right:0}
 
 /* Auth screen border swap */
-[dir="rtl"] .auth-right{border-left:none;border-right:1px solid var(--border)}
+[data-dir="rtl"] .auth-right{border-left:none;border-right:1px solid var(--border)}
 
 /* Number/tel inputs keep LTR direction */
-[dir="rtl"] input[type="number"],[dir="rtl"] input[type="tel"]{direction:ltr;text-align:left}
+[data-dir="rtl"] input[type="number"],[data-dir="rtl"] input[type="tel"]{direction:ltr;text-align:left}
 
 /* Subscription URL input stays LTR */
-[dir="rtl"] .sp__sub-url-input{direction:ltr;text-align:left}
+[data-dir="rtl"] .sp__sub-url-input{direction:ltr;text-align:left}
 
 /* Settings grid flip (nav moves to right side) */
-[dir="rtl"] .settings-layout{grid-template-columns:1fr 200px}
+[data-dir="rtl"] .settings-layout{grid-template-columns:1fr 200px}
 
 /* RTL content direction for main and sidebar */
-[dir="rtl"] .main{direction:rtl;text-align:right}
-[dir="rtl"] .sidebar{direction:rtl;text-align:right}
+[data-dir="rtl"] .main{direction:rtl;text-align:right}
+[data-dir="rtl"] .sidebar{direction:rtl;text-align:right}
 
 /* Bulk toolbar clear margin */
-[dir="rtl"] .bulk-toolbar .bulk-toolbar__clear{margin-left:0;margin-right:auto}
+[data-dir="rtl"] .bulk-toolbar .bulk-toolbar__clear{margin-left:0;margin-right:auto}
 
 /* Responsive */
 @media(max-width:1100px){.g4{grid-template-columns:repeat(2,1fr)}.g2{grid-template-columns:1fr}.settings-layout{grid-template-columns:1fr}}

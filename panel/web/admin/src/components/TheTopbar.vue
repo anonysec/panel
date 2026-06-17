@@ -558,17 +558,17 @@ function formatTime(timestamp: string): string {
 }
 
 /* RTL support: topbar actions must always stay on the physical right side */
-:global([dir="rtl"]) .topbar-right {
+:global([data-dir="rtl"]) .topbar-right {
   margin-left: 0;
   margin-right: auto;
   direction: ltr;
 }
 
-:global([dir="rtl"]) .topbar-left {
+:global([data-dir="rtl"]) .topbar-left {
   text-align: right;
 }
 
-:global([dir="rtl"]) .breadcrumb-separator {
+:global([data-dir="rtl"]) .breadcrumb-separator {
   transform: rotate(180deg);
 }
 </style>

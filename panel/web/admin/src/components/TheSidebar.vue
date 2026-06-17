@@ -512,30 +512,30 @@ function handleChangeLang(event: Event) {
 }
 
 /* RTL support */
-:global([dir="rtl"]) .sidebar {
+:global([data-dir="rtl"]) .sidebar {
   border-right: none;
   border-left: 1px solid var(--color-border, var(--border, #28333f));
 }
 
-:global([dir="rtl"]) .collapse-btn {
+:global([data-dir="rtl"]) .collapse-btn {
   right: auto;
   left: -4px;
 }
 
-:global([dir="rtl"]) .brand-text {
+:global([data-dir="rtl"]) .brand-text {
   text-align: right;
 }
 
-:global([dir="rtl"]) .nav-item {
+:global([data-dir="rtl"]) .nav-item {
   text-align: right;
 }
 
-:global([dir="rtl"]) .badge {
+:global([data-dir="rtl"]) .badge {
   margin-left: 0;
   margin-right: auto;
 }
 
-:global([dir="rtl"]) .meta {
+:global([data-dir="rtl"]) .meta {
   text-align: right;
 }
 </style>

@@ -149,7 +149,6 @@ function handleNotifications() {
   min-height: 100vh;
   width: 100%;
   background: var(--color-bg, #070a12);
-  direction: ltr;
 }
 
 .app-shell.sidebar-collapsed {
@@ -164,8 +163,8 @@ function handleNotifications() {
   height: 100vh;
 }
 
-/* Restore RTL text direction inside main content when html dir="rtl" */
-:global([dir="rtl"]) .main {
+/* Restore RTL text direction inside main content when data-dir="rtl" */
+:global([data-dir="rtl"]) .main {
   direction: rtl;
   text-align: right;
 }
@@ -226,7 +225,7 @@ function handleNotifications() {
 }
 
 /* RTL content direction */
-:global([dir="rtl"]) .main {
+:global([data-dir="rtl"]) .main {
   direction: rtl;
   text-align: right;
 }
