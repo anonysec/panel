@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { computed } from 'vue'
 import type { Breadcrumb } from '@koris/types/components'
 import { useI18n } from '@koris/composables/useI18n'
 import type { Locale } from '@koris/composables/useI18n'
@@ -10,14 +10,12 @@ export interface Props {
   title: string
   subtitle?: string
   breadcrumbs?: Breadcrumb[]
-  realtimeConnected: boolean
   notificationCount: number
 }
 
 withDefaults(defineProps<Props>(), {
   subtitle: '',
   breadcrumbs: () => [],
-  realtimeConnected: false,
   notificationCount: 0,
 })
 
@@ -25,36 +23,14 @@ const emit = defineEmits<{
   (e: 'open-command-palette'): void
   (e: 'open-notifications'): void
   (e: 'toggle-theme'): void
-  (e: 'search', query: string): void
 }>()
 
-const searchQuery = defineModel<string>('searchQuery', { default: '' })
-
-const searchExpanded = ref(false)
-const searchHovered = ref(false)
-const searchFocused = ref(false)
-
-const showSearchBar = computed(() => {
-  return searchExpanded.value || searchHovered.value || searchFocused.value || searchQuery.value.length > 0
+// Platform-aware keyboard shortcut display
+const shortcutLabel = computed(() => {
+  const isMac = typeof navigator !== 'undefined' &&
+    (/mac/i.test(navigator.platform) || /macintosh/i.test(navigator.userAgent))
+  return isMac ? 'Cmd+K' : 'Ctrl+K'
 })
-
-function onSearchFocus() {
-  searchFocused.value = true
-  searchExpanded.value = true
-}
-
-function onSearchBlur() {
-  searchFocused.value = false
-  if (!searchQuery.value) {
-    searchExpanded.value = false
-  }
-}
-
-function handleSearchKeyup(event: KeyboardEvent) {
-  if (event.key === 'Enter') {
-    emit('search', searchQuery.value)
-  }
-}
 </script>
 
 <template>
@@ -107,29 +83,20 @@ function handleSearchKeyup(event: KeyboardEvent) {
     </div>
 
     <div class="topbar-right">
-      <!-- Search box -->
-      <div
+      <!-- Search box - always visible, opens command palette on click -->
+      <button
         class="search-box"
-        :class="{ 'search-box--expanded': showSearchBar }"
-        @mouseenter="searchHovered = true"
-        @mouseleave="searchHovered = false"
+        type="button"
+        aria-label="Search"
+        @click="emit('open-command-palette')"
       >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <svg class="search-box-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <circle cx="11" cy="11" r="7" />
           <path d="M21 21l-4-4" />
         </svg>
-        <input
-          v-show="showSearchBar"
-          v-model="searchQuery"
-          type="text"
-          placeholder="Search..."
-          aria-label="Search"
-          @focus="onSearchFocus"
-          @blur="onSearchBlur"
-          @keyup="handleSearchKeyup"
-        />
-        <kbd v-show="showSearchBar" class="search-shortcut">⌘K</kbd>
-      </div>
+        <span class="search-box-text">Search...</span>
+        <kbd class="search-shortcut">{{ shortcutLabel }}</kbd>
+      </button>
 
       <!-- Language Switcher -->
       <div class="lang-switcher" role="group" aria-label="Language switcher">
@@ -142,14 +109,6 @@ function handleSearchKeyup(event: KeyboardEvent) {
           {{ lang === 'en' ? 'EN' : lang === 'fa' ? 'FA' : 'ZH' }}
         </button>
       </div>
-
-      <!-- Realtime connection status -->
-      <div
-        :class="['status-dot', { offline: !realtimeConnected }]"
-        :title="realtimeConnected ? 'Realtime connected' : 'Realtime disconnected'"
-        :aria-label="realtimeConnected ? 'Realtime connected' : 'Realtime disconnected'"
-        role="status"
-      />
 
       <!-- Notification bell -->
       <button
@@ -255,35 +214,34 @@ function handleSearchKeyup(event: KeyboardEvent) {
   gap: var(--space-3, 12px);
 }
 
-/* Search box - styled to match KInput design system */
+/* Search box - always visible, clickable to open command palette */
 .search-box {
   display: flex;
   align-items: center;
   gap: var(--space-2, 8px);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  padding: 0 var(--space-3);
+  padding: 0 var(--space-3, 12px);
   border-radius: var(--radius-md);
-  width: 36px;
   height: 36px;
-  overflow: hidden;
   cursor: pointer;
-  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-              border-color var(--duration-normal, 0.15s) var(--ease-default, ease),
+  transition: border-color var(--duration-normal, 0.15s) var(--ease-default, ease),
               box-shadow var(--duration-normal, 0.15s) var(--ease-default, ease);
+  color: var(--color-muted, #8b98a5);
+  font-family: var(--font-family);
 }
 
-.search-box--expanded {
-  width: 240px;
-  cursor: text;
+.search-box:hover {
+  border-color: var(--color-primary, #2563eb);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
 }
 
-.search-box:focus-within {
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.25);
+.search-box:focus-visible {
+  outline: 2px solid var(--color-primary, #2563eb);
+  outline-offset: 2px;
 }
 
-.search-box svg {
+.search-box-icon {
   width: 16px;
   height: 16px;
   min-width: 16px;
@@ -291,26 +249,10 @@ function handleSearchKeyup(event: KeyboardEvent) {
   flex-shrink: 0;
 }
 
-.search-box input {
-  background: none;
-  border: none;
-  outline: none;
-  color: var(--color-text);
-  font-size: var(--text-base);
-  font-family: var(--font-family);
-  width: 100%;
-  min-height: unset;
-  padding: 0;
-  opacity: 0;
-  transition: opacity 0.2s ease 0.1s;
-}
-
-.search-box--expanded input {
-  opacity: 1;
-}
-
-.search-box input::placeholder {
-  color: var(--color-muted);
+.search-box-text {
+  font-size: var(--text-sm, 12.5px);
+  color: var(--color-muted, #8b98a5);
+  white-space: nowrap;
 }
 
 .search-shortcut {
@@ -323,38 +265,6 @@ function handleSearchKeyup(event: KeyboardEvent) {
   font-family: var(--font-mono, monospace);
   white-space: nowrap;
   flex-shrink: 0;
-  opacity: 0;
-  transition: opacity 0.2s ease 0.1s;
-}
-
-.search-box--expanded .search-shortcut {
-  opacity: 1;
-}
-
-/* Status dot */
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: var(--radius-full, 9999px);
-  background: var(--color-success, #22c55e);
-  box-shadow: 0 0 6px rgba(34, 197, 94, 0.5);
-  animation: livePulse 2s ease-in-out infinite;
-  flex-shrink: 0;
-}
-
-.status-dot.offline {
-  background: var(--color-danger, #ef4444);
-  box-shadow: 0 0 6px rgba(239, 68, 68, 0.5);
-  animation: none;
-}
-
-@keyframes livePulse {
-  0%, 100% {
-    box-shadow: 0 0 6px rgba(34, 197, 94, 0.5);
-  }
-  50% {
-    box-shadow: 0 0 12px rgba(34, 197, 94, 0.8), 0 0 4px rgba(34, 197, 94, 1);
-  }
 }
 
 /* Icon button */
@@ -422,4 +332,17 @@ function handleSearchKeyup(event: KeyboardEvent) {
   background: rgba(37, 99, 235, 0.1);
 }
 
+/* Mobile responsive: hide text and kbd on small screens */
+@media (max-width: 640px) {
+  .search-box-text,
+  .search-shortcut {
+    display: none;
+  }
+
+  .search-box {
+    width: 36px;
+    padding: 0;
+    justify-content: center;
+  }
+}
 </style>

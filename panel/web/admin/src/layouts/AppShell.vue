@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useRealtimeStore } from '@/stores/realtime'
 import { useTheme } from '@koris/composables/useTheme'
 import { useI18n } from '@koris/composables/useI18n'
+import { openCommandPalette } from '@/composables/useCommandPalette'
 import TheSidebar from '@/components/TheSidebar.vue'
 import TheTopbar from '@/components/TheTopbar.vue'
 import CommandPalette from '@/components/CommandPalette.vue'
@@ -91,10 +92,10 @@ function handleNotifications() {
       <TheTopbar
         :title="pageTitle"
         :breadcrumbs="breadcrumbs"
-        :realtime-connected="realtimeStore.connected"
         :notification-count="realtimeStore.notificationCount"
         @toggle-theme="toggleTheme"
         @open-notifications="handleNotifications"
+        @open-command-palette="openCommandPalette"
       />
 
       <router-view v-slot="{ Component, route: viewRoute }">

@@ -29,7 +29,6 @@ export interface UseCommandPaletteReturn {
 function fuzzyMatch(text: string, pattern: string): boolean {
   const lower = text.toLowerCase()
   const search = pattern.toLowerCase()
-  // Simple fuzzy: check if all characters in pattern appear in order in text
   let j = 0
   for (let i = 0; i < lower.length && j < search.length; i++) {
     if (lower[i] === search[j]) {
@@ -50,12 +49,33 @@ function matchesAction(action: CommandAction, pattern: string): boolean {
   return false
 }
 
+// Module-level shared state (singleton pattern)
+// All consumers share the same isOpen/query/selectedIndex refs
+const isOpen = ref(false)
+const query = ref('')
+const selectedIndex = ref(0)
+
+/**
+ * Open the command palette from anywhere.
+ * Can be called outside of a Vue component context.
+ */
+export function openCommandPalette(): void {
+  isOpen.value = true
+  query.value = ''
+  selectedIndex.value = 0
+}
+
+/**
+ * Close the command palette from anywhere.
+ */
+export function closeCommandPalette(): void {
+  isOpen.value = false
+  query.value = ''
+  selectedIndex.value = 0
+}
+
 export function useCommandPalette(options: UseCommandPaletteOptions): UseCommandPaletteReturn {
   const { actions, shortcut = 'ctrl+k' } = options
-
-  const isOpen = ref(false)
-  const query = ref('')
-  const selectedIndex = ref(0)
 
   const filteredActions = computed<CommandAction[]>(() => {
     const q = query.value.trim()
@@ -64,15 +84,11 @@ export function useCommandPalette(options: UseCommandPaletteOptions): UseCommand
   })
 
   function open() {
-    isOpen.value = true
-    query.value = ''
-    selectedIndex.value = 0
+    openCommandPalette()
   }
 
   function close() {
-    isOpen.value = false
-    query.value = ''
-    selectedIndex.value = 0
+    closeCommandPalette()
   }
 
   function execute(action: CommandAction) {

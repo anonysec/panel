@@ -1,0 +1,30 @@
+{
+  "id": "FEAT-001",
+  "type": "fix",
+  "description": "Fix TheTopbar: remove status dot, fix search box to open command palette, fix keybind display to show platform-aware shortcut (Ctrl+K / Cmd+K). Make search box click trigger command palette open event instead of being an independent search input.",
+  "status": "in_progress",
+  "steps": [
+    "In panel/panel/web/admin/src/components/TheTopbar.vue: Remove the entire .status-dot div element and its associated CSS (.status-dot, .status-dot.offline, @keyframes livePulse).",
+    "Remove the `realtimeConnected` prop from the Props interface since it is no longer needed in the topbar.",
+    "Replace the independent search input logic with a simple clickable search-box that emits 'open-command-palette' when clicked. Remove searchQuery, searchExpanded, searchHovered, searchFocused, showSearchBar, onSearchFocus, onSearchBlur, handleSearchKeyup - replace with a single click handler that emits 'open-command-palette'.",
+    "Change the <kbd> shortcut display from hardcoded '⌘K' to a computed value that detects platform: show 'Cmd+K' on macOS, 'Ctrl+K' on other platforms. Use navigator.platform or navigator.userAgent to detect Mac.",
+    "Simplify the search-box markup: make it a static display that shows the search icon, 'Search...' text, and the platform-aware shortcut kbd - always visible, not expanding/collapsing. Clicking anywhere on it emits 'open-command-palette'.",
+    "In panel/panel/web/admin/src/layouts/AppShell.vue: Remove the :realtime-connected prop from TheTopbar usage. Add @open-command-palette handler that opens the command palette (import and use the useCommandPalette composable or expose an open method).",
+    "In panel/panel/web/admin/src/layouts/AppShell.vue: To connect search box click to CommandPalette, add a ref or provide/inject pattern. The simplest approach: add a global event bus or use a shared ref. Since CommandPalette.vue already uses useCommandPalette which exposes open(), expose it via a template ref or use a shared composable instance. Best approach: make useCommandPalette a singleton by moving its state to module scope, then AppShell can import and call open().",
+    "Make the search-box responsive for mobile: on small screens, show only the search icon (hide text and kbd shortcut). Add @media (max-width: 640px) responsive styles."
+  ],
+  "acceptance_criteria": [
+    "No red/green status dot appears in the topbar",
+    "Clicking the search box opens the command palette overlay",
+    "The shortcut hint shows 'Ctrl+K' on non-Mac platforms and 'Cmd+K' on Mac",
+    "The search box is always visible (not expanding/collapsing on hover)",
+    "On mobile viewports (<640px), the search box shows only the icon",
+    "vue-tsc --noEmit passes without errors"
+  ],
+  "verification": [
+    "cd panel/web/admin && npx vue-tsc --noEmit",
+    "cd panel/web/admin && npx vite build"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}
