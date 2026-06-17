@@ -195,32 +195,59 @@ async function saveTelegramSettings(): Promise<void> {
 
 // ─── Backup ─────────────────────────────────────────────────────────────────
 const importFileInput = ref<HTMLInputElement | null>(null)
+const exporting = ref(false)
+const importing = ref(false)
 
-interface ExportItem {
-  labelKey: string
-  url: string
-}
-
-const exportItems: ExportItem[] = [
-  { labelKey: 'settings.export_customers_csv', url: '/api/export/customers.csv' },
-  { labelKey: 'settings.export_payments_csv', url: '/api/export/payments.csv' },
-  { labelKey: 'settings.export_wallet_csv', url: '/api/export/wallet-transactions.csv' },
-  { labelKey: 'settings.export_radacct_csv', url: '/api/export/radacct.csv' },
-]
-
-function downloadExport(url: string): void {
-  window.open(url, '_blank')
+async function downloadBackup(): Promise<void> {
+  exporting.value = true
+  try {
+    const res = await fetch('/api/backup/export', { credentials: 'include' })
+    if (!res.ok) throw new Error('Export failed')
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+    a.download = `panel-backup-${ts}.json`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    toast.success(t('settings.export_success'))
+  } catch {
+    toast.error(t('settings.export_error'))
+  } finally {
+    exporting.value = false
+  }
 }
 
 function triggerImport(): void {
   importFileInput.value?.click()
 }
 
-function handleImportFile(event: Event): void {
+async function handleImportFile(event: Event): Promise<void> {
   const target = event.target as HTMLInputElement
-  if (target.files && target.files.length > 0) {
-    toast.success(t('settings.import_coming_soon'))
-    // Reset file input so the same file can be selected again
+  if (!target.files || target.files.length === 0) return
+  const file = target.files[0]
+  importing.value = true
+  try {
+    const formData = new FormData()
+    formData.append('file', file)
+    const res = await fetch('/api/backup/import', {
+      method: 'POST',
+      credentials: 'include',
+      body: formData,
+    })
+    const data = await res.json()
+    if (data.ok) {
+      toast.success(t('settings.import_success'))
+    } else {
+      toast.error(t('settings.import_error') + (data.error ? `: ${data.error}` : ''))
+    }
+  } catch {
+    toast.error(t('settings.import_error'))
+  } finally {
+    importing.value = false
     target.value = ''
   }
 }
@@ -418,31 +445,23 @@ onMounted(async () => {
 
           <div class="backup-section">
             <h5 class="subsection-title">{{ t('settings.export_backup') }}</h5>
-            <p class="text-muted text-sm">{{ t('settings.available_exports') }}</p>
-            <div class="export-list">
-              <div
-                v-for="item in exportItems"
-                :key="item.url"
-                class="export-item"
-              >
-                <span class="export-item__label">{{ t(item.labelKey) }}</span>
-                <KButton variant="ghost" size="sm" @click="downloadExport(item.url)">
-                  {{ t('label.download') }}
-                </KButton>
-              </div>
-            </div>
+            <p class="text-muted text-sm">{{ t('settings.backup_format') }}</p>
+            <KButton variant="primary" size="sm" :loading="exporting" @click="downloadBackup">
+              {{ t('settings.export_backup') }}
+            </KButton>
           </div>
 
           <div class="backup-section">
             <h5 class="subsection-title">{{ t('settings.import_backup') }}</h5>
+            <p class="text-muted text-sm">{{ t('settings.import_backup_desc') }}</p>
             <input
               ref="importFileInput"
               type="file"
-              accept=".csv,.json"
+              accept=".json"
               class="hidden-input"
               @change="handleImportFile"
             />
-            <KButton variant="ghost" size="sm" @click="triggerImport">
+            <KButton variant="ghost" size="sm" :loading="importing" @click="triggerImport">
               {{ t('settings.import_backup') }}
             </KButton>
           </div>

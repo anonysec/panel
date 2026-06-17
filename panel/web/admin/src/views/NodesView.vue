@@ -100,11 +100,16 @@ function formatBps(bps: number): string {
 
 function getServiceStatus(node: any, protocol: string): string {
   const metrics = node.status_metrics
+  // Check node_services array first (SSH is only stored there)
+  if (node.services && Array.isArray(node.services)) {
+    const svc = node.services.find((s: any) => s.service === protocol)
+    if (svc && svc.status) return svc.status
+  }
+  // Fall back to status_metrics for openvpn/l2tp/ikev2
   if (!metrics) return 'unknown'
   if (protocol === 'openvpn') return metrics.openvpn_status || 'unknown'
   if (protocol === 'l2tp') return metrics.l2tp_status || 'unknown'
   if (protocol === 'ikev2') return metrics.ikev2_status || 'unknown'
-  if (protocol === 'ssh') return metrics.ssh_status || 'unknown'
   return 'unknown'
 }
 
