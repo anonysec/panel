@@ -2,7 +2,7 @@
   "id": "FEAT-003",
   "type": "feat",
   "description": "Real-time bandwidth display (Task Group 7: full implementation). Bandwidth collector with tc output parsing, delta rate calculation, node push integration, panel-side storage, WebSocket broadcast, and tests.",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "Create node/cmd/node/bandwidth.go (in package main, same as main.go) with: type UserBandwidth struct { IP string `json:\"ip\"`; ClassID string `json:\"class_id\"`; RxBytes int64 `json:\"rx_bytes\"`; TxBytes int64 `json:\"tx_bytes\"`; RxBps int64 `json:\"rx_bps\"`; TxBps int64 `json:\"tx_bps\"` }. type BandwidthCollector struct { prev map[string]UserBandwidth; lastCollect time.Time }. func NewBandwidthCollector() *BandwidthCollector. func (bc *BandwidthCollector) Collect(dev string) []UserBandwidth - runs 'tc -s class show dev <dev>' and parses output into per-class stats, then calls DeltaRates.",
     "Implement parseTcOutput(output string) []tcClassStat that parses tc -s class show dev output. Each class entry looks like: 'class htb 1:NNN root/parent ... rate Xbit ...' followed by 'Sent NNNN bytes ...' lines. Parse class ID and byte counters.",
@@ -27,5 +27,5 @@
     "cd /projects/sandbox/panel && go test ./..."
   ],
   "blocked_reason": null,
-  "findings": ""
+  "findings": "All tests pass. Build succeeds. Implementation includes bandwidth.go with BandwidthCollector, parseTcOutput, DeltaRates; modified main.go Push struct and loop; modified api.go nodePush handler and realtimeWS handler; added bandwidthPayload method; created migration 023. Node tests verify parsing and counter-wrap clamping."
 }
