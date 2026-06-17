@@ -149,6 +149,7 @@ function handleNotifications() {
   min-height: 100vh;
   width: 100%;
   background: var(--color-bg, #070a12);
+  direction: ltr; /* Lock grid layout - sidebar always left, main always right */
 }
 
 .app-shell.sidebar-collapsed {
@@ -161,6 +162,12 @@ function handleNotifications() {
   padding: var(--space-5, 20px) var(--space-6, 24px);
   overflow-y: auto;
   height: 100vh;
+}
+
+/* Restore RTL text direction inside main content when html dir="rtl" */
+:global([dir="rtl"]) .main {
+  direction: rtl;
+  text-align: right;
 }
 
 /* Fade transition for view changes */

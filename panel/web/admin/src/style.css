@@ -36,7 +36,7 @@ select:focus{border-color:rgba(37,99,235,0.5)}
 .topbar{display:flex;align-items:center;gap:14px;margin-bottom:22px}
 .topbar-left h2{font-size:20px;font-weight:700;letter-spacing:-.02em}
 .topbar-left p{font-size:12.5px;color:var(--muted);margin-top:2px}
-.topbar-right{margin-inline-start:auto;display:flex;align-items:center;gap:10px}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px}
 .search-box{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);padding:8px 12px;border-radius:10px;width:220px}
 .search-box input{background:none;border:none;outline:none;color:var(--text);font-size:12.5px;width:100%}
 .search-box svg{width:15px;height:15px;color:var(--muted);flex-shrink:0}
@@ -304,6 +304,10 @@ kbd{font-size:10px;padding:2px 5px;border-radius:4px;background:var(--surface-2)
 
 /* Sidebar border swap */
 [dir="rtl"] .sidebar{border-right:none;border-left:1px solid var(--border)}
+
+/* Content direction for RTL - text flows right-to-left inside containers */
+[dir="rtl"] .main{direction:rtl;text-align:right}
+[dir="rtl"] .sidebar{direction:rtl;text-align:right}
 
 /* Badge margin swap */
 [dir="rtl"] .nav-item .badge{margin-left:0;margin-right:auto}
