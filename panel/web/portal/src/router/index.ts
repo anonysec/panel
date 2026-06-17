@@ -8,15 +8,16 @@ const router = createRouter({
       component: () => import('@/layouts/PortalShell.vue'),
       meta: { requiresAuth: true },
       children: [
-        { path: '', name: 'portal-dashboard', component: () => import('@/views/DashboardView.vue') },
-        { path: 'billing', name: 'portal-billing', component: () => import('@/views/BillingView.vue') },
-        { path: 'usage', name: 'portal-usage', component: () => import('@/views/UsageView.vue') },
-        { path: 'support', name: 'portal-support', component: () => import('@/views/SupportView.vue') },
+        { path: '', name: 'portal-home', component: () => import('@/views/SinglePageView.vue') },
         { path: 'profile', name: 'portal-profile', component: () => import('@/views/ProfileView.vue') },
-        { path: 'vpn-profiles', name: 'portal-vpn', component: () => import('@/views/VpnProfilesView.vue') },
       ]
     },
     { path: '/login', name: 'portal-login', component: () => import('@/views/LoginView.vue') },
+    // Redirect old routes to home
+    { path: '/billing', redirect: '/' },
+    { path: '/usage', redirect: '/' },
+    { path: '/support', redirect: '/' },
+    { path: '/vpn-profiles', redirect: '/' },
     { path: '/:pathMatch(.*)*', redirect: '/' }
   ]
 })
@@ -34,7 +35,7 @@ router.beforeEach(async (to) => {
   }
 
   if (to.name === 'portal-login' && auth.isAuthenticated) {
-    return { name: 'portal-dashboard' }
+    return { name: 'portal-home' }
   }
 })
 
