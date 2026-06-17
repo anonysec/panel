@@ -207,6 +207,35 @@ func processPaygBilling(db *sql.DB) {
 	}
 }
 
+// loadBotConfigFromDB reads telegram_token and telegram_chat_id from the panel_settings table.
+// Returns empty values if the table doesn't exist or the keys are not set.
+func loadBotConfigFromDB(database *sql.DB) (token string, chatIDs []int64) {
+	rows, err := database.Query(`SELECT key_name, value FROM panel_settings WHERE key_name IN ('telegram_token', 'telegram_chat_id')`)
+	if err != nil {
+		// Table might not exist yet on first run
+		return "", nil
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var key, val string
+		if err := rows.Scan(&key, &val); err != nil {
+			continue
+		}
+		switch key {
+		case "telegram_token":
+			token = strings.TrimSpace(val)
+		case "telegram_chat_id":
+			for _, s := range strings.Split(val, ",") {
+				s = strings.TrimSpace(s)
+				if id, err := strconv.ParseInt(s, 10, 64); err == nil && id != 0 {
+					chatIDs = append(chatIDs, id)
+				}
+			}
+		}
+	}
+	return
+}
+
 func main() {
 	// Optimize for single-core servers
 	if os.Getenv("GOMAXPROCS") == "" {
@@ -242,15 +271,32 @@ func main() {
 	srv := api.New(database, cfg)
 
 	// Start Telegram bot
+	// Load bot config from DB first, env vars override
+	dbToken, dbChatIDs := loadBotConfigFromDB(database)
 	botToken := os.Getenv("PANEL_TG_BOT_TOKEN")
+	if botToken == "" {
+		botToken = dbToken
+	}
 	botEnabled := strings.ToLower(os.Getenv("PANEL_TG_ENABLED")) == "true"
+	if !botEnabled && botToken != "" {
+		// If token exists (from DB or env) but PANEL_TG_ENABLED is not explicitly set,
+		// auto-enable if token is present
+		if os.Getenv("PANEL_TG_ENABLED") == "" && botToken != "" {
+			botEnabled = true
+		}
+	}
 	botWebhook := os.Getenv("PANEL_TG_WEBHOOK_URL")
 	var adminChats []int64
-	for _, s := range strings.Split(os.Getenv("PANEL_TG_CHAT_ID"), ",") {
-		s = strings.TrimSpace(s)
-		if id, err := strconv.ParseInt(s, 10, 64); err == nil && id != 0 {
-			adminChats = append(adminChats, id)
+	envChatID := os.Getenv("PANEL_TG_CHAT_ID")
+	if envChatID != "" {
+		for _, s := range strings.Split(envChatID, ",") {
+			s = strings.TrimSpace(s)
+			if id, err := strconv.ParseInt(s, 10, 64); err == nil && id != 0 {
+				adminChats = append(adminChats, id)
+			}
 		}
+	} else {
+		adminChats = dbChatIDs
 	}
 	telegramBot := bot.New(bot.Config{
 		Token:      botToken,

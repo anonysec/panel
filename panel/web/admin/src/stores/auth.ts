@@ -124,18 +124,15 @@ export const useAuthStore = defineStore('auth', () => {
    * On success, sets user and isAuthenticated.
    * On error, preserves existing state — error is surfaced via useApi's error ref.
    */
-  async function login(username: string, password: string): Promise<boolean> {
+  async function login(uname: string, password: string): Promise<boolean> {
     try {
-      // Preflight: ensure CSRF token is available on fresh sessions
-      await get<any>('/api/health').catch(() => null)
-
       const res = await post<LoginResponse>('/api/auth/admin', {
-        username,
+        username: uname,
         password,
       })
 
       user.value = {
-        username: res.username || username,
+        username: res.username || uname,
         role: res.role || 'admin',
         credit: res.credit || 0,
       }
@@ -144,7 +141,12 @@ export const useAuthStore = defineStore('auth', () => {
       setupRequired.value = false
       return true
     } catch {
-      // Preserve existing state on error (Requirement 3.4)
+      // Ensure a user-friendly error message is always visible
+      if (!error.value) {
+        error.value = 'Invalid username or password'
+      } else if (error.value === 'Unauthorized') {
+        error.value = 'Invalid username or password'
+      }
       return false
     }
   }

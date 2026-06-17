@@ -25,8 +25,18 @@ const newToken = ref<string | null>(null)
 
 // ─── Edit Node State ─────────────────────────────────────────────────────────
 const editingNodeId = ref<number | null>(null)
-const editNodeForm = ref({ name: '', public_ip: '', domain: '' })
+const editNodeForm = ref({
+  name: '',
+  public_ip: '',
+  domain: '',
+  proxy_enabled: false,
+  proxy_type: 'HTTP',
+  proxy_address: '',
+  proxy_username: '',
+  proxy_password: '',
+})
 const savingNode = ref(false)
+const showAdvanced = ref(false)
 
 const tabs = computed(() => [
   { key: 'nodes', label: t('nodes.nodes') },
@@ -47,15 +57,13 @@ const PROTOCOL_DEFAULTS: Record<string, any> = {
     extra_json: {
       transport: 'udp', cipher: 'AES-256-GCM', tls_mode: 'tls-crypt', dns1: '8.8.8.8', dns2: '8.8.4.4',
       comp_lzo: false, push_routes: '', fragment: 0, mssfix: 0, keepalive: '10 120', topology: 'subnet', verb: 3, custom_directives: '',
-      outbound: { enabled: false, type: 'vless', address: '', uuid: '', tls: true, path: '', sni: '' },
     },
   },
   l2tp: {
     port: 1701, network: '10.9.0.0/24', enabled: true, mtu: 1500, max_clients: 0, enable_logs: true, conn_limit: 0,
     extra_json: {
       ipsec_mode: 'ipsec', psk: '', auth_method: 'CHAP', dns1: '8.8.8.8', dns2: '8.8.4.4',
-      refuse_chap: false, refuse_pap: true, lcp_echo_interval: 30, lcp_echo_failure: 4, idle_timeout: 0, require_mschap_v2: true,
-      outbound: { enabled: false, type: 'vless', address: '', uuid: '', tls: true, path: '', sni: '' },
+      lcp_echo_interval: 30, lcp_echo_failure: 4, idle_timeout: 0,
     },
   },
   ikev2: {
@@ -63,7 +71,6 @@ const PROTOCOL_DEFAULTS: Record<string, any> = {
     extra_json: {
       auth_type: 'psk', psk: '', cert_id: '', dns1: '8.8.8.8', dns2: '8.8.4.4',
       dpd_interval: 30, dpd_timeout: 150, rekey_time: '4h', ike_proposals: 'aes256-sha256-modp2048', esp_proposals: 'aes256-sha256', left_id: '', right_id: '%any', fragment_size: 0,
-      outbound: { enabled: false, type: 'vless', address: '', uuid: '', tls: true, path: '', sni: '' },
     },
   },
   ssh: {
@@ -71,7 +78,7 @@ const PROTOCOL_DEFAULTS: Record<string, any> = {
     extra_json: {
       listen_address: '0.0.0.0', key_type: 'ed25519',
       max_sessions: 10, idle_timeout: 0, shell_access: false, allowed_keys: '',
-      outbound: { enabled: false, type: 'vless', address: '', uuid: '', tls: true, path: '', sni: '' },
+      accounting_enabled: true, accounting_interval: 300,
     },
   },
 }
@@ -110,11 +117,17 @@ function getServiceStatus(node: any, protocol: string): string {
     if (svc && svc.status) return svc.status
   }
   // Fall back to status_metrics for openvpn/l2tp/ikev2
-  if (!metrics) return 'unknown'
+  if (!metrics) {
+    // If there is a config for this protocol, status is unknown; otherwise not configured
+    const hasConfig = getNodeConfig(node.id, protocol)
+    return hasConfig ? 'unknown' : 'not_configured'
+  }
   if (protocol === 'openvpn') return metrics.openvpn_status || 'unknown'
   if (protocol === 'l2tp') return metrics.l2tp_status || 'unknown'
   if (protocol === 'ikev2') return metrics.ikev2_status || 'unknown'
-  return 'unknown'
+  // For SSH and others, check if config exists
+  const hasConfig = getNodeConfig(node.id, protocol)
+  return hasConfig ? 'unknown' : 'not_configured'
 }
 
 function getNodeConfig(nodeId: number, protocol: string) {
@@ -169,12 +182,17 @@ function startEditNode(node: any) {
     name: node.name || '',
     public_ip: node.public_ip || '',
     domain: node.domain || '',
+    proxy_enabled: node.proxy_enabled || false,
+    proxy_type: node.proxy_type || 'HTTP',
+    proxy_address: node.proxy_address || '',
+    proxy_username: node.proxy_username || '',
+    proxy_password: node.proxy_password || '',
   }
 }
 
 function cancelEditNode() {
   editingNodeId.value = null
-  editNodeForm.value = { name: '', public_ip: '', domain: '' }
+  editNodeForm.value = { name: '', public_ip: '', domain: '', proxy_enabled: false, proxy_type: 'HTTP', proxy_address: '', proxy_username: '', proxy_password: '' }
 }
 
 async function handleEditNode() {
@@ -182,7 +200,7 @@ async function handleEditNode() {
   savingNode.value = true
   // Build delta payload: only include fields that actually changed
   const originalNode = store.list.find((n: any) => n.id === editingNodeId.value)
-  const payload: Record<string, string> = {}
+  const payload: Record<string, any> = {}
   if (editNodeForm.value.name !== (originalNode?.name || '')) {
     payload.name = editNodeForm.value.name
   }
@@ -192,12 +210,12 @@ async function handleEditNode() {
   if (editNodeForm.value.domain !== (originalNode?.domain || '')) {
     payload.domain = editNodeForm.value.domain
   }
-  // If nothing changed, just close the form
-  if (Object.keys(payload).length === 0) {
-    savingNode.value = false
-    cancelEditNode()
-    return
-  }
+  // Always include proxy fields when editing
+  payload.proxy_enabled = editNodeForm.value.proxy_enabled
+  payload.proxy_type = editNodeForm.value.proxy_type
+  payload.proxy_address = editNodeForm.value.proxy_address
+  payload.proxy_username = editNodeForm.value.proxy_username
+  payload.proxy_password = editNodeForm.value.proxy_password
   const success = await store.editNode(editingNodeId.value, payload)
   savingNode.value = false
   if (success) {
@@ -212,6 +230,7 @@ async function handleEditNode() {
 // ─── Protocol Config Handlers ────────────────────────────────────────────────
 function startEdit(nodeId: number, protocol: string, currentConfig: any) {
   editingConfig.value = { nodeId, protocol }
+  showAdvanced.value = false
   const defaults = PROTOCOL_DEFAULTS[protocol]
   if (currentConfig) {
     configForm.value = {
@@ -335,12 +354,7 @@ function removeAllowedKey(index: number) {
   configForm.value.extra_json.allowed_keys = current.join('\n')
 }
 
-// ─── Proxy Helpers ────────────────────────────────────────────────────────
-function initOutbound() {
-  if (!configForm.value.extra_json.outbound) {
-    configForm.value.extra_json.outbound = { enabled: false, type: 'vless', address: '', uuid: '', tls: true, path: '', sni: '' }
-  }
-}
+// ─── Protocol Config Helpers ──────────────────────────────────────────────
 
 async function saveConfig() {
   if (!editingConfig.value) return
@@ -575,6 +589,42 @@ onMounted(() => {
                       </template>
                     </KFormField>
                   </div>
+                  <!-- API Proxy Section -->
+                  <div class="form-group">
+                    <h5 class="form-group__title">{{ t('nodes.api_proxy') }}</h5>
+                    <div class="form-grid">
+                      <KFormField name="proxy-enabled" :label="t('nodes.proxy_enabled')">
+                        <template #default>
+                          <label class="toggle-switch">
+                            <input type="checkbox" :checked="editNodeForm.proxy_enabled" @change="editNodeForm.proxy_enabled = ($event.target as HTMLInputElement).checked" />
+                            <span class="toggle-switch__slider" />
+                          </label>
+                        </template>
+                      </KFormField>
+                      <template v-if="editNodeForm.proxy_enabled">
+                        <KFormField name="proxy-type" :label="t('nodes.proxy_type')">
+                          <template #default="{ fieldId }">
+                            <KSelect :id="fieldId" v-model="editNodeForm.proxy_type" :options="[{ label: 'HTTP', value: 'HTTP' }, { label: 'SOCKS5', value: 'SOCKS5' }]" />
+                          </template>
+                        </KFormField>
+                        <KFormField name="proxy-address" :label="t('nodes.proxy_address')">
+                          <template #default="{ fieldId }">
+                            <KInput :id="fieldId" v-model="editNodeForm.proxy_address" placeholder="127.0.0.1:8080" />
+                          </template>
+                        </KFormField>
+                        <KFormField name="proxy-username" :label="t('nodes.proxy_username')">
+                          <template #default="{ fieldId }">
+                            <KInput :id="fieldId" v-model="editNodeForm.proxy_username" placeholder="" />
+                          </template>
+                        </KFormField>
+                        <KFormField name="proxy-password" :label="t('nodes.proxy_password')">
+                          <template #default="{ fieldId }">
+                            <KInput :id="fieldId" v-model="editNodeForm.proxy_password" type="password" placeholder="" />
+                          </template>
+                        </KFormField>
+                      </template>
+                    </div>
+                  </div>
                   <div class="form-actions">
                     <KButton variant="ghost" size="sm" @click="cancelEditNode">{{ t('btn.cancel') }}</KButton>
                     <KButton type="submit" variant="primary" size="sm" :loading="savingNode">{{ t('btn.save') }}</KButton>
@@ -767,8 +817,15 @@ onMounted(() => {
                       </div>
                     </div>
 
+                    <!-- Advanced Settings Toggle -->
+                    <div class="form-group advanced-toggle">
+                      <KButton variant="ghost" size="sm" @click="showAdvanced = !showAdvanced">
+                        {{ showAdvanced ? t('nodes.hide_advanced') : t('nodes.show_advanced') }}
+                      </KButton>
+                    </div>
+
                     <!-- Security Group -->
-                    <div class="form-group">
+                    <div v-if="showAdvanced" class="form-group">
                       <h5 class="form-group__title">{{ t('nodes.group_security') }}</h5>
                       <div class="protocol-form__grid">
                         <template v-if="proto === 'openvpn'">
@@ -798,30 +855,6 @@ onMounted(() => {
                           <KFormField :name="`${proto}-auth`" :label="t('nodes.auth_method')" :hint="t('nodes.hint_auth_method')">
                             <template #default="{ fieldId }">
                               <KSelect :id="fieldId" v-model="configForm.extra_json.auth_method" :options="[{ label: 'CHAP', value: 'CHAP' }, { label: 'PAP', value: 'PAP' }, { label: 'MS-CHAPv2', value: 'MS-CHAPv2' }]" />
-                            </template>
-                          </KFormField>
-                          <KFormField :name="`${proto}-refuse-chap`" :label="t('nodes.refuse_chap')">
-                            <template #default>
-                              <label class="toggle-switch">
-                                <input type="checkbox" :checked="configForm.extra_json.refuse_chap" @change="configForm.extra_json.refuse_chap = ($event.target as HTMLInputElement).checked" />
-                                <span class="toggle-switch__slider" />
-                              </label>
-                            </template>
-                          </KFormField>
-                          <KFormField :name="`${proto}-refuse-pap`" :label="t('nodes.refuse_pap')">
-                            <template #default>
-                              <label class="toggle-switch">
-                                <input type="checkbox" :checked="configForm.extra_json.refuse_pap" @change="configForm.extra_json.refuse_pap = ($event.target as HTMLInputElement).checked" />
-                                <span class="toggle-switch__slider" />
-                              </label>
-                            </template>
-                          </KFormField>
-                          <KFormField :name="`${proto}-require-mschap-v2`" :label="t('nodes.require_mschapv2')">
-                            <template #default>
-                              <label class="toggle-switch">
-                                <input type="checkbox" :checked="configForm.extra_json.require_mschap_v2" @change="configForm.extra_json.require_mschap_v2 = ($event.target as HTMLInputElement).checked" />
-                                <span class="toggle-switch__slider" />
-                              </label>
                             </template>
                           </KFormField>
                         </template>
@@ -899,7 +932,7 @@ onMounted(() => {
                     </div>
 
                     <!-- Performance Group -->
-                    <div class="form-group">
+                    <div v-if="showAdvanced" class="form-group">
                       <h5 class="form-group__title">{{ t('nodes.group_performance') }}</h5>
                       <div class="protocol-form__grid">
                         <KFormField :name="`${proto}-max-clients`" :label="t('nodes.max_clients')">
@@ -964,12 +997,25 @@ onMounted(() => {
                               <KInput :id="fieldId" v-model="configForm.extra_json.idle_timeout" type="number" placeholder="0" />
                             </template>
                           </KFormField>
+                          <KFormField :name="`${proto}-accounting-enabled`" :label="t('nodes.accounting_enabled')">
+                            <template #default>
+                              <label class="toggle-switch">
+                                <input type="checkbox" :checked="configForm.extra_json.accounting_enabled" @change="configForm.extra_json.accounting_enabled = ($event.target as HTMLInputElement).checked" />
+                                <span class="toggle-switch__slider" />
+                              </label>
+                            </template>
+                          </KFormField>
+                          <KFormField :name="`${proto}-accounting-interval`" :label="t('nodes.accounting_interval')">
+                            <template #default="{ fieldId }">
+                              <KInput :id="fieldId" v-model="configForm.extra_json.accounting_interval" type="number" placeholder="300" />
+                            </template>
+                          </KFormField>
                         </template>
                       </div>
                     </div>
 
                     <!-- Logging & Advanced Group -->
-                    <div class="form-group">
+                    <div v-if="showAdvanced" class="form-group">
                       <h5 class="form-group__title">{{ t('nodes.group_logging') }}</h5>
                       <div class="protocol-form__grid">
                         <KFormField :name="`${proto}-enable-logs`" :label="t('nodes.enable_logs')">
@@ -999,59 +1045,6 @@ onMounted(() => {
                               <KTextarea :id="fieldId" v-model="configForm.extra_json.custom_directives" :rows="3" placeholder="One directive per line" />
                             </template>
                           </KFormField>
-                        </template>
-                      </div>
-                    </div>
-
-                    <!-- Proxy Group -->
-                    <div class="form-group">
-                      <h5 class="form-group__title">{{ t('nodes.outbound') }}</h5>
-                      <p class="form-group__desc">{{ t('nodes.outbound_desc') }}</p>
-                      <div class="protocol-form__grid">
-                        <KFormField :name="`${proto}-outbound-enabled`" :label="t('nodes.outbound_enabled')" :hint="t('nodes.hint_outbound')">
-                          <template #default>
-                            <label class="toggle-switch">
-                              <input type="checkbox" :checked="configForm.extra_json.outbound?.enabled ?? false" @change="initOutbound(); configForm.extra_json.outbound.enabled = ($event.target as HTMLInputElement).checked" />
-                              <span class="toggle-switch__slider" />
-                            </label>
-                          </template>
-                        </KFormField>
-                        <template v-if="configForm.extra_json.outbound?.enabled">
-                          <KFormField :name="`${proto}-outbound-type`" :label="t('nodes.outbound_type')">
-                            <template #default="{ fieldId }">
-                              <KSelect :id="fieldId" v-model="configForm.extra_json.outbound.type" :options="[{ label: 'VLESS', value: 'vless' }, { label: 'VMess', value: 'vmess' }, { label: 'Trojan', value: 'trojan' }, { label: 'Shadowsocks', value: 'shadowsocks' }, { label: 'SOCKS5', value: 'socks5' }]" />
-                            </template>
-                          </KFormField>
-                          <KFormField :name="`${proto}-outbound-address`" :label="t('nodes.outbound_address')">
-                            <template #default="{ fieldId }">
-                              <KInput :id="fieldId" v-model="configForm.extra_json.outbound.address" placeholder="proxy.example.com:443" />
-                            </template>
-                          </KFormField>
-                          <KFormField :name="`${proto}-outbound-uuid`" :label="t('nodes.outbound_uuid')">
-                            <template #default="{ fieldId }">
-                              <KInput :id="fieldId" v-model="configForm.extra_json.outbound.uuid" :placeholder="t('nodes.placeholder_uuid_or_password')" type="password" />
-                            </template>
-                          </KFormField>
-                          <KFormField :name="`${proto}-outbound-tls`" :label="t('nodes.outbound_tls')">
-                            <template #default>
-                              <label class="toggle-switch">
-                                <input type="checkbox" :checked="configForm.extra_json.outbound.tls" @change="configForm.extra_json.outbound.tls = ($event.target as HTMLInputElement).checked" />
-                                <span class="toggle-switch__slider" />
-                              </label>
-                            </template>
-                          </KFormField>
-                          <template v-if="['vless', 'vmess', 'trojan'].includes(configForm.extra_json.outbound.type)">
-                            <KFormField :name="`${proto}-outbound-path`" :label="t('nodes.outbound_path')">
-                              <template #default="{ fieldId }">
-                                <KInput :id="fieldId" v-model="configForm.extra_json.outbound.path" placeholder="/ws" />
-                              </template>
-                            </KFormField>
-                            <KFormField :name="`${proto}-outbound-sni`" :label="t('nodes.outbound_sni')">
-                              <template #default="{ fieldId }">
-                                <KInput :id="fieldId" v-model="configForm.extra_json.outbound.sni" placeholder="sni.example.com" />
-                              </template>
-                            </KFormField>
-                          </template>
                         </template>
                       </div>
                     </div>
@@ -1267,6 +1260,13 @@ onMounted(() => {
   border-top: 1px solid var(--color-border);
   padding-top: var(--space-3);
   margin-top: var(--space-2);
+}
+
+/* Advanced Toggle */
+.advanced-toggle {
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-3);
+  margin-top: var(--space-3);
 }
 
 /* Validation indicators */

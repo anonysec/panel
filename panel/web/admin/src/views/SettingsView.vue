@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import { useNodesStore } from '@/stores/nodes'
 import { useApi } from '@koris/composables/useApi'
 import { useToast } from '@koris/composables/useToast'
 import { useI18n } from '@koris/composables/useI18n'
@@ -18,7 +17,6 @@ const props = defineProps<{ tab?: string }>()
 
 const { t, locale: currentLocale, setLocale } = useI18n()
 const { mode: currentMode, theme: currentTheme, setMode, setTheme } = useTheme()
-const nodesStore = useNodesStore()
 const { get, put, patch } = useApi()
 const toast = useToast()
 const activeTab = ref(props.tab || 'panel-settings')
@@ -315,6 +313,60 @@ const importFileInput = ref<HTMLInputElement | null>(null)
 const exporting = ref(false)
 const importing = ref(false)
 
+// ─── Panel HTTPS Certificate ────────────────────────────────────────────────
+const certStatus = ref<{ cert: boolean; key: boolean; expiry: string }>({ cert: false, key: false, expiry: '' })
+const certFile = ref<File | null>(null)
+const keyFile = ref<File | null>(null)
+const savingCert = ref(false)
+
+async function loadCertStatus(): Promise<void> {
+  try {
+    const res = await get<{ ok: boolean; cert: boolean; key: boolean; expiry?: string }>('/api/settings/cert-status')
+    certStatus.value = { cert: !!res.cert, key: !!res.key, expiry: res.expiry || '' }
+  } catch {
+    // No cert info available
+  }
+}
+
+function handleCertUpload(event: Event): void {
+  const target = event.target as HTMLInputElement
+  if (target.files && target.files.length > 0) certFile.value = target.files[0]
+}
+
+function handleKeyUpload(event: Event): void {
+  const target = event.target as HTMLInputElement
+  if (target.files && target.files.length > 0) keyFile.value = target.files[0]
+}
+
+async function saveCertFiles(): Promise<void> {
+  if (!certFile.value && !keyFile.value) {
+    toast.error(t('settings.cert_no_files'))
+    return
+  }
+  savingCert.value = true
+  try {
+    const formData = new FormData()
+    if (certFile.value) formData.append('cert', certFile.value)
+    if (keyFile.value) formData.append('key', keyFile.value)
+    const res = await fetch('/api/settings/cert-upload', {
+      method: 'POST',
+      credentials: 'include',
+      body: formData,
+    })
+    const data = await res.json()
+    if (data.ok) {
+      toast.success(t('settings.cert_save_success'))
+      await loadCertStatus()
+    } else {
+      toast.error(t('settings.cert_save_error'))
+    }
+  } catch {
+    toast.error(t('settings.cert_save_error'))
+  } finally {
+    savingCert.value = false
+  }
+}
+
 async function downloadBackup(): Promise<void> {
   exporting.value = true
   try {
@@ -370,7 +422,7 @@ async function handleImportFile(event: Event): Promise<void> {
 }
 
 onMounted(async () => {
-  await Promise.all([loadPanelSettings(), loadThresholds(), loadTelegramSettings(), loadWarningConfig(), loadAppLinks()])
+  await Promise.all([loadPanelSettings(), loadThresholds(), loadTelegramSettings(), loadWarningConfig(), loadAppLinks(), loadCertStatus()])
 })
 </script>
 
@@ -646,18 +698,35 @@ onMounted(async () => {
       <!-- Certificates -->
       <template #certificates>
         <div class="settings-panel">
-          <h4 class="section-title">{{ t('settings.ssl_certs') }}</h4>
+          <h4 class="section-title">{{ t('settings.panel_https') }}</h4>
+          <p class="text-muted text-sm">{{ t('settings.panel_https_desc') }}</p>
           <div class="cert-info">
             <div class="cert-item">
-              <span class="cert-item__label">{{ t('settings.ca_cert') }}</span>
-              <KStatusPill :status="nodesStore.vpnSettings?.ca_exists ? 'active' : 'disabled'" size="sm" />
+              <span class="cert-item__label">{{ t('settings.upload_cert') }}</span>
+              <KStatusPill :status="certStatus.cert ? 'active' : 'disabled'" size="sm" />
             </div>
             <div class="cert-item">
-              <span class="cert-item__label">{{ t('settings.tls_key') }}</span>
-              <KStatusPill :status="nodesStore.vpnSettings?.tls_crypt_exists ? 'active' : 'disabled'" size="sm" />
+              <span class="cert-item__label">{{ t('settings.upload_key') }}</span>
+              <KStatusPill :status="certStatus.key ? 'active' : 'disabled'" size="sm" />
+            </div>
+            <div v-if="certStatus.expiry" class="cert-item">
+              <span class="cert-item__label">{{ t('settings.cert_expiry') }}</span>
+              <span class="cert-item__value text-sm">{{ certStatus.expiry }}</span>
             </div>
           </div>
-          <KButton variant="primary" size="sm" class="mt-3">{{ t('settings.regen_certs') }}</KButton>
+          <form class="settings-form cert-upload-form" @submit.prevent>
+            <KFormField name="ssl-cert" :label="t('settings.upload_cert')">
+              <template #default>
+                <input type="file" accept=".pem,.crt,.cer" @change="handleCertUpload" />
+              </template>
+            </KFormField>
+            <KFormField name="ssl-key" :label="t('settings.upload_key')">
+              <template #default>
+                <input type="file" accept=".pem,.key" @change="handleKeyUpload" />
+              </template>
+            </KFormField>
+            <KButton variant="primary" size="sm" :loading="savingCert" @click="saveCertFiles">{{ t('btn.save') }}</KButton>
+          </form>
         </div>
       </template>
 
@@ -707,6 +776,8 @@ onMounted(async () => {
 .cert-info { display: flex; flex-direction: column; gap: var(--space-2); }
 .cert-item { display: flex; justify-content: space-between; align-items: center; padding: var(--space-3); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); max-width: 400px; }
 .cert-item__label { font-size: var(--text-sm); }
+.cert-item__value { font-size: var(--text-sm); color: var(--color-text); }
+.cert-upload-form input[type="file"] { font-size: var(--text-sm); }
 
 .thresholds-list { display: flex; flex-direction: column; gap: var(--space-2); }
 .threshold-row { display: flex; align-items: flex-end; gap: var(--space-2); }

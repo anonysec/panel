@@ -552,6 +552,30 @@ const messages: Record<Locale, Record<string, string>> = {
     'nodes.placeholder_uuid_or_password': 'UUID or password',
     // Nodes
     'nodes.node_token': 'Node Token',
+    // Nodes - API Proxy
+    'nodes.api_proxy': 'API Proxy',
+    'nodes.proxy_enabled': 'Enable Proxy',
+    'nodes.proxy_type': 'Proxy Type',
+    'nodes.proxy_address': 'Proxy Address',
+    'nodes.proxy_username': 'Username',
+    'nodes.proxy_password': 'Password',
+    // Nodes - Advanced Toggle
+    'nodes.show_advanced': 'Show Advanced Settings',
+    'nodes.hide_advanced': 'Hide Advanced Settings',
+    // Nodes - SSH Accounting
+    'nodes.accounting_enabled': 'Accounting Enabled',
+    'nodes.accounting_interval': 'Accounting Interval (sec)',
+    // Nodes - Status
+    'nodes.not_configured': 'Not Configured',
+    // Settings - Panel HTTPS
+    'settings.panel_https': 'Panel HTTPS Certificate',
+    'settings.panel_https_desc': 'Upload SSL certificate and key for panel HTTPS access. These files are used to serve the panel over a secure connection.',
+    'settings.upload_cert': 'SSL Certificate',
+    'settings.upload_key': 'SSL Private Key',
+    'settings.cert_expiry': 'Certificate Expiry',
+    'settings.cert_no_files': 'Please select a certificate or key file to upload.',
+    'settings.cert_save_success': 'Certificate files saved successfully.',
+    'settings.cert_save_error': 'Failed to save certificate files.',
   },
   fa: {
     // Navigation
@@ -1100,6 +1124,30 @@ const messages: Record<Locale, Record<string, string>> = {
     'nodes.placeholder_uuid_or_password': 'UUID یا رمز عبور',
     // Nodes
     'nodes.node_token': 'توکن نود',
+    // Nodes - API Proxy
+    'nodes.api_proxy': 'پروکسی API',
+    'nodes.proxy_enabled': 'فعال‌سازی پروکسی',
+    'nodes.proxy_type': 'نوع پروکسی',
+    'nodes.proxy_address': 'آدرس پروکسی',
+    'nodes.proxy_username': 'نام کاربری',
+    'nodes.proxy_password': 'رمز عبور',
+    // Nodes - Advanced Toggle
+    'nodes.show_advanced': 'نمایش تنظیمات پیشرفته',
+    'nodes.hide_advanced': 'مخفی کردن تنظیمات پیشرفته',
+    // Nodes - SSH Accounting
+    'nodes.accounting_enabled': 'حسابداری فعال',
+    'nodes.accounting_interval': 'فاصله حسابداری (ثانیه)',
+    // Nodes - Status
+    'nodes.not_configured': 'پیکربندی نشده',
+    // Settings - Panel HTTPS
+    'settings.panel_https': 'گواهی HTTPS پنل',
+    'settings.panel_https_desc': 'گواهی SSL و کلید خصوصی را برای دسترسی HTTPS پنل آپلود کنید.',
+    'settings.upload_cert': 'گواهی SSL',
+    'settings.upload_key': 'کلید خصوصی SSL',
+    'settings.cert_expiry': 'تاریخ انقضای گواهی',
+    'settings.cert_no_files': 'لطفا یک فایل گواهی یا کلید انتخاب کنید.',
+    'settings.cert_save_success': 'فایل‌های گواهی با موفقیت ذخیره شد.',
+    'settings.cert_save_error': 'خطا در ذخیره فایل‌های گواهی.',
   },
   zh: {
     // Navigation
@@ -1649,6 +1697,30 @@ const messages: Record<Locale, Record<string, string>> = {
     'nodes.placeholder_uuid_or_password': 'UUID或密码',
     // Nodes
     'nodes.node_token': '节点令牌',
+    // Nodes - API Proxy
+    'nodes.api_proxy': 'API代理',
+    'nodes.proxy_enabled': '启用代理',
+    'nodes.proxy_type': '代理类型',
+    'nodes.proxy_address': '代理地址',
+    'nodes.proxy_username': '用户名',
+    'nodes.proxy_password': '密码',
+    // Nodes - Advanced Toggle
+    'nodes.show_advanced': '显示高级设置',
+    'nodes.hide_advanced': '隐藏高级设置',
+    // Nodes - SSH Accounting
+    'nodes.accounting_enabled': '启用计费',
+    'nodes.accounting_interval': '计费间隔 (秒)',
+    // Nodes - Status
+    'nodes.not_configured': '未配置',
+    // Settings - Panel HTTPS
+    'settings.panel_https': '面板HTTPS证书',
+    'settings.panel_https_desc': '上传SSL证书和密钥以启用面板的HTTPS安全访问。',
+    'settings.upload_cert': 'SSL证书',
+    'settings.upload_key': 'SSL私钥',
+    'settings.cert_expiry': '证书到期日期',
+    'settings.cert_no_files': '请选择证书或密钥文件上传。',
+    'settings.cert_save_success': '证书文件保存成功。',
+    'settings.cert_save_error': '保存证书文件失败。',
   },
   ru: {
     // Navigation
@@ -2195,6 +2267,30 @@ const messages: Record<Locale, Record<string, string>> = {
     // Sidebar
     'sidebar.expand': 'Развернуть боковую панель',
     'sidebar.collapse': 'Свернуть боковую панель',
+    // Nodes - API Proxy
+    'nodes.api_proxy': 'API Прокси',
+    'nodes.proxy_enabled': 'Включить прокси',
+    'nodes.proxy_type': 'Тип прокси',
+    'nodes.proxy_address': 'Адрес прокси',
+    'nodes.proxy_username': 'Имя пользователя',
+    'nodes.proxy_password': 'Пароль',
+    // Nodes - Advanced Toggle
+    'nodes.show_advanced': 'Показать расширенные настройки',
+    'nodes.hide_advanced': 'Скрыть расширенные настройки',
+    // Nodes - SSH Accounting
+    'nodes.accounting_enabled': 'Учет включен',
+    'nodes.accounting_interval': 'Интервал учета (сек)',
+    // Nodes - Status
+    'nodes.not_configured': 'Не настроено',
+    // Settings - Panel HTTPS
+    'settings.panel_https': 'HTTPS сертификат панели',
+    'settings.panel_https_desc': 'Загрузите SSL сертификат и ключ для HTTPS доступа к панели.',
+    'settings.upload_cert': 'SSL Сертификат',
+    'settings.upload_key': 'SSL Приватный ключ',
+    'settings.cert_expiry': 'Срок действия сертификата',
+    'settings.cert_no_files': 'Выберите файл сертификата или ключа для загрузки.',
+    'settings.cert_save_success': 'Файлы сертификата сохранены успешно.',
+    'settings.cert_save_error': 'Ошибка сохранения файлов сертификата.',
   }
 }
 

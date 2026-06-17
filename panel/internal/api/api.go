@@ -133,6 +133,7 @@ type NodeStatus struct {
 	OpenVPN      string  `json:"openvpn_status"`
 	L2TP         string  `json:"l2tp_status"`
 	IKEv2        string  `json:"ikev2_status"`
+	SSH          string  `json:"ssh_status"`
 	UpdatedAt    string  `json:"updated_at"`
 }
 
@@ -1988,6 +1989,10 @@ func (s *Server) fillNodeRuntime(n *Node) error {
 					svc.UpdatedAt = t.Time.Format(time.RFC3339)
 				}
 				n.Services = append(n.Services, svc)
+				// Populate SSH status from services
+				if svc.Service == "ssh" && svc.Status != "" {
+					n.StatusMetrics.SSH = svc.Status
+				}
 			}
 		}
 	}
