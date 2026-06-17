@@ -90,7 +90,7 @@ async function handleLogin() {
 
         <!-- Error Message -->
         <div v-if="store.error" class="login-form__error" role="alert">
-          {{ store.error }}
+          {{ t(store.error) || store.error }}
         </div>
 
         <KButton

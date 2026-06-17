@@ -398,8 +398,8 @@ const messages: Record<Locale, Record<string, string>> = {
     'login.sign_in_btn': 'Sign In',
     'login.username_required': 'Username is required',
     'login.password_required': 'Password is required',
+    'login.invalid_credentials': 'Invalid username or password',
     // Setup
-    'setup.hero_title': 'Welcome to KorisPanel',
     'setup.hero_desc': 'Set up your admin account to start managing your VPN infrastructure.',
     'setup.initial_setup': 'Initial Setup',
     'setup.create_owner': 'Create the owner account to get started.',
@@ -569,7 +569,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'nodes.not_configured': 'Not Configured',
     // Settings - Panel HTTPS
     'settings.panel_https': 'Panel HTTPS Certificate',
-    'settings.panel_https_desc': 'Upload SSL certificate and key for panel HTTPS access. These files are used to serve the panel over a secure connection.',
+    'settings.panel_https_desc': 'Panel HTTPS certificate management is configured through the server configuration. Set PANEL_TLS_CERT and PANEL_TLS_KEY environment variables to enable HTTPS.',
     'settings.upload_cert': 'SSL Certificate',
     'settings.upload_key': 'SSL Private Key',
     'settings.cert_expiry': 'Certificate Expiry',
@@ -970,6 +970,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'login.sign_in_btn': 'ورود',
     'login.username_required': 'نام کاربری الزامی است',
     'login.password_required': 'رمز عبور الزامی است',
+    'login.invalid_credentials': 'نام کاربری یا رمز عبور نامعتبر است',
     // Setup
     'setup.hero_title': 'به KorisPanel خوش آمدید',
     'setup.hero_desc': 'حساب مدیر خود را ایجاد کنید تا مدیریت زیرساخت VPN را شروع کنید.',
@@ -1141,7 +1142,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'nodes.not_configured': 'پیکربندی نشده',
     // Settings - Panel HTTPS
     'settings.panel_https': 'گواهی HTTPS پنل',
-    'settings.panel_https_desc': 'گواهی SSL و کلید خصوصی را برای دسترسی HTTPS پنل آپلود کنید.',
+    'settings.panel_https_desc': 'مدیریت گواهی HTTPS پنل از طریق پیکربندی سرور انجام می‌شود. متغیرهای محیطی PANEL_TLS_CERT و PANEL_TLS_KEY را برای فعال‌سازی HTTPS تنظیم کنید.',
     'settings.upload_cert': 'گواهی SSL',
     'settings.upload_key': 'کلید خصوصی SSL',
     'settings.cert_expiry': 'تاریخ انقضای گواهی',
@@ -1543,6 +1544,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'login.sign_in_btn': '登录',
     'login.username_required': '用户名为必填项',
     'login.password_required': '密码为必填项',
+    'login.invalid_credentials': '用户名或密码无效',
     // Setup
     'setup.hero_title': '欢迎使用 KorisPanel',
     'setup.hero_desc': '创建管理员账户以开始管理VPN基础设施。',
@@ -1714,7 +1716,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'nodes.not_configured': '未配置',
     // Settings - Panel HTTPS
     'settings.panel_https': '面板HTTPS证书',
-    'settings.panel_https_desc': '上传SSL证书和密钥以启用面板的HTTPS安全访问。',
+    'settings.panel_https_desc': '面板HTTPS证书管理通过服务器配置进行。设置 PANEL_TLS_CERT 和 PANEL_TLS_KEY 环境变量以启用HTTPS。',
     'settings.upload_cert': 'SSL证书',
     'settings.upload_key': 'SSL私钥',
     'settings.cert_expiry': '证书到期日期',
@@ -2148,6 +2150,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'login.sign_in_btn': 'Войти',
     'login.username_required': 'Имя пользователя обязательно',
     'login.password_required': 'Пароль обязателен',
+    'login.invalid_credentials': 'Неверное имя пользователя или пароль',
     // Setup
     'setup.hero_title': 'Добро пожаловать в KorisPanel',
     'setup.hero_desc': 'Создайте учетную запись администратора для управления VPN-инфраструктурой.',
@@ -2284,7 +2287,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'nodes.not_configured': 'Не настроено',
     // Settings - Panel HTTPS
     'settings.panel_https': 'HTTPS сертификат панели',
-    'settings.panel_https_desc': 'Загрузите SSL сертификат и ключ для HTTPS доступа к панели.',
+    'settings.panel_https_desc': 'Управление HTTPS сертификатом панели осуществляется через конфигурацию сервера. Установите переменные окружения PANEL_TLS_CERT и PANEL_TLS_KEY для включения HTTPS.',
     'settings.upload_cert': 'SSL Сертификат',
     'settings.upload_key': 'SSL Приватный ключ',
     'settings.cert_expiry': 'Срок действия сертификата',

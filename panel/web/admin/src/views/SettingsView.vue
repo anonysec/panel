@@ -11,7 +11,6 @@ import KFormField from '@koris/ui/KFormField.vue'
 import KInput from '@koris/ui/KInput.vue'
 import KSelect from '@koris/ui/KSelect.vue'
 import KButton from '@koris/ui/KButton.vue'
-import KStatusPill from '@koris/ui/KStatusPill.vue'
 
 const props = defineProps<{ tab?: string }>()
 
@@ -314,58 +313,8 @@ const exporting = ref(false)
 const importing = ref(false)
 
 // ─── Panel HTTPS Certificate ────────────────────────────────────────────────
-const certStatus = ref<{ cert: boolean; key: boolean; expiry: string }>({ cert: false, key: false, expiry: '' })
-const certFile = ref<File | null>(null)
-const keyFile = ref<File | null>(null)
-const savingCert = ref(false)
-
-async function loadCertStatus(): Promise<void> {
-  try {
-    const res = await get<{ ok: boolean; cert: boolean; key: boolean; expiry?: string }>('/api/settings/cert-status')
-    certStatus.value = { cert: !!res.cert, key: !!res.key, expiry: res.expiry || '' }
-  } catch {
-    // No cert info available
-  }
-}
-
-function handleCertUpload(event: Event): void {
-  const target = event.target as HTMLInputElement
-  if (target.files && target.files.length > 0) certFile.value = target.files[0]
-}
-
-function handleKeyUpload(event: Event): void {
-  const target = event.target as HTMLInputElement
-  if (target.files && target.files.length > 0) keyFile.value = target.files[0]
-}
-
-async function saveCertFiles(): Promise<void> {
-  if (!certFile.value && !keyFile.value) {
-    toast.error(t('settings.cert_no_files'))
-    return
-  }
-  savingCert.value = true
-  try {
-    const formData = new FormData()
-    if (certFile.value) formData.append('cert', certFile.value)
-    if (keyFile.value) formData.append('key', keyFile.value)
-    const res = await fetch('/api/settings/cert-upload', {
-      method: 'POST',
-      credentials: 'include',
-      body: formData,
-    })
-    const data = await res.json()
-    if (data.ok) {
-      toast.success(t('settings.cert_save_success'))
-      await loadCertStatus()
-    } else {
-      toast.error(t('settings.cert_save_error'))
-    }
-  } catch {
-    toast.error(t('settings.cert_save_error'))
-  } finally {
-    savingCert.value = false
-  }
-}
+// Certificate management is done via environment variables (PANEL_TLS_CERT, PANEL_TLS_KEY).
+// No upload functionality needed.
 
 async function downloadBackup(): Promise<void> {
   exporting.value = true
@@ -422,7 +371,7 @@ async function handleImportFile(event: Event): Promise<void> {
 }
 
 onMounted(async () => {
-  await Promise.all([loadPanelSettings(), loadThresholds(), loadTelegramSettings(), loadWarningConfig(), loadAppLinks(), loadCertStatus()])
+  await Promise.all([loadPanelSettings(), loadThresholds(), loadTelegramSettings(), loadWarningConfig(), loadAppLinks()])
 })
 </script>
 
@@ -702,31 +651,14 @@ onMounted(async () => {
           <p class="text-muted text-sm">{{ t('settings.panel_https_desc') }}</p>
           <div class="cert-info">
             <div class="cert-item">
-              <span class="cert-item__label">{{ t('settings.upload_cert') }}</span>
-              <KStatusPill :status="certStatus.cert ? 'active' : 'disabled'" size="sm" />
+              <span class="cert-item__label">PANEL_TLS_CERT</span>
+              <code class="cert-item__value text-sm">/path/to/cert.pem</code>
             </div>
             <div class="cert-item">
-              <span class="cert-item__label">{{ t('settings.upload_key') }}</span>
-              <KStatusPill :status="certStatus.key ? 'active' : 'disabled'" size="sm" />
-            </div>
-            <div v-if="certStatus.expiry" class="cert-item">
-              <span class="cert-item__label">{{ t('settings.cert_expiry') }}</span>
-              <span class="cert-item__value text-sm">{{ certStatus.expiry }}</span>
+              <span class="cert-item__label">PANEL_TLS_KEY</span>
+              <code class="cert-item__value text-sm">/path/to/key.pem</code>
             </div>
           </div>
-          <form class="settings-form cert-upload-form" @submit.prevent>
-            <KFormField name="ssl-cert" :label="t('settings.upload_cert')">
-              <template #default>
-                <input type="file" accept=".pem,.crt,.cer" @change="handleCertUpload" />
-              </template>
-            </KFormField>
-            <KFormField name="ssl-key" :label="t('settings.upload_key')">
-              <template #default>
-                <input type="file" accept=".pem,.key" @change="handleKeyUpload" />
-              </template>
-            </KFormField>
-            <KButton variant="primary" size="sm" :loading="savingCert" @click="saveCertFiles">{{ t('btn.save') }}</KButton>
-          </form>
         </div>
       </template>
 

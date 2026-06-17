@@ -118,6 +118,7 @@ type Node struct {
 	Status        string              `json:"status"`
 	LastSeenAt    string              `json:"last_seen_at"`
 	CreatedAt     string              `json:"created_at"`
+	ProxyConfig   json.RawMessage     `json:"proxy_config,omitempty"`
 	StatusMetrics NodeStatus          `json:"status_metrics"`
 	Services      []Service           `json:"services"`
 	History       []NodeUsageSnapshot `json:"history,omitempty"`
@@ -1811,7 +1812,7 @@ func (s *Server) nodeByID(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) listNodes(w http.ResponseWriter, r *http.Request) {
 	s.markStaleNodes()
-	rows, err := s.DB.Query(`SELECT id,name,public_ip,COALESCE(domain,''),status,last_seen_at,created_at FROM nodes ORDER BY id DESC LIMIT 500`)
+	rows, err := s.DB.Query(`SELECT id,name,public_ip,COALESCE(domain,''),status,last_seen_at,created_at,proxy_config FROM nodes ORDER BY id DESC LIMIT 500`)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
@@ -1832,7 +1833,7 @@ func (s *Server) listNodes(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) getNode(w http.ResponseWriter, id int64) {
 	s.markStaleNodes()
-	node, err := s.scanNode(s.DB.QueryRow(`SELECT id,name,public_ip,COALESCE(domain,''),status,last_seen_at,created_at FROM nodes WHERE id=? LIMIT 1`, id))
+	node, err := s.scanNode(s.DB.QueryRow(`SELECT id,name,public_ip,COALESCE(domain,''),status,last_seen_at,created_at,proxy_config FROM nodes WHERE id=? LIMIT 1`, id))
 	if err == sql.ErrNoRows {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
 		return
@@ -1876,9 +1877,14 @@ func (s *Server) createNode(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) updateNode(w http.ResponseWriter, r *http.Request, id int64) {
 	var in struct {
-		Name     string `json:"name"`
-		PublicIP string `json:"public_ip"`
-		Domain   string `json:"domain"`
+		Name          string  `json:"name"`
+		PublicIP      string  `json:"public_ip"`
+		Domain        string  `json:"domain"`
+		ProxyEnabled  *bool   `json:"proxy_enabled,omitempty"`
+		ProxyType     *string `json:"proxy_type,omitempty"`
+		ProxyAddress  *string `json:"proxy_address,omitempty"`
+		ProxyUsername *string `json:"proxy_username,omitempty"`
+		ProxyPassword *string `json:"proxy_password,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad_json"})
@@ -1891,9 +1897,41 @@ func (s *Server) updateNode(w http.ResponseWriter, r *http.Request, id int64) {
 		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "name_public_ip_required"})
 		return
 	}
-	if _, err := s.DB.Exec(`UPDATE nodes SET name=?,public_ip=?,domain=? WHERE id=?`, in.Name, in.PublicIP, nullString(in.Domain), id); err != nil {
-		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": err.Error()})
-		return
+
+	// Build proxy_config JSON if any proxy fields are provided
+	var proxyConfigJSON *string
+	if in.ProxyEnabled != nil || in.ProxyType != nil || in.ProxyAddress != nil {
+		pc := map[string]any{}
+		if in.ProxyEnabled != nil {
+			pc["enabled"] = *in.ProxyEnabled
+		}
+		if in.ProxyType != nil {
+			pc["type"] = *in.ProxyType
+		}
+		if in.ProxyAddress != nil {
+			pc["address"] = *in.ProxyAddress
+		}
+		if in.ProxyUsername != nil {
+			pc["username"] = *in.ProxyUsername
+		}
+		if in.ProxyPassword != nil {
+			pc["password"] = *in.ProxyPassword
+		}
+		b, _ := json.Marshal(pc)
+		s := string(b)
+		proxyConfigJSON = &s
+	}
+
+	if proxyConfigJSON != nil {
+		if _, err := s.DB.Exec(`UPDATE nodes SET name=?,public_ip=?,domain=?,proxy_config=? WHERE id=?`, in.Name, in.PublicIP, nullString(in.Domain), *proxyConfigJSON, id); err != nil {
+			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": err.Error()})
+			return
+		}
+	} else {
+		if _, err := s.DB.Exec(`UPDATE nodes SET name=?,public_ip=?,domain=? WHERE id=?`, in.Name, in.PublicIP, nullString(in.Domain), id); err != nil {
+			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": err.Error()})
+			return
+		}
 	}
 	actor, _, _ := s.currentAdmin(r)
 	s.logAudit(actor, "node.updated", "node", strconv.FormatInt(id, 10), nil, map[string]any{"name": in.Name}, clientIP(r))
@@ -1960,7 +1998,8 @@ type nodeScanner interface{ Scan(dest ...any) error }
 func (s *Server) scanNode(row nodeScanner) (Node, error) {
 	var n Node
 	var lastSeen, created sql.NullTime
-	if err := row.Scan(&n.ID, &n.Name, &n.PublicIP, &n.Domain, &n.Status, &lastSeen, &created); err != nil {
+	var proxyConfig []byte
+	if err := row.Scan(&n.ID, &n.Name, &n.PublicIP, &n.Domain, &n.Status, &lastSeen, &created, &proxyConfig); err != nil {
 		return n, err
 	}
 	if lastSeen.Valid {
@@ -1968,6 +2007,9 @@ func (s *Server) scanNode(row nodeScanner) (Node, error) {
 	}
 	if created.Valid {
 		n.CreatedAt = created.Time.Format(time.RFC3339)
+	}
+	if len(proxyConfig) > 0 {
+		n.ProxyConfig = json.RawMessage(proxyConfig)
 	}
 	return n, nil
 }

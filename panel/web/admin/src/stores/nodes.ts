@@ -75,6 +75,11 @@ export interface EditNodePayload {
   name?: string
   public_ip?: string
   domain?: string
+  proxy_enabled?: boolean
+  proxy_type?: string
+  proxy_address?: string
+  proxy_username?: string
+  proxy_password?: string
 }
 
 /**
