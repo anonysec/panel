@@ -4,6 +4,8 @@ import { useNodesStore } from '@/stores/nodes'
 import { useApi } from '@koris/composables/useApi'
 import { useToast } from '@koris/composables/useToast'
 import { useI18n } from '@koris/composables/useI18n'
+import { useTheme, availableThemes } from '@koris/composables/useTheme'
+import type { ThemeMode, UITheme } from '@koris/composables/useTheme'
 import type { Locale } from '@koris/composables/useI18n'
 import KTabs from '@koris/ui/KTabs.vue'
 import KFormField from '@koris/ui/KFormField.vue'
@@ -15,6 +17,7 @@ import KStatusPill from '@koris/ui/KStatusPill.vue'
 const props = defineProps<{ tab?: string }>()
 
 const { t, locale: currentLocale, setLocale } = useI18n()
+const { mode: currentMode, theme: currentTheme, setMode, setTheme } = useTheme()
 const nodesStore = useNodesStore()
 const { get, put, patch } = useApi()
 const toast = useToast()
@@ -34,6 +37,20 @@ const panelName = ref('')
 const panelLang = ref<string>(currentLocale.value)
 const loadingSettings = ref(false)
 const savingSettings = ref(false)
+
+// Theme settings (local copies for save)
+const selectedTheme = ref<UITheme>(currentTheme.value)
+const selectedMode = ref<ThemeMode>(currentMode.value)
+
+const modeOptions: { value: ThemeMode; labelKey: string }[] = [
+  { value: 'system', labelKey: 'settings.mode_system' },
+  { value: 'dark', labelKey: 'settings.mode_dark' },
+  { value: 'light', labelKey: 'settings.mode_light' },
+]
+
+// Apply theme/mode immediately when user changes in UI (live preview)
+watch(selectedTheme, (v) => { setTheme(v) })
+watch(selectedMode, (v) => { setMode(v) })
 
 // Sync panelLang with global locale (bidirectional)
 watch(panelLang, (newLang) => {
@@ -55,6 +72,15 @@ async function loadPanelSettings(): Promise<void> {
     if (res.settings) {
       panelName.value = res.settings.panel_name || ''
       panelLang.value = res.settings.language || 'en'
+      // Load theme settings from server
+      if (res.settings.ui_theme && availableThemes.some((t) => t.id === res.settings.ui_theme)) {
+        selectedTheme.value = res.settings.ui_theme as UITheme
+        setTheme(res.settings.ui_theme as UITheme)
+      }
+      if (res.settings.ui_mode && ['system', 'dark', 'light'].includes(res.settings.ui_mode)) {
+        selectedMode.value = res.settings.ui_mode as ThemeMode
+        setMode(res.settings.ui_mode as ThemeMode)
+      }
     }
   } catch {
     // Use defaults on error
@@ -69,6 +95,8 @@ async function savePanelSettings(): Promise<void> {
     await patch<{ ok: boolean }>('/api/panel-settings', {
       panel_name: panelName.value,
       language: panelLang.value,
+      ui_theme: selectedTheme.value,
+      ui_mode: selectedMode.value,
     })
     toast.success(t('settings.save_success'))
   } catch {
@@ -229,6 +257,56 @@ onMounted(async () => {
                 />
               </template>
             </KFormField>
+
+            <!-- Theme Section -->
+            <div class="theme-section">
+              <h5 class="subsection-title">{{ t('settings.ui_theme') }}</h5>
+              <p class="text-muted text-sm">{{ t('settings.ui_theme_desc') }}</p>
+              <div class="theme-cards">
+                <button
+                  v-for="themeItem in availableThemes"
+                  :key="themeItem.id"
+                  type="button"
+                  class="theme-card"
+                  :class="{ active: selectedTheme === themeItem.id }"
+                  @click="selectedTheme = themeItem.id"
+                >
+                  <div class="theme-card__swatches">
+                    <span class="swatch" :style="{ background: themeItem.colors.bg }"></span>
+                    <span class="swatch" :style="{ background: themeItem.colors.surface }"></span>
+                    <span class="swatch" :style="{ background: themeItem.colors.primary }"></span>
+                    <span class="swatch" :style="{ background: themeItem.colors.accent }"></span>
+                  </div>
+                  <div class="theme-card__info">
+                    <span class="theme-card__name">{{ t('settings.theme_' + themeItem.id) }}</span>
+                    <span class="theme-card__desc">{{ t('settings.theme_' + themeItem.id + '_desc') }}</span>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            <!-- Mode Section -->
+            <div class="mode-section">
+              <h5 class="subsection-title">{{ t('settings.ui_mode') }}</h5>
+              <div class="mode-radios">
+                <label
+                  v-for="opt in modeOptions"
+                  :key="opt.value"
+                  class="mode-radio"
+                  :class="{ active: selectedMode === opt.value }"
+                >
+                  <input
+                    type="radio"
+                    name="ui-mode"
+                    :value="opt.value"
+                    v-model="selectedMode"
+                    class="mode-radio__input"
+                  />
+                  <span class="mode-radio__label">{{ t(opt.labelKey) }}</span>
+                </label>
+              </div>
+            </div>
+
             <KButton type="submit" variant="primary" :loading="savingSettings" :disabled="loadingSettings">
               {{ t('settings.save') }}
             </KButton>
@@ -401,11 +479,50 @@ onMounted(async () => {
 .text-sm { font-size: var(--text-sm); }
 .mt-3 { margin-top: var(--space-3); }
 
+/* Theme Section */
+.theme-section { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--color-border); }
+.theme-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: var(--space-2); max-width: 600px; }
+.theme-card { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3); background: var(--color-surface); border: 2px solid var(--color-border); border-radius: var(--radius-lg); cursor: pointer; transition: border-color 0.15s, transform 0.15s; text-align: left; }
+.theme-card:hover { border-color: var(--color-primary); transform: translateY(-1px); }
+.theme-card.active { border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15); }
+.theme-card__swatches { display: flex; gap: 4px; }
+.theme-card__swatches .swatch { width: 20px; height: 20px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.1); }
+.theme-card__info { display: flex; flex-direction: column; gap: 2px; }
+.theme-card__name { font-size: var(--text-sm); font-weight: var(--font-semibold); color: var(--color-text); }
+.theme-card__desc { font-size: var(--text-xs); color: var(--color-muted); }
+
+/* Mode Section */
+.mode-section { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-2); }
+.mode-radios { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+.mode-radio { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); cursor: pointer; transition: border-color 0.15s; font-size: var(--text-sm); font-weight: var(--font-medium); color: var(--color-text); }
+.mode-radio:hover { border-color: var(--color-primary); }
+.mode-radio.active { border-color: var(--color-primary); background: rgba(37, 99, 235, 0.05); }
+.mode-radio__input { display: none; }
+.mode-radio__label { pointer-events: none; }
+
 @media (max-width: 768px) {
   .settings-form { max-width: 100%; }
   .cert-item { max-width: 100%; }
   .export-list { max-width: 100%; }
   .export-item { flex-direction: column; align-items: flex-start; gap: var(--space-2); }
   .threshold-input-group { flex-wrap: wrap; }
+  .theme-cards { grid-template-columns: 1fr; max-width: 100%; }
+  .mode-radios { flex-direction: column; }
 }
+
+/* RTL support */
+[dir="rtl"] .settings-view { text-align: right; }
+[dir="rtl"] .settings-form { text-align: right; }
+[dir="rtl"] .section-title { text-align: right; }
+[dir="rtl"] .subsection-title { text-align: right; }
+[dir="rtl"] .cert-item { flex-direction: row-reverse; }
+[dir="rtl"] .cert-item__label { text-align: right; }
+[dir="rtl"] .export-item { flex-direction: row-reverse; }
+[dir="rtl"] .export-item__label { text-align: right; }
+[dir="rtl"] .threshold-row { flex-direction: row-reverse; }
+[dir="rtl"] .threshold-input-group { flex-direction: row-reverse; }
+[dir="rtl"] .backup-section { text-align: right; }
+[dir="rtl"] .theme-card { text-align: right; }
+[dir="rtl"] .theme-card__swatches { flex-direction: row-reverse; }
+[dir="rtl"] .mode-radios { flex-direction: row-reverse; }
 </style>

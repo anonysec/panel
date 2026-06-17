@@ -4,10 +4,12 @@ import { useRouter } from 'vue-router'
 import { useRealtimeStore } from '@/stores/realtime'
 import { useCustomersStore } from '@/stores/customers'
 import { useNodesStore } from '@/stores/nodes'
+import { useI18n } from '@koris/composables/useI18n'
 import KChart from '@koris/ui/KChart.vue'
 import KStatusPill from '@koris/ui/KStatusPill.vue'
 import KSkeleton from '@koris/ui/KSkeleton.vue'
 
+const { t } = useI18n()
 const router = useRouter()
 const realtime = useRealtimeStore()
 const customers = useCustomersStore()
@@ -17,10 +19,10 @@ customers.loadCustomers()
 nodes.loadNodes()
 
 const statCards = computed(() => [
-  { label: 'Revenue', value: `$${realtime.stats.approved_payments}`, icon: '💰', route: 'payments' },
-  { label: 'Active Users', value: realtime.stats.active_customers, icon: '👥', route: 'customers' },
-  { label: 'Nodes Online', value: realtime.stats.nodes, icon: '🖥️', route: 'nodes' },
-  { label: 'Open Tickets', value: realtime.stats.open_tickets, icon: '🎫', route: 'tickets' },
+  { label: t('stat.revenue'), value: `$${realtime.stats.approved_payments}`, icon: '💰', route: 'payments' },
+  { label: t('stat.active_users'), value: realtime.stats.active_customers, icon: '👥', route: 'customers' },
+  { label: t('stat.nodes_online'), value: realtime.stats.nodes, icon: '🖥️', route: 'nodes' },
+  { label: t('stat.open_tickets'), value: realtime.stats.open_tickets, icon: '🎫', route: 'tickets' },
 ])
 
 function handleStatClick(routeName: string) {
@@ -57,10 +59,10 @@ const userStatusData = computed(() => {
   const disabled = customers.list.filter(c => c.status === 'disabled').length
   const expired = customers.list.filter(c => c.status === 'expired').length
   return [
-    { label: 'Active', value: active },
-    { label: 'Limited', value: limited },
-    { label: 'Disabled', value: disabled },
-    { label: 'Expired', value: expired },
+    { label: t('status.active'), value: active },
+    { label: t('status.limited'), value: limited },
+    { label: t('status.disabled'), value: disabled },
+    { label: t('status.expired'), value: expired },
   ]
 })
 
@@ -96,7 +98,7 @@ function formatDuration(seconds: number): string {
     <!-- Charts Row -->
     <section class="charts-row">
       <div class="chart-panel chart-panel--traffic">
-        <h4 class="panel-title">Data Usage</h4>
+        <h4 class="panel-title">{{ t('dashboard.data_usage') }}</h4>
         <div v-if="trafficChartData.length > 2">
           <KChart
             type="area"
@@ -110,19 +112,19 @@ function formatDuration(seconds: number): string {
         <div v-else class="traffic-fallback">
           <div class="traffic-live">
             <div class="traffic-stat">
-              <span class="traffic-stat__label">Total Downloaded</span>
+              <span class="traffic-stat__label">{{ t('dashboard.total_downloaded') }}</span>
               <span class="traffic-stat__value">{{ formatBytes(totalDownloaded) }}</span>
             </div>
             <div class="traffic-stat">
-              <span class="traffic-stat__label">Total Uploaded</span>
+              <span class="traffic-stat__label">{{ t('dashboard.total_uploaded') }}</span>
               <span class="traffic-stat__value">{{ formatBytes(totalUploaded) }}</span>
             </div>
           </div>
-          <p class="traffic-note">Chart data loading... (updates every 3 seconds)</p>
+          <p class="traffic-note">{{ t('dashboard.chart_loading') }}</p>
         </div>
       </div>
       <div class="chart-panel chart-panel--donut">
-        <h4 class="panel-title">User Status</h4>
+        <h4 class="panel-title">{{ t('dashboard.user_status') }}</h4>
         <KChart
           v-if="customers.list.length > 0"
           type="donut"
@@ -136,16 +138,16 @@ function formatDuration(seconds: number): string {
 
     <!-- Recent Users -->
     <section class="panel">
-      <h4 class="panel-title">Recent Users</h4>
+      <h4 class="panel-title">{{ t('dashboard.recent_users') }}</h4>
       <div class="recent-table">
         <table class="mini-table" role="table">
           <thead>
             <tr>
-              <th>Username</th>
-              <th>Display Name</th>
-              <th>Status</th>
-              <th>Plan</th>
-              <th>Created</th>
+              <th>{{ t('user.username') }}</th>
+              <th>{{ t('user.display_name') }}</th>
+              <th>{{ t('user.status') }}</th>
+              <th>{{ t('user.plan') }}</th>
+              <th>{{ t('user.created') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -157,7 +159,7 @@ function formatDuration(seconds: number): string {
               <td class="text-muted">{{ user.created_at?.slice(0, 10) }}</td>
             </tr>
             <tr v-if="recentUsers.length === 0">
-              <td colspan="5" class="text-muted text-center">No users yet</td>
+              <td colspan="5" class="text-muted text-center">{{ t('empty.no_users') }}</td>
             </tr>
           </tbody>
         </table>
@@ -167,7 +169,7 @@ function formatDuration(seconds: number): string {
     <!-- Node Health + Live Sessions -->
     <section class="bottom-row">
       <div class="panel panel--nodes">
-        <h4 class="panel-title">Node Health</h4>
+        <h4 class="panel-title">{{ t('dashboard.node_health') }}</h4>
         <div class="node-cards">
           <div v-for="node in nodes.list" :key="node.id" class="node-health-card">
             <div class="node-health-card__header">
@@ -191,12 +193,12 @@ function formatDuration(seconds: number): string {
               </div>
             </div>
           </div>
-          <p v-if="nodes.list.length === 0" class="text-muted">No nodes registered</p>
+          <p v-if="nodes.list.length === 0" class="text-muted">{{ t('empty.no_nodes') }}</p>
         </div>
       </div>
 
       <div class="panel panel--sessions">
-        <h4 class="panel-title">Live Sessions</h4>
+        <h4 class="panel-title">{{ t('dashboard.live_sessions') }}</h4>
         <div class="sessions-list">
           <div v-for="session in realtime.liveSessions.slice(0, 8)" :key="session.id" class="session-row">
             <span class="session-row__user">{{ session.username }}</span>
@@ -205,7 +207,7 @@ function formatDuration(seconds: number): string {
             <span class="session-row__traffic">{{ formatBytes(session.input_bytes + session.output_bytes) }}</span>
             <span class="session-row__duration text-muted">{{ formatDuration(session.session_seconds) }}</span>
           </div>
-          <p v-if="realtime.liveSessions.length === 0" class="text-muted">No active sessions</p>
+          <p v-if="realtime.liveSessions.length === 0" class="text-muted">{{ t('empty.no_sessions') }}</p>
         </div>
       </div>
     </section>
@@ -266,4 +268,20 @@ function formatDuration(seconds: number): string {
 @media (max-width: 768px) {
   .charts-row, .bottom-row { grid-template-columns: 1fr; }
 }
+
+/* RTL support */
+[dir="rtl"] .stat-card { flex-direction: row-reverse; }
+[dir="rtl"] .stat-card__body { text-align: right; }
+[dir="rtl"] .stat-card__label { text-align: right; }
+[dir="rtl"] .mini-table th { text-align: right; }
+[dir="rtl"] .mini-table td { text-align: right; }
+[dir="rtl"] .metric-bar { flex-direction: row-reverse; }
+[dir="rtl"] .metric-bar__value { text-align: left; }
+[dir="rtl"] .metric-bar__label { text-align: right; }
+[dir="rtl"] .node-health-card__header { flex-direction: row-reverse; }
+[dir="rtl"] .session-row { direction: rtl; }
+[dir="rtl"] .panel-title { text-align: right; }
+[dir="rtl"] .charts-row { direction: rtl; }
+[dir="rtl"] .bottom-row { direction: rtl; }
+[dir="rtl"] .traffic-stat__label { text-align: center; }
 </style>

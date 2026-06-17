@@ -23,6 +23,11 @@ const showAddForm = ref(false)
 const creating = ref(false)
 const newToken = ref<string | null>(null)
 
+// ─── Edit Node State ─────────────────────────────────────────────────────────
+const editingNodeId = ref<number | null>(null)
+const editNodeForm = ref({ name: '', public_ip: '', domain: '' })
+const savingNode = ref(false)
+
 const tabs = computed(() => [
   { key: 'nodes', label: t('nodes.nodes') },
   { key: 'cores', label: t('nodes.cores') },
@@ -148,6 +153,52 @@ async function handleDeleteNode(id: number, name: string) {
   }
 }
 
+// ─── Edit Node Handlers ──────────────────────────────────────────────────────
+function startEditNode(node: any) {
+  editingNodeId.value = node.id
+  editNodeForm.value = {
+    name: node.name || '',
+    public_ip: node.public_ip || '',
+    domain: node.domain || '',
+  }
+}
+
+function cancelEditNode() {
+  editingNodeId.value = null
+  editNodeForm.value = { name: '', public_ip: '', domain: '' }
+}
+
+async function handleEditNode() {
+  if (!editingNodeId.value) return
+  savingNode.value = true
+  // Build delta payload: only include fields that actually changed
+  const originalNode = store.list.find((n: any) => n.id === editingNodeId.value)
+  const payload: Record<string, string> = {}
+  if (editNodeForm.value.name !== (originalNode?.name || '')) {
+    payload.name = editNodeForm.value.name
+  }
+  if (editNodeForm.value.public_ip !== (originalNode?.public_ip || '')) {
+    payload.public_ip = editNodeForm.value.public_ip
+  }
+  if (editNodeForm.value.domain !== (originalNode?.domain || '')) {
+    payload.domain = editNodeForm.value.domain
+  }
+  // If nothing changed, just close the form
+  if (Object.keys(payload).length === 0) {
+    savingNode.value = false
+    cancelEditNode()
+    return
+  }
+  const success = await store.editNode(editingNodeId.value, payload)
+  savingNode.value = false
+  if (success) {
+    toast.success(t('nodes.edit_success'))
+    cancelEditNode()
+  } else {
+    toast.error(t('nodes.edit_error'))
+  }
+}
+
 
 // ─── Protocol Config Handlers ────────────────────────────────────────────────
 function startEdit(nodeId: number, protocol: string, currentConfig: any) {
@@ -183,6 +234,96 @@ function startEdit(nodeId: number, protocol: string, currentConfig: any) {
 function cancelEdit() {
   editingConfig.value = null
   configForm.value = {}
+}
+
+// ─── Validation Helpers ──────────────────────────────────────────────────────
+function isPortValid(port: number | string | null | undefined): boolean {
+  const num = Number(port)
+  return Number.isInteger(num) && num >= 1 && num <= 65535
+}
+
+function isCidrValid(cidr: string | null | undefined): boolean {
+  if (!cidr) return true // empty is ok for SSH
+  const match = cidr.match(/^(\d{1,3}\.){3}\d{1,3}\/(\d{1,2})$/)
+  if (!match) return false
+  const parts = cidr.split('/')[0].split('.')
+  const mask = Number(cidr.split('/')[1])
+  return parts.every(p => Number(p) >= 0 && Number(p) <= 255) && mask >= 0 && mask <= 32
+}
+
+// ─── Config Preview ──────────────────────────────────────────────────────────
+const showConfigPreview = ref(false)
+
+function getConfigPreview(): string[] {
+  if (!editingConfig.value) return []
+  const lines: string[] = []
+  const f = configForm.value
+  lines.push(`protocol=${f.protocol}`)
+  lines.push(`port=${f.port}`)
+  if (f.network) lines.push(`network=${f.network}`)
+  lines.push(`enabled=${f.enabled}`)
+  if (f.mtu) lines.push(`mtu=${f.mtu}`)
+  if (f.max_clients) lines.push(`max_clients=${f.max_clients}`)
+  if (f.conn_limit) lines.push(`conn_limit=${f.conn_limit}`)
+  lines.push(`enable_logs=${f.enable_logs}`)
+  if (f.extra_json) {
+    for (const [key, val] of Object.entries(f.extra_json)) {
+      if (val !== '' && val !== null && val !== undefined) {
+        lines.push(`${key}=${val}`)
+      }
+    }
+  }
+  return lines
+}
+
+// ─── Chip Array Helpers ──────────────────────────────────────────────────────
+const newRouteInput = ref('')
+const newKeyInput = ref('')
+
+function getPushRoutesArray(): string[] {
+  const raw = configForm.value?.extra_json?.push_routes || ''
+  if (!raw) return []
+  return raw.split(',').map((r: string) => r.trim()).filter(Boolean)
+}
+
+function addPushRoute() {
+  const val = newRouteInput.value.trim()
+  if (!val) return
+  const current = getPushRoutesArray()
+  if (!current.includes(val)) {
+    current.push(val)
+    configForm.value.extra_json.push_routes = current.join(', ')
+  }
+  newRouteInput.value = ''
+}
+
+function removePushRoute(index: number) {
+  const current = getPushRoutesArray()
+  current.splice(index, 1)
+  configForm.value.extra_json.push_routes = current.join(', ')
+}
+
+function getAllowedKeysArray(): string[] {
+  const raw = configForm.value?.extra_json?.allowed_keys || ''
+  if (!raw) return []
+  return raw.split('\n').map((k: string) => k.trim()).filter(Boolean)
+}
+
+function addAllowedKey() {
+  const val = newKeyInput.value.trim()
+  if (!val) return
+  const current = getAllowedKeysArray()
+  if (!current.includes(val)) {
+    current.push(val)
+    configForm.value.extra_json.allowed_keys = current.join('\n')
+  }
+  newKeyInput.value = ''
+}
+
+function removeAllowedKey(index: number) {
+  const current = getAllowedKeysArray()
+  current.splice(index, 1)
+  configForm.value.extra_json.allowed_keys = current.join('\n')
 }
 
 async function saveConfig() {
@@ -388,12 +529,41 @@ onMounted(() => {
                 </div>
               </div>
               <div class="node-card__actions">
+                <KButton variant="ghost" size="sm" @click="startEditNode(node)">
+                  {{ t('btn.edit') }}
+                </KButton>
                 <KButton variant="ghost" size="sm" @click="toggleNode(node.id, node.status)">
                   {{ node.status === 'online' ? t('btn.disable') : t('btn.enable') }}
                 </KButton>
                 <KButton variant="danger" size="sm" @click="handleDeleteNode(node.id, node.name)">
                   {{ t('btn.delete') }}
                 </KButton>
+              </div>
+              <!-- Inline Edit Node Form -->
+              <div v-if="editingNodeId === node.id" class="node-edit-form">
+                <form @submit.prevent="handleEditNode">
+                  <div class="form-grid">
+                    <KFormField name="edit-name" :label="t('nodes.node_name')" required>
+                      <template #default="{ fieldId }">
+                        <KInput :id="fieldId" v-model="editNodeForm.name" placeholder="node-us-1" />
+                      </template>
+                    </KFormField>
+                    <KFormField name="edit-ip" :label="t('nodes.public_ip')" required>
+                      <template #default="{ fieldId }">
+                        <KInput :id="fieldId" v-model="editNodeForm.public_ip" placeholder="1.2.3.4" />
+                      </template>
+                    </KFormField>
+                    <KFormField name="edit-domain" :label="t('nodes.domain')" required>
+                      <template #default="{ fieldId }">
+                        <KInput :id="fieldId" v-model="editNodeForm.domain" placeholder="us1.example.com" />
+                      </template>
+                    </KFormField>
+                  </div>
+                  <div class="form-actions">
+                    <KButton variant="ghost" size="sm" @click="cancelEditNode">{{ t('btn.cancel') }}</KButton>
+                    <KButton type="submit" variant="primary" size="sm" :loading="savingNode">{{ t('btn.save') }}</KButton>
+                  </div>
+                </form>
               </div>
             </div>
           </div>
@@ -468,14 +638,16 @@ onMounted(() => {
                     <div class="form-group">
                       <h5 class="form-group__title">{{ t('nodes.group_networking') }}</h5>
                       <div class="protocol-form__grid">
-                        <KFormField :name="`${proto}-port`" :label="t('label.port')" :hint="t('nodes.hint_port')">
+                        <KFormField :name="`${proto}-port`" :label="t('label.port')" :hint="t('nodes.hint_port')" :class="{ 'field--invalid': configForm.port && !isPortValid(configForm.port) }">
                           <template #default="{ fieldId }">
                             <KInput :id="fieldId" v-model="configForm.port" type="number" placeholder="Port" />
+                            <span v-if="configForm.port && !isPortValid(configForm.port)" class="validation-msg">{{ t('nodes.validation_port') }}</span>
                           </template>
                         </KFormField>
-                        <KFormField :name="`${proto}-network`" :label="t('label.network')" :hint="t('nodes.hint_network')">
+                        <KFormField :name="`${proto}-network`" :label="t('label.network')" :hint="t('nodes.hint_network')" :class="{ 'field--invalid': configForm.network && !isCidrValid(configForm.network) }">
                           <template #default="{ fieldId }">
                             <KInput :id="fieldId" v-model="configForm.network" placeholder="10.8.0.0/24" />
+                            <span v-if="configForm.network && !isCidrValid(configForm.network)" class="validation-msg">{{ t('nodes.validation_cidr') }}</span>
                           </template>
                         </KFormField>
                         <KFormField v-if="proto !== 'ssh'" :name="`${proto}-mtu`" :label="t('nodes.mtu')">
@@ -507,8 +679,19 @@ onMounted(() => {
                             </template>
                           </KFormField>
                           <KFormField :name="`${proto}-push-routes`" :label="t('nodes.push_routes')" class="form-group__full-width">
-                            <template #default="{ fieldId }">
-                              <KTextarea :id="fieldId" v-model="configForm.extra_json.push_routes" :rows="2" placeholder="192.168.1.0/24, 10.0.0.0/8" />
+                            <template #default>
+                              <div class="chip-field">
+                                <div class="chip-list">
+                                  <span v-for="(route, idx) in getPushRoutesArray()" :key="idx" class="chip">
+                                    {{ route }}
+                                    <button type="button" class="chip__remove" @click="removePushRoute(idx)">&times;</button>
+                                  </span>
+                                </div>
+                                <div class="chip-input-row">
+                                  <KInput v-model="newRouteInput" :placeholder="t('nodes.add_route_placeholder')" @keydown.enter.prevent="addPushRoute" />
+                                  <KButton variant="ghost" size="sm" type="button" @click="addPushRoute">{{ t('nodes.add') }}</KButton>
+                                </div>
+                              </div>
                             </template>
                           </KFormField>
                           <KFormField :name="`${proto}-fragment`" :label="t('nodes.fragment')">
@@ -680,8 +863,19 @@ onMounted(() => {
                             </template>
                           </KFormField>
                           <KFormField :name="`${proto}-allowed-keys`" :label="t('nodes.allowed_keys')" class="form-group__full-width">
-                            <template #default="{ fieldId }">
-                              <KTextarea :id="fieldId" v-model="configForm.extra_json.allowed_keys" :rows="3" placeholder="ssh-ed25519 AAAA..." />
+                            <template #default>
+                              <div class="chip-field">
+                                <div class="chip-list">
+                                  <span v-for="(key, idx) in getAllowedKeysArray()" :key="idx" class="chip chip--key">
+                                    {{ key.length > 40 ? key.slice(0, 40) + '...' : key }}
+                                    <button type="button" class="chip__remove" @click="removeAllowedKey(idx)">&times;</button>
+                                  </span>
+                                </div>
+                                <div class="chip-input-row">
+                                  <KInput v-model="newKeyInput" :placeholder="t('nodes.add_key_placeholder')" @keydown.enter.prevent="addAllowedKey" />
+                                  <KButton variant="ghost" size="sm" type="button" @click="addAllowedKey">{{ t('nodes.add') }}</KButton>
+                                </div>
+                              </div>
                             </template>
                           </KFormField>
                         </template>
@@ -794,9 +988,18 @@ onMounted(() => {
                     </div>
 
                     <div class="protocol-form__actions">
+                      <KButton variant="ghost" size="sm" @click="showConfigPreview = !showConfigPreview">
+                        {{ showConfigPreview ? t('nodes.hide_preview') : t('nodes.show_preview') }}
+                      </KButton>
                       <KButton variant="ghost" size="sm" @click="resetToDefaults">{{ t('nodes.reset_defaults') }}</KButton>
                       <KButton variant="ghost" size="sm" @click="cancelEdit">{{ t('btn.cancel') }}</KButton>
                       <KButton variant="primary" size="sm" :loading="savingConfig" @click="saveConfig">{{ t('nodes.save_config') }}</KButton>
+                    </div>
+
+                    <!-- Config Preview Panel -->
+                    <div v-if="showConfigPreview" class="config-preview">
+                      <h5 class="config-preview__title">{{ t('nodes.config_preview') }}</h5>
+                      <pre class="config-preview__code"><code>{{ getConfigPreview().join('\n') }}</code></pre>
                     </div>
                   </div>
                 </div>
@@ -983,4 +1186,120 @@ onMounted(() => {
     flex-wrap: wrap;
   }
 }
+
+/* Node Edit Form */
+.node-edit-form {
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-3);
+  margin-top: var(--space-2);
+}
+
+/* Validation indicators */
+.field--invalid :deep(input) {
+  border-color: var(--color-danger, #ef4444) !important;
+  box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.3);
+}
+.validation-msg {
+  font-size: var(--text-xs);
+  color: var(--color-danger, #ef4444);
+  margin-top: 2px;
+  display: block;
+}
+
+/* Config Preview */
+.config-preview {
+  margin-top: var(--space-4);
+  padding: var(--space-3);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+.config-preview__title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
+  color: var(--color-muted);
+  text-transform: uppercase;
+}
+.config-preview__code {
+  margin: 0;
+  font-size: var(--text-xs);
+  line-height: 1.6;
+  color: var(--color-text);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* Chip Field */
+.chip-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  min-height: 24px;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: rgba(37, 99, 235, 0.1);
+  color: var(--color-primary);
+  border-radius: 9999px;
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
+  max-width: 100%;
+  word-break: break-all;
+}
+.chip--key {
+  font-family: monospace;
+  background: var(--color-surface-2);
+  color: var(--color-text);
+}
+.chip__remove {
+  border: none;
+  background: none;
+  color: var(--color-danger, #ef4444);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  opacity: 0.7;
+  transition: opacity var(--duration-fast);
+}
+.chip__remove:hover { opacity: 1; }
+.chip-input-row {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+.chip-input-row :deep(input) {
+  flex: 1;
+}
+
+/* RTL support */
+[dir="rtl"] .page-header { flex-direction: row-reverse; }
+[dir="rtl"] .node-card { direction: rtl; text-align: right; }
+[dir="rtl"] .node-card__title { flex-direction: row-reverse; }
+[dir="rtl"] .node-card__actions { flex-direction: row-reverse; }
+[dir="rtl"] .metric-row { flex-direction: row-reverse; }
+[dir="rtl"] .metric-row__val { text-align: left; }
+[dir="rtl"] .metric-row__label { text-align: right; }
+[dir="rtl"] .protocol-card__header { flex-direction: row-reverse; }
+[dir="rtl"] .protocol-card__info { flex-direction: row-reverse; }
+[dir="rtl"] .protocol-card__meta { flex-direction: row-reverse; }
+[dir="rtl"] .protocol-card__controls { margin-left: 0; margin-right: auto; flex-direction: row-reverse; }
+[dir="rtl"] .protocol-form__actions { flex-direction: row-reverse; }
+[dir="rtl"] .form-actions { flex-direction: row-reverse; }
+[dir="rtl"] .form-group__title { text-align: right; }
+[dir="rtl"] .field--danger { border-left: none; padding-left: 0; border-right: 3px solid rgba(239, 68, 68, 0.5); padding-right: var(--space-2); }
+[dir="rtl"] .chip-input-row { flex-direction: row-reverse; }
+[dir="rtl"] .config-preview { text-align: right; }
+[dir="rtl"] .config-preview__title { text-align: right; }
+[dir="rtl"] .panel-title { text-align: right; }
+[dir="rtl"] .token-banner { text-align: right; }
 </style>

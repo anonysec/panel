@@ -238,6 +238,38 @@ kbd{font-size:10px;padding:2px 5px;border-radius:4px;background:var(--surface-2)
 [data-theme="light"] .toast.success{background:rgba(255,255,255,.97);border-color:rgba(22,163,74,.3)}
 [data-theme="light"] .toast.error{background:rgba(255,255,255,.97);border-color:rgba(220,38,38,.3)}
 
+/* UI Theme: Kiro - component overrides */
+[data-ui-theme="kiro"] .sidebar{background:rgba(12,18,34,.95)}
+[data-ui-theme="kiro"] .logo{background:linear-gradient(135deg,#06b6d4,#a78bfa)}
+[data-ui-theme="kiro"] .nav-item.active{background:linear-gradient(135deg,rgba(6,182,212,.15),rgba(167,139,250,.12));box-shadow:inset 0 0 0 1px rgba(6,182,212,.25)}
+[data-ui-theme="kiro"] .btn-primary{background:linear-gradient(135deg,#06b6d4,#a78bfa);box-shadow:0 4px 14px rgba(6,182,212,.25)}
+[data-ui-theme="kiro"] .stat-card:hover{border-color:rgba(6,182,212,.2)}
+[data-ui-theme="kiro"] .shadow-brand{box-shadow:0 4px 14px rgba(6,182,212,.3)}
+
+/* UI Theme: GitHub - component overrides */
+[data-ui-theme="github"] .sidebar{background:rgba(22,27,34,.97)}
+[data-ui-theme="github"] .logo{background:linear-gradient(135deg,#58a6ff,#7ee787)}
+[data-ui-theme="github"] .nav-item.active{background:linear-gradient(135deg,rgba(88,166,255,.12),rgba(126,231,135,.08));box-shadow:inset 0 0 0 1px rgba(88,166,255,.2)}
+[data-ui-theme="github"] .btn-primary{background:linear-gradient(135deg,#58a6ff,#7ee787);box-shadow:0 4px 14px rgba(88,166,255,.2)}
+[data-ui-theme="github"] .stat-card:hover{border-color:rgba(88,166,255,.2)}
+
+/* UI Theme: Soft Dark - component overrides */
+[data-ui-theme="soft-dark"] .sidebar{background:rgba(26,27,38,.97)}
+[data-ui-theme="soft-dark"] .logo{background:linear-gradient(135deg,#7aa2f7,#bb9af7)}
+[data-ui-theme="soft-dark"] .nav-item.active{background:linear-gradient(135deg,rgba(122,162,247,.15),rgba(187,154,247,.1));box-shadow:inset 0 0 0 1px rgba(122,162,247,.2)}
+[data-ui-theme="soft-dark"] .btn-primary{background:linear-gradient(135deg,#7aa2f7,#bb9af7);box-shadow:0 4px 14px rgba(122,162,247,.2)}
+[data-ui-theme="soft-dark"] .stat-card:hover{border-color:rgba(122,162,247,.2)}
+
+/* UI Theme: Corporate - component overrides */
+[data-ui-theme="corporate"] .sidebar{background:rgba(255,255,255,.98);border-right-color:#e5e7eb}
+[data-ui-theme="corporate"] .logo{background:linear-gradient(135deg,#4f46e5,#0891b2)}
+[data-ui-theme="corporate"] .nav-item.active{background:linear-gradient(135deg,rgba(79,70,229,.1),rgba(8,145,178,.08));box-shadow:inset 0 0 0 1px rgba(79,70,229,.2)}
+[data-ui-theme="corporate"] .btn-primary{background:linear-gradient(135deg,#4f46e5,#0891b2);box-shadow:0 4px 14px rgba(79,70,229,.15)}
+[data-ui-theme="corporate"] .stat-card:hover{border-color:rgba(79,70,229,.2)}
+[data-ui-theme="corporate"] .toast.success{background:rgba(255,255,255,.98);border-color:rgba(5,150,105,.3)}
+[data-ui-theme="corporate"] .toast.error{background:rgba(255,255,255,.98);border-color:rgba(220,38,38,.3)}
+[data-ui-theme="corporate"] ::-webkit-scrollbar-thumb{background:#cbd5e1}
+
 /* Command palette */
 .cmd-palette{width:min(520px,calc(100vw - 40px));background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:0 30px 80px rgba(0,0,0,.5);overflow:hidden;animation:modalIn .12s ease}
 .cmd-input-row{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--border)}
@@ -305,6 +337,84 @@ kbd{font-size:10px;padding:2px 5px;border-radius:4px;background:var(--surface-2)
 [dir="rtl"] .pagination{flex-direction:row-reverse}
 [dir="rtl"] .toast{right:auto;left:16px}
 [dir="rtl"] .notif-dropdown{right:auto;left:0}
+
+/* RTL - Comprehensive component coverage */
+[dir="rtl"] body{text-align:right}
+[dir="rtl"] .topbar{flex-direction:row-reverse}
+[dir="rtl"] .main{text-align:right}
+
+/* RTL - Buttons with icons */
+[dir="rtl"] .btn-primary,[dir="rtl"] .btn-ghost,[dir="rtl"] .btn-danger{direction:rtl}
+[dir="rtl"] .icon-btn .notif-dot{right:auto;left:8px}
+
+/* RTL - Node cards comprehensive */
+[dir="rtl"] .node-grid{direction:rtl}
+[dir="rtl"] .node-metrics span{text-align:center}
+
+/* RTL - Stat cards */
+[dir="rtl"] .stat-card .ic{margin-left:12px;margin-right:0}
+[dir="rtl"] .stat-card .lbl{text-align:right}
+[dir="rtl"] .stat-card .trend{text-align:right}
+
+/* RTL - Tables */
+[dir="rtl"] td{text-align:right}
+[dir="rtl"] .table-wrap{direction:rtl}
+
+/* RTL - Modal */
+[dir="rtl"] .modal{direction:rtl;text-align:right}
+[dir="rtl"] .modal-close{margin-left:0;margin-right:auto}
+
+/* RTL - Toast animation */
+[dir="rtl"] .toast .toast-close{margin-left:0;margin-right:auto}
+@keyframes slideInRtl{from{opacity:0;transform:translateX(-20px)}to{opacity:1;transform:none}}
+[dir="rtl"] .toast{animation-name:slideInRtl}
+
+/* RTL - Form elements */
+[dir="rtl"] label{text-align:right}
+[dir="rtl"] input,[dir="rtl"] select,[dir="rtl"] textarea{text-align:right}
+[dir="rtl"] input[type="number"],[dir="rtl"] input[type="tel"]{direction:ltr;text-align:left}
+
+/* RTL - Grid layouts */
+[dir="rtl"] .grid{direction:rtl}
+[dir="rtl"] .g2{direction:rtl}
+[dir="rtl"] .g4{direction:rtl}
+
+/* RTL - Command palette */
+[dir="rtl"] .cmd-input-row{flex-direction:row-reverse}
+[dir="rtl"] .cmd-item{flex-direction:row-reverse}
+[dir="rtl"] .cmd-item-text{text-align:right}
+
+/* RTL - Notifications dropdown */
+[dir="rtl"] .notif-head{flex-direction:row-reverse}
+[dir="rtl"] .notif-item{flex-direction:row-reverse}
+[dir="rtl"] .notif-text{text-align:right}
+
+/* RTL - Pill alignment */
+[dir="rtl"] .pill{direction:rtl}
+
+/* RTL - Auth screen */
+[dir="rtl"] .auth-screen{direction:rtl}
+[dir="rtl"] .auth-left{text-align:right}
+[dir="rtl"] .auth-right{border-left:none;border-right:1px solid var(--border);text-align:right}
+
+/* RTL - Empty state */
+[dir="rtl"] .empty-state{text-align:center}
+
+/* RTL - Alert */
+[dir="rtl"] .alert{text-align:right}
+
+/* RTL - Sidebar footer */
+[dir="rtl"] .sidebar-foot{flex-direction:row-reverse}
+[dir="rtl"] .sidebar-foot .meta{text-align:right}
+
+/* RTL - Donut chart */
+[dir="rtl"] .donut-wrap{direction:rtl}
+
+/* RTL - Settings */
+[dir="rtl"] .settings-layout{grid-template-columns:1fr 200px}
+
+/* RTL - Bulk toolbar */
+[dir="rtl"] .bulk-toolbar .bulk-toolbar__clear{margin-left:0;margin-right:auto}
 
 /* Responsive */
 @media(max-width:1100px){.g4{grid-template-columns:repeat(2,1fr)}.g2{grid-template-columns:1fr}.settings-layout{grid-template-columns:1fr}}

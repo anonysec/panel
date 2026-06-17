@@ -101,7 +101,7 @@
   --z-tooltip: 400;
 }
 
-/* ─── Light Theme Overrides ─── */
+/* ─── Light Theme Overrides (mode-based) ─── */
 [data-theme="light"] {
   --color-bg: #f8fafc;
   --color-surface: #ffffff;
@@ -121,4 +121,169 @@
   --shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.1);
   --shadow-xl: 0 20px 50px rgba(0, 0, 0, 0.15);
   --shadow-brand: 0 4px 14px rgba(59, 130, 246, 0.2);
+}
+
+/* ─── UI Theme: Kiro ─── */
+/* Teal/cyan primary with dark navy background and purple accent */
+[data-ui-theme="kiro"] {
+  --color-bg: #0c1222;
+  --color-surface: #1a2332;
+  --color-surface-2: #243044;
+  --color-border: #2d3b4d;
+  --color-text: #e8eef4;
+  --color-muted: #8899aa;
+
+  --color-primary: #06b6d4;
+  --color-accent: #a78bfa;
+  --color-brand-2: #a78bfa;
+
+  --color-success: #34d399;
+  --color-warning: #fbbf24;
+  --color-danger: #f87171;
+
+  --gradient-brand: linear-gradient(135deg, #06b6d4, #a78bfa);
+
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.25);
+  --shadow-md: 0 10px 30px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 20px 60px rgba(0, 0, 0, 0.45);
+  --shadow-xl: 0 30px 80px rgba(0, 0, 0, 0.6);
+  --shadow-brand: 0 4px 14px rgba(6, 182, 212, 0.3);
+}
+
+[data-ui-theme="kiro"][data-theme="light"] {
+  --color-bg: #f0fdfa;
+  --color-surface: #ffffff;
+  --color-surface-2: #ecfeff;
+  --color-border: #cffafe;
+  --color-text: #0c1222;
+  --color-muted: #5b7282;
+
+  --color-primary: #0891b2;
+  --color-brand-2: #7c3aed;
+
+  --shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.1);
+  --shadow-xl: 0 20px 50px rgba(0, 0, 0, 0.15);
+  --shadow-brand: 0 4px 14px rgba(8, 145, 178, 0.2);
+}
+
+/* ─── UI Theme: GitHub ─── */
+/* GitHub-inspired dark palette with blue primary and green accent */
+[data-ui-theme="github"] {
+  --color-bg: #0d1117;
+  --color-surface: #161b22;
+  --color-surface-2: #1c2128;
+  --color-border: #30363d;
+  --color-text: #c9d1d9;
+  --color-muted: #8b949e;
+
+  --color-primary: #58a6ff;
+  --color-accent: #7ee787;
+  --color-brand-2: #7ee787;
+
+  --color-success: #3fb950;
+  --color-warning: #d29922;
+  --color-danger: #f85149;
+
+  --gradient-brand: linear-gradient(135deg, #58a6ff, #7ee787);
+
+  --shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.5);
+  --shadow-xl: 0 24px 64px rgba(0, 0, 0, 0.6);
+  --shadow-brand: 0 4px 14px rgba(88, 166, 255, 0.25);
+}
+
+[data-ui-theme="github"][data-theme="light"] {
+  --color-bg: #ffffff;
+  --color-surface: #f6f8fa;
+  --color-surface-2: #eaeef2;
+  --color-border: #d0d7de;
+  --color-text: #24292f;
+  --color-muted: #57606a;
+
+  --color-primary: #0969da;
+  --color-brand-2: #1a7f37;
+  --color-success: #1a7f37;
+  --color-warning: #9a6700;
+  --color-danger: #cf222e;
+
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 10px 24px rgba(0, 0, 0, 0.1);
+  --shadow-xl: 0 20px 48px rgba(0, 0, 0, 0.14);
+  --shadow-brand: 0 4px 14px rgba(9, 105, 218, 0.2);
+}
+
+/* ─── UI Theme: Soft Dark ─── */
+/* Warmer dark with softer contrast */
+[data-ui-theme="soft-dark"] {
+  --color-bg: #1a1b26;
+  --color-surface: #24283b;
+  --color-surface-2: #2f3549;
+  --color-border: #414868;
+  --color-text: #c0caf5;
+  --color-muted: #565f89;
+
+  --color-primary: #7aa2f7;
+  --color-accent: #9ece6a;
+  --color-brand-2: #9ece6a;
+
+  --color-success: #73daca;
+  --color-warning: #e0af68;
+  --color-danger: #f7768e;
+
+  --gradient-brand: linear-gradient(135deg, #7aa2f7, #bb9af7);
+
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.4);
+  --shadow-xl: 0 24px 64px rgba(0, 0, 0, 0.5);
+  --shadow-brand: 0 4px 14px rgba(122, 162, 247, 0.25);
+}
+
+[data-ui-theme="soft-dark"][data-theme="light"] {
+  --color-bg: #f5f5f5;
+  --color-surface: #ffffff;
+  --color-surface-2: #ebebeb;
+  --color-border: #d4d4d8;
+  --color-text: #1a1b26;
+  --color-muted: #6b7280;
+
+  --color-primary: #4f69c6;
+  --color-brand-2: #5b8a3c;
+
+  --shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 10px 24px rgba(0, 0, 0, 0.1);
+  --shadow-xl: 0 20px 48px rgba(0, 0, 0, 0.14);
+  --shadow-brand: 0 4px 14px rgba(79, 105, 198, 0.2);
+}
+
+/* ─── UI Theme: Corporate ─── */
+/* Always light - clean professional look */
+[data-ui-theme="corporate"] {
+  --color-bg: #f8fafc;
+  --color-surface: #ffffff;
+  --color-surface-2: #f1f5f9;
+  --color-border: #e5e7eb;
+  --color-text: #111827;
+  --color-muted: #6b7280;
+
+  --color-primary: #4f46e5;
+  --color-accent: #0891b2;
+  --color-brand-2: #0891b2;
+
+  --color-success: #059669;
+  --color-warning: #d97706;
+  --color-danger: #dc2626;
+
+  --gradient-brand: linear-gradient(135deg, #4f46e5, #0891b2);
+
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.07);
+  --shadow-lg: 0 10px 24px rgba(0, 0, 0, 0.1);
+  --shadow-xl: 0 20px 48px rgba(0, 0, 0, 0.12);
+  --shadow-brand: 0 4px 14px rgba(79, 70, 229, 0.2);
 }
