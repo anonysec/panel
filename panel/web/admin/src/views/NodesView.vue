@@ -11,6 +11,7 @@ import KEmptyState from '@koris/ui/KEmptyState.vue'
 import KFormField from '@koris/ui/KFormField.vue'
 import KInput from '@koris/ui/KInput.vue'
 import KSelect from '@koris/ui/KSelect.vue'
+import KTextarea from '@koris/ui/KTextarea.vue'
 
 const store = useNodesStore()
 const toast = useToast()
@@ -34,10 +35,34 @@ const nodeForm = ref({
 
 // ─── Protocol Defaults & Config State ────────────────────────────────────────
 const PROTOCOL_DEFAULTS: Record<string, any> = {
-  openvpn: { port: 1194, network: '10.8.0.0/24', enabled: true, mtu: 1500, max_clients: 0, enable_logs: true, conn_limit: 0, extra_json: { transport: 'udp', cipher: 'AES-256-GCM', tls_mode: 'tls-crypt', dns1: '8.8.8.8', dns2: '8.8.4.4' } },
-  l2tp: { port: 1701, network: '10.9.0.0/24', enabled: true, mtu: 1500, max_clients: 0, enable_logs: true, conn_limit: 0, extra_json: { ipsec_mode: 'ipsec', psk: '', auth_method: 'CHAP', dns1: '8.8.8.8', dns2: '8.8.4.4' } },
-  ikev2: { port: 500, network: '10.10.0.0/24', enabled: true, mtu: 1500, max_clients: 0, enable_logs: true, conn_limit: 0, extra_json: { auth_type: 'psk', psk: '', cert_id: '', dns1: '8.8.8.8', dns2: '8.8.4.4' } },
-  ssh: { port: 2222, network: '', enabled: true, max_clients: 0, enable_logs: true, conn_limit: 0, extra_json: { listen_address: '0.0.0.0', key_type: 'ed25519' } },
+  openvpn: {
+    port: 1194, network: '10.8.0.0/24', enabled: true, mtu: 1500, max_clients: 0, enable_logs: true, conn_limit: 0,
+    extra_json: {
+      transport: 'udp', cipher: 'AES-256-GCM', tls_mode: 'tls-crypt', dns1: '8.8.8.8', dns2: '8.8.4.4',
+      comp_lzo: false, push_routes: '', fragment: 0, mssfix: 0, keepalive: '10 120', topology: 'subnet', verb: 3, custom_directives: '',
+    },
+  },
+  l2tp: {
+    port: 1701, network: '10.9.0.0/24', enabled: true, mtu: 1500, max_clients: 0, enable_logs: true, conn_limit: 0,
+    extra_json: {
+      ipsec_mode: 'ipsec', psk: '', auth_method: 'CHAP', dns1: '8.8.8.8', dns2: '8.8.4.4',
+      refuse_chap: false, refuse_pap: true, lcp_echo_interval: 30, lcp_echo_failure: 4, idle_timeout: 0, require_mschap_v2: true,
+    },
+  },
+  ikev2: {
+    port: 500, network: '10.10.0.0/24', enabled: true, mtu: 1500, max_clients: 0, enable_logs: true, conn_limit: 0,
+    extra_json: {
+      auth_type: 'psk', psk: '', cert_id: '', dns1: '8.8.8.8', dns2: '8.8.4.4',
+      dpd_interval: 30, dpd_timeout: 150, rekey_time: '4h', ike_proposals: 'aes256-sha256-modp2048', esp_proposals: 'aes256-sha256', left_id: '', right_id: '%any', fragment_size: 0,
+    },
+  },
+  ssh: {
+    port: 2222, network: '', enabled: true, max_clients: 0, enable_logs: true, conn_limit: 0,
+    extra_json: {
+      listen_address: '0.0.0.0', key_type: 'ed25519',
+      max_sessions: 10, idle_timeout: 0, shell_access: false, allowed_keys: '',
+    },
+  },
 }
 
 const protocolList = ['openvpn', 'l2tp', 'ikev2', 'ssh'] as const
@@ -490,6 +515,195 @@ onMounted(() => {
                       </template>
                     </div>
 
+                    <!-- Protocol Options (collapsible) -->
+                    <details class="protocol-options">
+                      <summary class="protocol-options__title">Protocol Options</summary>
+                      <div class="protocol-form__grid protocol-options__grid">
+
+                        <!-- OpenVPN Protocol Options -->
+                        <template v-if="proto === 'openvpn'">
+                          <KFormField :name="`${proto}-topology`" label="Topology">
+                            <template #default="{ fieldId }">
+                              <KSelect :id="fieldId" v-model="configForm.extra_json.topology" :options="[{ label: 'subnet', value: 'subnet' }, { label: 'net30', value: 'net30' }, { label: 'p2p', value: 'p2p' }]" />
+                            </template>
+                          </KFormField>
+                          <KFormField :name="`${proto}-keepalive`" label="Keepalive">
+                            <template #default="{ fieldId }">
+                              <KInput :id="fieldId" v-model="configForm.extra_json.keepalive" placeholder="10 120" />
+                            </template>
+                          </KFormField>
+                          <KFormField :name="`${proto}-fragment`" label="Fragment (0 = disabled)">
+                            <template #default="{ fieldId }">
+                              <KInput :id="fieldId" v-model="configForm.extra_json.fragment" type="number" placeholder="0" />
+                            </template>
+                          </KFormField>
+                          <KFormField :name="`${proto}-mssfix`" label="MSS Fix (0 = disabled)">
+                            <template #default="{ fieldId }">
+                              <KInput :id="fieldId" v-model="configForm.extra_json.mssfix" type="number" placeholder="0" />
+                            </template>
+                          </KFormField>
+                          <KFormField :name="`${proto}-verb`" label="Verbosity (0-11)">
+                            <template #default="{ fieldId }">
+                              <KInput :id="fieldId" v-model="configForm.extra_json.verb" type="number" placeholder="3" />
+                            </template>
+                          </KFormField>
+                          <KFormField :name="`${proto}-comp-lzo`" label="Comp-LZO">
+                            <template #default>
+                              <label class="toggle-switch">
+                                <input
+                                  type="checkbox"
+                                  :checked="configForm.extra_json.comp_lzo"
+                                  @change="configForm.extra_json.comp_lzo = ($event.target as HTMLInputElement).checked"
+                                />
+                                <span class="toggle-switch__slider" />
+                              </label>
+                            </template>
+                          </KFormField>
+                          <KFormField :name="`${proto}-push-routes`" label="Push Routes (comma-separated)" class="protocol-options__full-width">
+                            <template #default="{ fieldId }">
+                              <KTextarea :id="fieldId" v-model="configForm.extra_json.push_routes" :rows="2" placeholder="192.168.1.0/24, 10.0.0.0/8" />
+                            </template>
+                          </KFormField>
+                          <KFormField :name="`${proto}-custom-directives`" label="Custom Directives" class="protocol-options__full-width">
+                            <template #default="{ fieldId }">
+                              <KTextarea :id="fieldId" v-model="configForm.extra_json.custom_directives" :rows="3" placeholder="One directive per line" />
+                            </template>
+                          </KFormField>
+                        </template>
+
+                        <!-- L2TP Protocol Options -->
+                        <template v-if="proto === 'l2tp'">
+                          <KFormField :name="`${proto}-lcp-echo-interval`" label="LCP Echo Interval">
+                            <template #default="{ fieldId }">
+                              <KInput :id="fieldId" v-model="configForm.extra_json.lcp_echo_interval" type="number" placeholder="30" />
+                            </template>
+                          </KFormField>
+                          <KFormField :name="`${proto}-lcp-echo-failure`" label="LCP Echo Failure">
+                            <template #default="{ fieldId }">
+                              <KInput :id="fieldId" v-model="configForm.extra_json.lcp_echo_failure" type="number" placeholder="4" />
+                            </template>
+                          </KFormField>
+                          <KFormField :name="`${proto}-idle-timeout`" label="Idle Timeout (0 = disabled)">
+                            <template #default="{ fieldId }">
+                              <KInput :id="fieldId" v-model="configForm.extra_json.idle_timeout" type="number" placeholder="0" />
+                            </template>
+                          </KFormField>
+                          <KFormField :name="`${proto}-refuse-chap`" label="Refuse CHAP">
+                            <template #default>
+                              <label class="toggle-switch">
+                                <input
+                                  type="checkbox"
+                                  :checked="configForm.extra_json.refuse_chap"
+                                  @change="configForm.extra_json.refuse_chap = ($event.target as HTMLInputElement).checked"
+                                />
+                                <span class="toggle-switch__slider" />
+                              </label>
+                            </template>
+                          </KFormField>
+                          <KFormField :name="`${proto}-refuse-pap`" label="Refuse PAP">
+                            <template #default>
+                              <label class="toggle-switch">
+                                <input
+                                  type="checkbox"
+                                  :checked="configForm.extra_json.refuse_pap"
+                                  @change="configForm.extra_json.refuse_pap = ($event.target as HTMLInputElement).checked"
+                                />
+                                <span class="toggle-switch__slider" />
+                              </label>
+                            </template>
+                          </KFormField>
+                          <KFormField :name="`${proto}-require-mschap-v2`" label="Require MS-CHAPv2">
+                            <template #default>
+                              <label class="toggle-switch">
+                                <input
+                                  type="checkbox"
+                                  :checked="configForm.extra_json.require_mschap_v2"
+                                  @change="configForm.extra_json.require_mschap_v2 = ($event.target as HTMLInputElement).checked"
+                                />
+                                <span class="toggle-switch__slider" />
+                              </label>
+                            </template>
+                          </KFormField>
+                        </template>
+
+                        <!-- IKEv2 Protocol Options -->
+                        <template v-if="proto === 'ikev2'">
+                          <KFormField :name="`${proto}-dpd-interval`" label="DPD Interval (sec)">
+                            <template #default="{ fieldId }">
+                              <KInput :id="fieldId" v-model="configForm.extra_json.dpd_interval" type="number" placeholder="30" />
+                            </template>
+                          </KFormField>
+                          <KFormField :name="`${proto}-dpd-timeout`" label="DPD Timeout (sec)">
+                            <template #default="{ fieldId }">
+                              <KInput :id="fieldId" v-model="configForm.extra_json.dpd_timeout" type="number" placeholder="150" />
+                            </template>
+                          </KFormField>
+                          <KFormField :name="`${proto}-rekey-time`" label="Rekey Time">
+                            <template #default="{ fieldId }">
+                              <KInput :id="fieldId" v-model="configForm.extra_json.rekey_time" placeholder="4h" />
+                            </template>
+                          </KFormField>
+                          <KFormField :name="`${proto}-ike-proposals`" label="IKE Proposals">
+                            <template #default="{ fieldId }">
+                              <KInput :id="fieldId" v-model="configForm.extra_json.ike_proposals" placeholder="aes256-sha256-modp2048" />
+                            </template>
+                          </KFormField>
+                          <KFormField :name="`${proto}-esp-proposals`" label="ESP Proposals">
+                            <template #default="{ fieldId }">
+                              <KInput :id="fieldId" v-model="configForm.extra_json.esp_proposals" placeholder="aes256-sha256" />
+                            </template>
+                          </KFormField>
+                          <KFormField :name="`${proto}-left-id`" label="Left ID">
+                            <template #default="{ fieldId }">
+                              <KInput :id="fieldId" v-model="configForm.extra_json.left_id" placeholder="Server identity" />
+                            </template>
+                          </KFormField>
+                          <KFormField :name="`${proto}-right-id`" label="Right ID">
+                            <template #default="{ fieldId }">
+                              <KInput :id="fieldId" v-model="configForm.extra_json.right_id" placeholder="%any" />
+                            </template>
+                          </KFormField>
+                          <KFormField :name="`${proto}-fragment-size`" label="Fragment Size (0 = disabled)">
+                            <template #default="{ fieldId }">
+                              <KInput :id="fieldId" v-model="configForm.extra_json.fragment_size" type="number" placeholder="0" />
+                            </template>
+                          </KFormField>
+                        </template>
+
+                        <!-- SSH Protocol Options -->
+                        <template v-if="proto === 'ssh'">
+                          <KFormField :name="`${proto}-max-sessions`" label="Max Sessions">
+                            <template #default="{ fieldId }">
+                              <KInput :id="fieldId" v-model="configForm.extra_json.max_sessions" type="number" placeholder="10" />
+                            </template>
+                          </KFormField>
+                          <KFormField :name="`${proto}-idle-timeout`" label="Idle Timeout (0 = disabled)">
+                            <template #default="{ fieldId }">
+                              <KInput :id="fieldId" v-model="configForm.extra_json.idle_timeout" type="number" placeholder="0" />
+                            </template>
+                          </KFormField>
+                          <KFormField :name="`${proto}-shell-access`" label="Shell Access">
+                            <template #default>
+                              <label class="toggle-switch">
+                                <input
+                                  type="checkbox"
+                                  :checked="configForm.extra_json.shell_access"
+                                  @change="configForm.extra_json.shell_access = ($event.target as HTMLInputElement).checked"
+                                />
+                                <span class="toggle-switch__slider" />
+                              </label>
+                            </template>
+                          </KFormField>
+                          <KFormField :name="`${proto}-allowed-keys`" label="Allowed Keys (one per line)" class="protocol-options__full-width">
+                            <template #default="{ fieldId }">
+                              <KTextarea :id="fieldId" v-model="configForm.extra_json.allowed_keys" :rows="3" placeholder="ssh-ed25519 AAAA..." />
+                            </template>
+                          </KFormField>
+                        </template>
+
+                      </div>
+                    </details>
+
                     <!-- Advanced Settings -->
                     <details class="advanced-settings">
                       <summary class="advanced-settings__title">Advanced Settings</summary>
@@ -680,6 +894,51 @@ onMounted(() => {
   margin-top: var(--space-3);
 }
 
+/* Protocol Options (collapsible) */
+.protocol-options {
+  margin-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-3);
+}
+.protocol-options__title {
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  color: var(--color-muted);
+  cursor: pointer;
+  user-select: none;
+  padding: var(--space-1) 0;
+}
+.protocol-options__grid {
+  margin-top: var(--space-3);
+}
+.protocol-options__full-width {
+  grid-column: 1 / -1;
+}
+
 .text-muted { color: var(--color-muted); }
 .text-sm { font-size: var(--text-sm); }
+
+/* Responsive: single column on mobile */
+@media (max-width: 640px) {
+  .protocol-form__grid,
+  .advanced-settings__grid,
+  .protocol-options__grid {
+    grid-template-columns: 1fr;
+  }
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+  .nodes-grid {
+    grid-template-columns: 1fr;
+  }
+  .protocol-card__header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .protocol-card__controls {
+    margin-left: 0;
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
 </style>
