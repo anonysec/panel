@@ -479,9 +479,61 @@ func normalizeService(input string) string {
 	}
 }
 
+// isValidVPNUsername checks that a username contains only safe characters.
+// Allowed: alphanumeric, dots, hyphens, underscores, and @ signs.
+// This prevents injection of management protocol commands via newlines or control characters.
+func isValidVPNUsername(username string) bool {
+	for _, c := range username {
+		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') {
+			continue
+		}
+		if c == '.' || c == '-' || c == '_' || c == '@' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+// disconnectVPNUserSocket attempts to disconnect a user via a single Unix management socket.
+// Returns the response string on success, or an error. The caller does NOT need to close the connection.
+func disconnectVPNUserSocket(sockPath, username string, log *logger.Logger) (string, error) {
+	conn, err := net.DialTimeout("unix", sockPath, 3*time.Second)
+	if err != nil {
+		return "", err
+	}
+	defer conn.Close()
+
+	killCmd := fmt.Sprintf("kill %s\n", username)
+	conn.SetWriteDeadline(time.Now().Add(3 * time.Second))
+	if _, err := conn.Write([]byte(killCmd)); err != nil {
+		log.Warn("failed to write kill command to mgmt socket", map[string]any{
+			"socket": sockPath,
+			"error":  err.Error(),
+		})
+		return "", err
+	}
+
+	conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+	buf := make([]byte, 512)
+	n, _ := conn.Read(buf)
+	response := strings.TrimSpace(string(buf[:n]))
+	log.Info("vpn user disconnect via management socket", map[string]any{
+		"username": username,
+		"socket":   sockPath,
+		"response": response,
+	})
+	return response, nil
+}
+
 // disconnectVPNUser disconnects a specific user from the VPN by writing a kill
 // command to the OpenVPN management interface, or by removing their session file.
 func disconnectVPNUser(username string, log *logger.Logger) (string, error) {
+	// Validate username to prevent command injection via the management protocol.
+	if !isValidVPNUsername(username) {
+		return "", fmt.Errorf("invalid username: contains disallowed characters")
+	}
+
 	// Try OpenVPN management socket first (default: /run/openvpn/management.sock or TCP 127.0.0.1:7505)
 	mgmtPaths := []string{
 		"/run/openvpn/management.sock",
@@ -489,33 +541,10 @@ func disconnectVPNUser(username string, log *logger.Logger) (string, error) {
 	}
 
 	for _, sockPath := range mgmtPaths {
-		conn, err := net.DialTimeout("unix", sockPath, 3*time.Second)
+		response, err := disconnectVPNUserSocket(sockPath, username, log)
 		if err != nil {
 			continue
 		}
-		defer conn.Close()
-
-		// Send kill command to OpenVPN management interface
-		killCmd := fmt.Sprintf("kill %s\n", username)
-		conn.SetWriteDeadline(time.Now().Add(3 * time.Second))
-		if _, err := conn.Write([]byte(killCmd)); err != nil {
-			log.Warn("failed to write kill command to mgmt socket", map[string]any{
-				"socket": sockPath,
-				"error":  err.Error(),
-			})
-			continue
-		}
-
-		// Read response
-		conn.SetReadDeadline(time.Now().Add(3 * time.Second))
-		buf := make([]byte, 512)
-		n, _ := conn.Read(buf)
-		response := strings.TrimSpace(string(buf[:n]))
-		log.Info("vpn user disconnect via management socket", map[string]any{
-			"username": username,
-			"socket":   sockPath,
-			"response": response,
-		})
 		return response, nil
 	}
 

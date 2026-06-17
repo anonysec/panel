@@ -3,11 +3,13 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePortalAuthStore } from '@/stores/auth'
 import { useTheme } from '@koris/composables/useTheme'
+import { useI18n } from '@koris/composables/useI18n'
 import NotificationCenter from '@/components/NotificationCenter.vue'
 
 const router = useRouter()
 const auth = usePortalAuthStore()
 const { isDark, toggle: toggleTheme } = useTheme()
+const { t } = useI18n()
 
 const userMenuOpen = ref(false)
 const mobileMenuOpen = ref(false)
@@ -58,15 +60,15 @@ async function logout() {
       <nav class="portal-nav__links">
         <router-link :to="{ name: 'portal-dashboard' }">
           <svg class="portal-nav__icon" viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M3 3h6v6H3V3zm8 0h6v6h-6V3zm-8 8h6v6H3v-6zm8 0h6v6h-6v-6z"/></svg>
-          Dashboard
+          {{ t('portal.nav.dashboard') }}
         </router-link>
         <router-link :to="{ name: 'portal-support' }">
           <svg class="portal-nav__icon" viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M2 5a2 2 0 012-2h12a2 2 0 012 2v7a2 2 0 01-2 2H6l-4 4V5z"/></svg>
-          Support
+          {{ t('portal.nav.support') }}
         </router-link>
         <router-link :to="{ name: 'portal-vpn' }">
           <svg class="portal-nav__icon" viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M10 2a6 6 0 00-6 6c0 2.21 1.2 4.14 3 5.18V17a1 1 0 001 1h4a1 1 0 001-1v-3.82A5.99 5.99 0 0016 8a6 6 0 00-6-6zm0 2a4 4 0 014 4c0 1.48-.8 2.77-2 3.46V16H8v-4.54A3.99 3.99 0 016 8a4 4 0 014-4z"/></svg>
-          My VPN
+          {{ t('portal.nav.vpn') }}
         </router-link>
       </nav>
 
@@ -83,8 +85,8 @@ async function logout() {
           <div v-if="userMenuOpen" class="portal-nav__dropdown-backdrop" @click="closeUserMenu"></div>
           <div v-if="userMenuOpen" class="portal-nav__dropdown">
             <div class="portal-nav__dropdown-header">{{ auth.user?.username }}</div>
-            <button class="portal-nav__dropdown-item" @click="goToProfile">Profile Settings</button>
-            <button class="portal-nav__dropdown-item portal-nav__dropdown-item--danger" @click="logout">Logout</button>
+            <button class="portal-nav__dropdown-item" @click="goToProfile">{{ t('portal.nav.profile') }}</button>
+            <button class="portal-nav__dropdown-item portal-nav__dropdown-item--danger" @click="logout">{{ t('portal.nav.logout') }}</button>
           </div>
         </div>
       </div>
@@ -95,15 +97,15 @@ async function logout() {
     <nav v-if="mobileMenuOpen" class="portal-mobile-nav">
       <router-link :to="{ name: 'portal-dashboard' }" @click="closeMobileMenu">
         <svg class="portal-nav__icon" viewBox="0 0 20 20" fill="currentColor" width="18" height="18"><path d="M3 3h6v6H3V3zm8 0h6v6h-6V3zm-8 8h6v6H3v-6zm8 0h6v6h-6v-6z"/></svg>
-        Dashboard
+        {{ t('portal.nav.dashboard') }}
       </router-link>
       <router-link :to="{ name: 'portal-support' }" @click="closeMobileMenu">
         <svg class="portal-nav__icon" viewBox="0 0 20 20" fill="currentColor" width="18" height="18"><path d="M2 5a2 2 0 012-2h12a2 2 0 012 2v7a2 2 0 01-2 2H6l-4 4V5z"/></svg>
-        Support
+        {{ t('portal.nav.support') }}
       </router-link>
       <router-link :to="{ name: 'portal-vpn' }" @click="closeMobileMenu">
         <svg class="portal-nav__icon" viewBox="0 0 20 20" fill="currentColor" width="18" height="18"><path d="M10 2a6 6 0 00-6 6c0 2.21 1.2 4.14 3 5.18V17a1 1 0 001 1h4a1 1 0 001-1v-3.82A5.99 5.99 0 0016 8a6 6 0 00-6-6zm0 2a4 4 0 014 4c0 1.48-.8 2.77-2 3.46V16H8v-4.54A3.99 3.99 0 016 8a4 4 0 014-4z"/></svg>
-        My VPN
+        {{ t('portal.nav.vpn') }}
       </router-link>
     </nav>
 
@@ -111,15 +113,15 @@ async function logout() {
     <nav class="portal-bottom-tabs">
       <router-link :to="{ name: 'portal-dashboard' }" class="portal-bottom-tabs__item">
         <svg viewBox="0 0 20 20" fill="currentColor" width="20" height="20"><path d="M3 3h6v6H3V3zm8 0h6v6h-6V3zm-8 8h6v6H3v-6zm8 0h6v6h-6v-6z"/></svg>
-        <span>Dashboard</span>
+        <span>{{ t('portal.nav.dashboard') }}</span>
       </router-link>
       <router-link :to="{ name: 'portal-support' }" class="portal-bottom-tabs__item">
         <svg viewBox="0 0 20 20" fill="currentColor" width="20" height="20"><path d="M2 5a2 2 0 012-2h12a2 2 0 012 2v7a2 2 0 01-2 2H6l-4 4V5z"/></svg>
-        <span>Support</span>
+        <span>{{ t('portal.nav.support') }}</span>
       </router-link>
       <router-link :to="{ name: 'portal-vpn' }" class="portal-bottom-tabs__item">
         <svg viewBox="0 0 20 20" fill="currentColor" width="20" height="20"><path d="M10 2a6 6 0 00-6 6c0 2.21 1.2 4.14 3 5.18V17a1 1 0 001 1h4a1 1 0 001-1v-3.82A5.99 5.99 0 0016 8a6 6 0 00-6-6zm0 2a4 4 0 014 4c0 1.48-.8 2.77-2 3.46V16H8v-4.54A3.99 3.99 0 016 8a4 4 0 014-4z"/></svg>
-        <span>My VPN</span>
+        <span>{{ t('portal.nav.vpn') }}</span>
       </router-link>
     </nav>
 

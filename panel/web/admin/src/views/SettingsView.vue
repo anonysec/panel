@@ -56,9 +56,9 @@ async function savePanelSettings(): Promise<void> {
       panel_name: panelName.value,
       language: panelLang.value,
     })
-    toast.success('Panel settings saved successfully.')
+    toast.success(t('settings.save_success'))
   } catch {
-    toast.error('Failed to save panel settings.')
+    toast.error(t('settings.save_error'))
   } finally {
     savingSettings.value = false
   }
@@ -106,9 +106,9 @@ async function saveThresholds(): Promise<void> {
     const sorted = [...new Set(thresholds.value)].sort((a, b) => a - b)
     thresholds.value = sorted
     await put<{ ok: boolean }>('/api/settings/data-warning-thresholds', { thresholds: sorted })
-    toast.success('Data warning thresholds saved successfully.')
+    toast.success(t('settings.thresholds_save_success'))
   } catch {
-    toast.error('Failed to save data warning thresholds.')
+    toast.error(t('settings.thresholds_save_error'))
   } finally {
     savingThresholds.value = false
   }
@@ -138,9 +138,9 @@ async function saveTelegramSettings(): Promise<void> {
       telegram_token: telegramToken.value,
       telegram_chat_id: telegramChatId.value,
     })
-    toast.success('Telegram settings saved successfully.')
+    toast.success(t('settings.telegram_save_success'))
   } catch {
-    toast.error('Failed to save Telegram settings.')
+    toast.error(t('settings.telegram_save_error'))
   } finally {
     savingTelegram.value = false
   }
@@ -172,7 +172,7 @@ function triggerImport(): void {
 function handleImportFile(event: Event): void {
   const target = event.target as HTMLInputElement
   if (target.files && target.files.length > 0) {
-    toast.success('Import functionality coming soon.')
+    toast.success(t('settings.import_coming_soon'))
     // Reset file input so the same file can be selected again
     target.value = ''
   }
