@@ -238,6 +238,38 @@ kbd{font-size:10px;padding:2px 5px;border-radius:4px;background:var(--surface-2)
 [data-theme="light"] .toast.success{background:rgba(255,255,255,.97);border-color:rgba(22,163,74,.3)}
 [data-theme="light"] .toast.error{background:rgba(255,255,255,.97);border-color:rgba(220,38,38,.3)}
 
+/* UI Theme: Kiro - component overrides */
+[data-ui-theme="kiro"] .sidebar{background:rgba(12,18,34,.95)}
+[data-ui-theme="kiro"] .logo{background:linear-gradient(135deg,#06b6d4,#a78bfa)}
+[data-ui-theme="kiro"] .nav-item.active{background:linear-gradient(135deg,rgba(6,182,212,.15),rgba(167,139,250,.12));box-shadow:inset 0 0 0 1px rgba(6,182,212,.25)}
+[data-ui-theme="kiro"] .btn-primary{background:linear-gradient(135deg,#06b6d4,#a78bfa);box-shadow:0 4px 14px rgba(6,182,212,.25)}
+[data-ui-theme="kiro"] .stat-card:hover{border-color:rgba(6,182,212,.2)}
+[data-ui-theme="kiro"] .shadow-brand{box-shadow:0 4px 14px rgba(6,182,212,.3)}
+
+/* UI Theme: GitHub - component overrides */
+[data-ui-theme="github"] .sidebar{background:rgba(22,27,34,.97)}
+[data-ui-theme="github"] .logo{background:linear-gradient(135deg,#58a6ff,#7ee787)}
+[data-ui-theme="github"] .nav-item.active{background:linear-gradient(135deg,rgba(88,166,255,.12),rgba(126,231,135,.08));box-shadow:inset 0 0 0 1px rgba(88,166,255,.2)}
+[data-ui-theme="github"] .btn-primary{background:linear-gradient(135deg,#58a6ff,#7ee787);box-shadow:0 4px 14px rgba(88,166,255,.2)}
+[data-ui-theme="github"] .stat-card:hover{border-color:rgba(88,166,255,.2)}
+
+/* UI Theme: Soft Dark - component overrides */
+[data-ui-theme="soft-dark"] .sidebar{background:rgba(26,27,38,.97)}
+[data-ui-theme="soft-dark"] .logo{background:linear-gradient(135deg,#7aa2f7,#bb9af7)}
+[data-ui-theme="soft-dark"] .nav-item.active{background:linear-gradient(135deg,rgba(122,162,247,.15),rgba(187,154,247,.1));box-shadow:inset 0 0 0 1px rgba(122,162,247,.2)}
+[data-ui-theme="soft-dark"] .btn-primary{background:linear-gradient(135deg,#7aa2f7,#bb9af7);box-shadow:0 4px 14px rgba(122,162,247,.2)}
+[data-ui-theme="soft-dark"] .stat-card:hover{border-color:rgba(122,162,247,.2)}
+
+/* UI Theme: Corporate - component overrides */
+[data-ui-theme="corporate"] .sidebar{background:rgba(255,255,255,.98);border-right-color:#e5e7eb}
+[data-ui-theme="corporate"] .logo{background:linear-gradient(135deg,#4f46e5,#0891b2)}
+[data-ui-theme="corporate"] .nav-item.active{background:linear-gradient(135deg,rgba(79,70,229,.1),rgba(8,145,178,.08));box-shadow:inset 0 0 0 1px rgba(79,70,229,.2)}
+[data-ui-theme="corporate"] .btn-primary{background:linear-gradient(135deg,#4f46e5,#0891b2);box-shadow:0 4px 14px rgba(79,70,229,.15)}
+[data-ui-theme="corporate"] .stat-card:hover{border-color:rgba(79,70,229,.2)}
+[data-ui-theme="corporate"] .toast.success{background:rgba(255,255,255,.98);border-color:rgba(5,150,105,.3)}
+[data-ui-theme="corporate"] .toast.error{background:rgba(255,255,255,.98);border-color:rgba(220,38,38,.3)}
+[data-ui-theme="corporate"] ::-webkit-scrollbar-thumb{background:#cbd5e1}
+
 /* Command palette */
 .cmd-palette{width:min(520px,calc(100vw - 40px));background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:0 30px 80px rgba(0,0,0,.5);overflow:hidden;animation:modalIn .12s ease}
 .cmd-input-row{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--border)}

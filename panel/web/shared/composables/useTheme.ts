@@ -1,91 +1,181 @@
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 
-export type Theme = 'dark' | 'light'
+export type ThemeMode = 'system' | 'dark' | 'light'
+export type UITheme = 'midnight' | 'kiro' | 'github' | 'soft-dark' | 'corporate'
 
-const STORAGE_KEY = 'koris-theme'
-const ATTRIBUTE = 'data-theme'
+export interface ThemeInfo {
+  id: UITheme
+  name: string
+  description: string
+  colors: { bg: string; surface: string; primary: string; accent: string }
+  forcedMode?: 'light' | 'dark'
+}
 
-/**
- * Reads persisted theme from localStorage.
- * Defaults to 'dark' if nothing is stored or value is invalid.
- */
-function getPersistedTheme(): Theme {
+const MODE_KEY = 'koris-mode'
+const THEME_KEY = 'koris-ui-theme'
+const MODE_ATTRIBUTE = 'data-theme'
+const THEME_ATTRIBUTE = 'data-ui-theme'
+
+export const availableThemes: ThemeInfo[] = [
+  {
+    id: 'midnight',
+    name: 'Midnight',
+    description: 'Dark command-center aesthetic',
+    colors: { bg: '#070a12', surface: '#0b1120', primary: '#2563eb', accent: '#22d3ee' },
+  },
+  {
+    id: 'kiro',
+    name: 'Kiro',
+    description: 'Teal-cyan with dark navy',
+    colors: { bg: '#0c1222', surface: '#1a2332', primary: '#06b6d4', accent: '#a78bfa' },
+  },
+  {
+    id: 'github',
+    name: 'GitHub',
+    description: 'GitHub-inspired dark palette',
+    colors: { bg: '#0d1117', surface: '#161b22', primary: '#58a6ff', accent: '#7ee787' },
+  },
+  {
+    id: 'soft-dark',
+    name: 'Soft Dark',
+    description: 'Warmer tones, softer contrast',
+    colors: { bg: '#1a1b26', surface: '#24283b', primary: '#7aa2f7', accent: '#9ece6a' },
+  },
+  {
+    id: 'corporate',
+    name: 'Corporate',
+    description: 'Clean professional light theme',
+    colors: { bg: '#f8fafc', surface: '#ffffff', primary: '#4f46e5', accent: '#0891b2' },
+    forcedMode: 'light',
+  },
+]
+
+function getPersistedMode(): ThemeMode {
   try {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored === 'light' || stored === 'dark') {
+    const stored = localStorage.getItem(MODE_KEY)
+    if (stored === 'system' || stored === 'dark' || stored === 'light') {
       return stored
     }
   } catch {
-    // localStorage may be unavailable (e.g. private browsing in some browsers)
+    // localStorage unavailable
   }
-  return 'dark'
+  return 'system'
 }
 
-/**
- * Applies theme to the document root via the data-theme attribute.
- * CSS custom properties in tokens.css respond to [data-theme="light"] overrides.
- */
-function applyTheme(theme: Theme): void {
-  document.documentElement.setAttribute(ATTRIBUTE, theme)
+function getPersistedTheme(): UITheme {
+  try {
+    const stored = localStorage.getItem(THEME_KEY)
+    if (stored && availableThemes.some((t) => t.id === stored)) {
+      return stored as UITheme
+    }
+  } catch {
+    // localStorage unavailable
+  }
+  return 'midnight'
 }
 
-// Initialize before first paint — read persisted value and apply immediately.
-// This runs at module load time so the correct theme is set before any component renders.
-const initialTheme = getPersistedTheme()
-applyTheme(initialTheme)
+function getSystemPrefersDark(): boolean {
+  if (typeof window === 'undefined') return true
+  return window.matchMedia('(prefers-color-scheme: dark)').matches
+}
 
-// Module-level singleton reactive state so all consumers share the same theme
-const current = ref<Theme>(initialTheme)
+function resolveEffectiveMode(mode: ThemeMode, theme: UITheme): 'dark' | 'light' {
+  // Corporate theme always forces light mode
+  const themeInfo = availableThemes.find((t) => t.id === theme)
+  if (themeInfo?.forcedMode) {
+    return themeInfo.forcedMode
+  }
+  if (mode === 'system') {
+    return getSystemPrefersDark() ? 'dark' : 'light'
+  }
+  return mode
+}
+
+function applyToDocument(effectiveMode: 'dark' | 'light', theme: UITheme): void {
+  document.documentElement.setAttribute(MODE_ATTRIBUTE, effectiveMode)
+  document.documentElement.setAttribute(THEME_ATTRIBUTE, theme)
+}
+
+// Module-level singleton state
+const mode = ref<ThemeMode>(getPersistedMode())
+const theme = ref<UITheme>(getPersistedTheme())
+
+// Apply immediately on load
+applyToDocument(resolveEffectiveMode(mode.value, theme.value), theme.value)
+
+// Listen for system preference changes
+let mediaQuery: MediaQueryList | null = null
+if (typeof window !== 'undefined') {
+  mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
+  mediaQuery.addEventListener('change', () => {
+    // Only react if mode is 'system' and theme does not force a mode
+    if (mode.value === 'system') {
+      const themeInfo = availableThemes.find((t) => t.id === theme.value)
+      if (!themeInfo?.forcedMode) {
+        applyToDocument(getSystemPrefersDark() ? 'dark' : 'light', theme.value)
+      }
+    }
+  })
+}
 
 /**
  * useTheme composable
  *
- * Provides reactive theme state with persistence to localStorage
- * and automatic application via the data-theme attribute on document.documentElement.
+ * Two-level theme system:
+ * - mode: controls dark/light/system preference
+ * - theme: controls the full UI color palette restyle
  *
- * Requirements: 14.1, 14.2, 14.3, 26.2
+ * The admin saves these to the server via /api/panel-settings.
+ * Both admin and portal read from server on startup to apply the admin-chosen theme.
  */
 export function useTheme() {
-  /** Whether the current theme is dark (reactive computed) */
-  const isDark = computed(() => current.value === 'dark')
+  const isDark = computed(() => {
+    return resolveEffectiveMode(mode.value, theme.value) === 'dark'
+  })
 
-  /**
-   * Toggles between dark and light themes.
-   * Persists the new value to localStorage and applies it to the document root.
-   */
-  function toggle(): void {
-    const next: Theme = current.value === 'dark' ? 'light' : 'dark'
-    current.value = next
-    applyTheme(next)
+  function setMode(newMode: ThemeMode): void {
+    mode.value = newMode
     try {
-      localStorage.setItem(STORAGE_KEY, next)
+      localStorage.setItem(MODE_KEY, newMode)
     } catch {
-      // Silently handle localStorage write failures
+      // silent
     }
+    applyToDocument(resolveEffectiveMode(newMode, theme.value), theme.value)
   }
 
-  /**
-   * Sets a specific theme directly.
-   * Persists the value to localStorage and applies it to the document root.
-   */
-  function setTheme(theme: Theme): void {
-    current.value = theme
-    applyTheme(theme)
+  function setTheme(newTheme: UITheme): void {
+    theme.value = newTheme
     try {
-      localStorage.setItem(STORAGE_KEY, theme)
+      localStorage.setItem(THEME_KEY, newTheme)
     } catch {
-      // Silently handle localStorage write failures
+      // silent
+    }
+    applyToDocument(resolveEffectiveMode(mode.value, newTheme), newTheme)
+  }
+
+  /** Legacy toggle for backward compatibility */
+  function toggle(): void {
+    if (mode.value === 'dark') {
+      setMode('light')
+    } else {
+      setMode('dark')
     }
   }
 
   return {
-    /** Current active theme (reactive ref) */
-    current,
-    /** Whether the current theme is dark (reactive computed) */
+    /** Current mode setting */
+    mode,
+    /** Current UI theme */
+    theme,
+    /** Whether the resolved mode is dark */
     isDark,
-    /** Toggle between dark and light */
-    toggle,
-    /** Set a specific theme */
+    /** List of available themes with metadata */
+    availableThemes,
+    /** Set the dark/light/system mode */
+    setMode,
+    /** Set the UI theme */
     setTheme,
+    /** Toggle between dark and light (legacy) */
+    toggle,
   }
 }
