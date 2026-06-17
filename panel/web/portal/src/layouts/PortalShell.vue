@@ -300,6 +300,44 @@ const langLabels: Record<Locale, string> = {
   }
 }
 
+/* Extra small screens */
+@media (max-width: 360px) {
+  .portal-header {
+    padding: var(--space-1) var(--space-2);
+    gap: var(--space-1);
+  }
+  .portal-header__actions {
+    gap: var(--space-1);
+  }
+  .portal-header__btn {
+    min-width: 36px;
+    min-height: 36px;
+    padding: var(--space-1);
+    font-size: 12px;
+  }
+  .portal-header__user-toggle {
+    padding: var(--space-1);
+    gap: var(--space-1);
+    min-height: 36px;
+  }
+  .portal-header__user-avatar {
+    width: 24px;
+    height: 24px;
+    font-size: 10px;
+  }
+  .portal-header__logo {
+    width: 28px;
+    height: 28px;
+    font-size: 12px;
+  }
+  .portal-header__chevron {
+    display: none;
+  }
+  .portal-main {
+    padding: var(--space-2);
+  }
+}
+
 /* RTL support */
 [dir="rtl"] .portal-header {
   flex-direction: row-reverse;

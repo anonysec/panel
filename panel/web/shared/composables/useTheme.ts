@@ -155,7 +155,7 @@ export function useTheme() {
 
   /** Legacy toggle for backward compatibility */
   function toggle(): void {
-    if (mode.value === 'dark') {
+    if (isDark.value) {
       setMode('light')
     } else {
       setMode('dark')

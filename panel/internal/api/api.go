@@ -394,6 +394,7 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/api/certificates", s.requireAdmin(s.certificates))
 	mux.HandleFunc("/api/certificates/", s.requireAdmin(s.certificateByID))
 	mux.HandleFunc("/api/panel-settings", s.requireAdmin(s.panelSettings))
+	mux.HandleFunc("/api/public-settings", s.publicSettings)
 	mux.HandleFunc("/api/export/customers.csv", s.requireAdmin(s.exportCustomersCSV))
 	mux.HandleFunc("/api/export/payments.csv", s.requireAdmin(s.exportPaymentsCSV))
 	mux.HandleFunc("/api/export/radacct.csv", s.requireAdmin(s.exportRadacctCSV))
@@ -6007,6 +6008,36 @@ func (s *Server) panelSettings(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// publicSettings returns non-sensitive panel settings (theme, mode, panel name, language)
+// without requiring authentication. This allows the portal to fetch admin-chosen theme settings.
+func (s *Server) publicSettings(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method", http.StatusMethodNotAllowed)
+		return
+	}
+	allowedKeys := map[string]bool{
+		"ui_theme":   true,
+		"ui_mode":    true,
+		"panel_name": true,
+		"language":   true,
+	}
+	rows, err := s.DB.Query(`SELECT setting_key, setting_value FROM panel_settings ORDER BY setting_key`)
+	if err != nil {
+		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	defer rows.Close()
+	settings := map[string]string{}
+	for rows.Next() {
+		var k, v string
+		if rows.Scan(&k, &v) == nil {
+			if allowedKeys[k] {
+				settings[k] = v
+			}
+		}
+	}
+	writeJSON(w, map[string]any{"ok": true, "settings": settings})
+}
 
 // checkWSOrigin validates the WebSocket Origin header against allowed origins.
 // Empty Origin is allowed (same-origin requests from some browsers).

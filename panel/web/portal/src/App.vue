@@ -9,7 +9,7 @@ const { setMode, setTheme } = useTheme()
 
 onMounted(async () => {
   try {
-    const res = await get<{ ok: boolean; settings: Record<string, string> }>('/api/panel-settings')
+    const res = await get<{ ok: boolean; settings: Record<string, string> }>('/api/public-settings')
     if (res.settings) {
       if (res.settings.ui_theme && availableThemes.some((t) => t.id === res.settings.ui_theme)) {
         setTheme(res.settings.ui_theme as UITheme)

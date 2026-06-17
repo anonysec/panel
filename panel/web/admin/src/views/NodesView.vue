@@ -171,11 +171,25 @@ function cancelEditNode() {
 async function handleEditNode() {
   if (!editingNodeId.value) return
   savingNode.value = true
-  const success = await store.editNode(editingNodeId.value, {
-    name: editNodeForm.value.name,
-    public_ip: editNodeForm.value.public_ip,
-    domain: editNodeForm.value.domain,
-  })
+  // Build delta payload: only include fields that actually changed
+  const originalNode = store.list.find((n: any) => n.id === editingNodeId.value)
+  const payload: Record<string, string> = {}
+  if (editNodeForm.value.name !== (originalNode?.name || '')) {
+    payload.name = editNodeForm.value.name
+  }
+  if (editNodeForm.value.public_ip !== (originalNode?.public_ip || '')) {
+    payload.public_ip = editNodeForm.value.public_ip
+  }
+  if (editNodeForm.value.domain !== (originalNode?.domain || '')) {
+    payload.domain = editNodeForm.value.domain
+  }
+  // If nothing changed, just close the form
+  if (Object.keys(payload).length === 0) {
+    savingNode.value = false
+    cancelEditNode()
+    return
+  }
+  const success = await store.editNode(editingNodeId.value, payload)
   savingNode.value = false
   if (success) {
     toast.success(t('nodes.edit_success'))
