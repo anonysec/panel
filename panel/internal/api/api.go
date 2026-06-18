@@ -14,9 +14,9 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
-	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
@@ -89,19 +89,20 @@ type CustomerDetail struct {
 }
 
 type Plan struct {
-	ID               int64   `json:"id"`
-	Name             string  `json:"name"`
-	DataGB           float64 `json:"data_gb"`
-	SpeedMbps        float64 `json:"speed_mbps"`
-	DurationDays     int     `json:"duration_days"`
-	Price            float64 `json:"price"`
-	BillingType      string  `json:"billing_type"`
-	PricePerGB       float64 `json:"price_per_gb"`
-	PricePerDay      float64 `json:"price_per_day"`
-	DisconnectOnZero bool    `json:"disconnect_on_zero"`
-	IsActive         bool    `json:"is_active"`
-	SortOrder        int     `json:"sort_order"`
-	CreatedAt        string  `json:"created_at"`
+	ID                int64   `json:"id"`
+	Name              string  `json:"name"`
+	DataGB            float64 `json:"data_gb"`
+	SpeedMbps         float64 `json:"speed_mbps"`
+	DurationDays      int     `json:"duration_days"`
+	Price             float64 `json:"price"`
+	BillingType       string  `json:"billing_type"`
+	PricePerGB        float64 `json:"price_per_gb"`
+	PricePerDay       float64 `json:"price_per_day"`
+	DisconnectOnZero  bool    `json:"disconnect_on_zero"`
+	AllowPasswordless bool    `json:"allow_passwordless"`
+	IsActive          bool    `json:"is_active"`
+	SortOrder         int     `json:"sort_order"`
+	CreatedAt         string  `json:"created_at"`
 }
 
 type NodeUsageSnapshot struct {
@@ -129,16 +130,16 @@ type Node struct {
 }
 
 type NodeStatus struct {
-	CPUPercent   float64 `json:"cpu_percent"`
-	RAMPercent   float64 `json:"ram_percent"`
-	DiskPercent  float64 `json:"disk_percent"`
-	RxBps        int64   `json:"rx_bps"`
-	TxBps        int64   `json:"tx_bps"`
-	OpenVPN      string  `json:"openvpn_status"`
-	L2TP         string  `json:"l2tp_status"`
-	IKEv2        string  `json:"ikev2_status"`
-	SSH          string  `json:"ssh_status"`
-	UpdatedAt    string  `json:"updated_at"`
+	CPUPercent  float64 `json:"cpu_percent"`
+	RAMPercent  float64 `json:"ram_percent"`
+	DiskPercent float64 `json:"disk_percent"`
+	RxBps       int64   `json:"rx_bps"`
+	TxBps       int64   `json:"tx_bps"`
+	OpenVPN     string  `json:"openvpn_status"`
+	L2TP        string  `json:"l2tp_status"`
+	IKEv2       string  `json:"ikev2_status"`
+	SSH         string  `json:"ssh_status"`
+	UpdatedAt   string  `json:"updated_at"`
 }
 
 type DiagnosticsReport struct {
@@ -280,16 +281,16 @@ type UsageSession struct {
 }
 
 type UsageSummary struct {
-	Online            bool           `json:"online"`
-	ActiveSessions    int64          `json:"active_sessions"`
-	TotalInputBytes   int64          `json:"total_input_bytes"`
-	TotalOutputBytes  int64          `json:"total_output_bytes"`
-	TotalUsageBytes   int64          `json:"total_usage_bytes"`
-	MaxDataBytes      int64          `json:"max_data_bytes"`
-	RemainingBytes    *int64         `json:"remaining_bytes,omitempty"`
-	LastConnectedAt   string         `json:"last_connected_at"`
-	LastDisconnectedAt string        `json:"last_disconnected_at"`
-	Sessions          []UsageSession `json:"sessions"`
+	Online             bool           `json:"online"`
+	ActiveSessions     int64          `json:"active_sessions"`
+	TotalInputBytes    int64          `json:"total_input_bytes"`
+	TotalOutputBytes   int64          `json:"total_output_bytes"`
+	TotalUsageBytes    int64          `json:"total_usage_bytes"`
+	MaxDataBytes       int64          `json:"max_data_bytes"`
+	RemainingBytes     *int64         `json:"remaining_bytes,omitempty"`
+	LastConnectedAt    string         `json:"last_connected_at"`
+	LastDisconnectedAt string         `json:"last_disconnected_at"`
+	Sessions           []UsageSession `json:"sessions"`
 }
 
 var usernamePattern = regexp.MustCompile(`^[A-Za-z0-9_.-]{3,64}$`)
@@ -479,6 +480,7 @@ func (s *Server) setupOwner(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method", http.StatusMethodNotAllowed)
 		return
 	}
+	limitBody(w, r, maxJSONBody)
 	var in struct {
 		SetupKey string `json:"setup_key"`
 		Username string `json:"username"`
@@ -515,6 +517,7 @@ func (s *Server) adminLogin(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method", http.StatusMethodNotAllowed)
 		return
 	}
+	limitBody(w, r, maxJSONBody)
 	var in struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
@@ -566,6 +569,7 @@ func (s *Server) customerLogin(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method", http.StatusMethodNotAllowed)
 		return
 	}
+	limitBody(w, r, maxJSONBody)
 	var in struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
@@ -623,23 +627,23 @@ func (s *Server) dashboardStatsPayload() map[string]any {
 	_ = s.DB.QueryRow(`SELECT COALESCE(SUM(acctinputoctets),0), COALESCE(SUM(acctoutputoctets),0) FROM radacct WHERE acctstarttime >= CURDATE()`).Scan(&todayInput, &todayOutput)
 
 	return map[string]any{
-		"ok":                  true,
-		"customers":           s.count(`SELECT COUNT(*) FROM customers WHERE deleted_at IS NULL`),
-		"active_customers":    s.count(`SELECT COUNT(*) FROM customers WHERE deleted_at IS NULL AND status='active'`),
-		"plans":               s.count(`SELECT COUNT(*) FROM plans WHERE is_active=1`),
-		"nodes":               s.count(`SELECT COUNT(*) FROM nodes WHERE status IN('online','stale')`),
-		"online_users":        s.count(`SELECT COUNT(DISTINCT username) FROM radacct WHERE acctstoptime IS NULL`),
-		"active_sessions":     s.count(`SELECT COUNT(*) FROM radacct WHERE acctstoptime IS NULL`),
-		"open_tickets":        s.count(`SELECT COUNT(*) FROM tickets WHERE deleted_at IS NULL AND status='open'`),
-		"pending_payments":    s.count(`SELECT COUNT(*) FROM payments WHERE status='pending'`),
-		"approved_payments":   s.sum(`SELECT COALESCE(SUM(amount),0) FROM payments WHERE status='approved'`),
-		"unseen_events":       s.count(`SELECT COUNT(*) FROM events WHERE seen=0`),
-		"total_rx_bps":        rx,
-		"total_tx_bps":        tx,
-		"total_input_bytes":   totalInput,
-		"total_output_bytes":  totalOutput,
-		"today_input_bytes":   todayInput,
-		"today_output_bytes":  todayOutput,
+		"ok":                 true,
+		"customers":          s.count(`SELECT COUNT(*) FROM customers WHERE deleted_at IS NULL`),
+		"active_customers":   s.count(`SELECT COUNT(*) FROM customers WHERE deleted_at IS NULL AND status='active'`),
+		"plans":              s.count(`SELECT COUNT(*) FROM plans WHERE is_active=1`),
+		"nodes":              s.count(`SELECT COUNT(*) FROM nodes WHERE status IN('online','stale')`),
+		"online_users":       s.count(`SELECT COUNT(DISTINCT username) FROM radacct WHERE acctstoptime IS NULL`),
+		"active_sessions":    s.count(`SELECT COUNT(*) FROM radacct WHERE acctstoptime IS NULL`),
+		"open_tickets":       s.count(`SELECT COUNT(*) FROM tickets WHERE deleted_at IS NULL AND status='open'`),
+		"pending_payments":   s.count(`SELECT COUNT(*) FROM payments WHERE status='pending'`),
+		"approved_payments":  s.sum(`SELECT COALESCE(SUM(amount),0) FROM payments WHERE status='approved'`),
+		"unseen_events":      s.count(`SELECT COUNT(*) FROM events WHERE seen=0`),
+		"total_rx_bps":       rx,
+		"total_tx_bps":       tx,
+		"total_input_bytes":  totalInput,
+		"total_output_bytes": totalOutput,
+		"today_input_bytes":  todayInput,
+		"today_output_bytes": todayOutput,
 	}
 }
 
@@ -740,17 +744,18 @@ func (s *Server) deletedCustomers(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) createCustomer(w http.ResponseWriter, r *http.Request) {
+	limitBody(w, r, maxJSONBody)
 	var in struct {
-		Username    string   `json:"username"`
-		Password    string   `json:"password"`
-		DisplayName      string   `json:"display_name"`
-		PlanID           *int64   `json:"plan_id"`
-		DataGB           *float64 `json:"data_gb"`
-		SpeedMbps        *float64 `json:"speed_mbps"`
-		Days             *int     `json:"days"`
-		IPLimit          *int     `json:"ip_limit"`
-		ActivateOnConnect bool    `json:"activate_on_connect"`
-		TemplateID       *int64   `json:"template_id"`
+		Username          string   `json:"username"`
+		Password          string   `json:"password"`
+		DisplayName       string   `json:"display_name"`
+		PlanID            *int64   `json:"plan_id"`
+		DataGB            *float64 `json:"data_gb"`
+		SpeedMbps         *float64 `json:"speed_mbps"`
+		Days              *int     `json:"days"`
+		IPLimit           *int     `json:"ip_limit"`
+		ActivateOnConnect bool     `json:"activate_on_connect"`
+		TemplateID        *int64   `json:"template_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad_json"})
@@ -880,7 +885,12 @@ func (s *Server) createCustomer(w http.ResponseWriter, r *http.Request) {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
-	if _, err = tx.Exec(`INSERT INTO radcheck(username,attribute,op,value) VALUES(?,'Simultaneous-Use',':=',?)`, in.Username, strconv.Itoa(func() int { if in.IPLimit != nil && *in.IPLimit > 0 { return *in.IPLimit }; return 1 }())); err != nil {
+	if _, err = tx.Exec(`INSERT INTO radcheck(username,attribute,op,value) VALUES(?,'Simultaneous-Use',':=',?)`, in.Username, strconv.Itoa(func() int {
+		if in.IPLimit != nil && *in.IPLimit > 0 {
+			return *in.IPLimit
+		}
+		return 1
+	}())); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
@@ -1308,7 +1318,13 @@ func (s *Server) updateCustomer(w http.ResponseWriter, r *http.Request, id int64
 	}
 
 	if in.Status != nil && *in.Status != "active" {
-		s.disconnectCustomerSessions(username)
+		// Only disconnect if status is actually changing (avoid unnecessary disconnection
+		// when updating other fields on an already-disabled/limited customer)
+		var currentStatus string
+		_ = s.DB.QueryRow(`SELECT status FROM customers WHERE id=? LIMIT 1`, id).Scan(&currentStatus)
+		if currentStatus != *in.Status {
+			s.disconnectCustomerSessions(username)
+		}
 	}
 
 	actor, _, _ := s.currentAdmin(r)
@@ -1585,7 +1601,7 @@ func (s *Server) planByID(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) listPlans(w http.ResponseWriter, r *http.Request) {
-	rows, err := s.DB.Query(`SELECT id,name,data_gb,speed_mbps,duration_days,price,billing_type,price_per_gb,price_per_day,disconnect_on_zero,is_active,sort_order,created_at FROM plans ORDER BY is_active DESC, sort_order ASC, id DESC`)
+	rows, err := s.DB.Query(`SELECT id,name,data_gb,speed_mbps,duration_days,price,billing_type,price_per_gb,price_per_day,disconnect_on_zero,allow_passwordless,is_active,sort_order,created_at FROM plans ORDER BY is_active DESC, sort_order ASC, id DESC`)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
@@ -1625,8 +1641,8 @@ func (s *Server) createPlan(w http.ResponseWriter, r *http.Request) {
 		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid_plan"})
 		return
 	}
-	res, err := s.DB.Exec(`INSERT INTO plans(name,data_gb,speed_mbps,duration_days,price,billing_type,price_per_gb,price_per_day,disconnect_on_zero,is_active,sort_order) VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
-		in.Name, in.DataGB, in.SpeedMbps, in.DurationDays, in.Price, in.BillingType, in.PricePerGB, in.PricePerDay, boolInt(in.DisconnectOnZero), boolInt(in.IsActive), in.SortOrder)
+	res, err := s.DB.Exec(`INSERT INTO plans(name,data_gb,speed_mbps,duration_days,price,billing_type,price_per_gb,price_per_day,disconnect_on_zero,allow_passwordless,is_active,sort_order) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
+		in.Name, in.DataGB, in.SpeedMbps, in.DurationDays, in.Price, in.BillingType, in.PricePerGB, in.PricePerDay, boolInt(in.DisconnectOnZero), boolInt(in.AllowPasswordless), boolInt(in.IsActive), in.SortOrder)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
@@ -1638,7 +1654,7 @@ func (s *Server) createPlan(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) getPlan(w http.ResponseWriter, id int64) {
-	row := s.DB.QueryRow(`SELECT id,name,data_gb,speed_mbps,duration_days,price,billing_type,price_per_gb,price_per_day,disconnect_on_zero,is_active,sort_order,created_at FROM plans WHERE id=? LIMIT 1`, id)
+	row := s.DB.QueryRow(`SELECT id,name,data_gb,speed_mbps,duration_days,price,billing_type,price_per_gb,price_per_day,disconnect_on_zero,allow_passwordless,is_active,sort_order,created_at FROM plans WHERE id=? LIMIT 1`, id)
 	plan, err := scanPlan(row)
 	if err == sql.ErrNoRows {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
@@ -1673,8 +1689,8 @@ func (s *Server) updatePlan(w http.ResponseWriter, r *http.Request, id int64) {
 		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid_plan"})
 		return
 	}
-	if _, err := s.DB.Exec(`UPDATE plans SET name=?,data_gb=?,speed_mbps=?,duration_days=?,price=?,billing_type=?,price_per_gb=?,price_per_day=?,disconnect_on_zero=?,is_active=?,sort_order=? WHERE id=?`,
-		in.Name, in.DataGB, in.SpeedMbps, in.DurationDays, in.Price, in.BillingType, in.PricePerGB, in.PricePerDay, boolInt(in.DisconnectOnZero), boolInt(in.IsActive), in.SortOrder, id); err != nil {
+	if _, err := s.DB.Exec(`UPDATE plans SET name=?,data_gb=?,speed_mbps=?,duration_days=?,price=?,billing_type=?,price_per_gb=?,price_per_day=?,disconnect_on_zero=?,allow_passwordless=?,is_active=?,sort_order=? WHERE id=?`,
+		in.Name, in.DataGB, in.SpeedMbps, in.DurationDays, in.Price, in.BillingType, in.PricePerGB, in.PricePerDay, boolInt(in.DisconnectOnZero), boolInt(in.AllowPasswordless), boolInt(in.IsActive), in.SortOrder, id); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
@@ -1758,13 +1774,15 @@ func scanPlan(row planScanner) (Plan, error) {
 	var p Plan
 	var active int
 	var disconnectOnZero int
+	var allowPasswordless int
 	var created sql.NullTime
 	var billingType sql.NullString
-	if err := row.Scan(&p.ID, &p.Name, &p.DataGB, &p.SpeedMbps, &p.DurationDays, &p.Price, &billingType, &p.PricePerGB, &p.PricePerDay, &disconnectOnZero, &active, &p.SortOrder, &created); err != nil {
+	if err := row.Scan(&p.ID, &p.Name, &p.DataGB, &p.SpeedMbps, &p.DurationDays, &p.Price, &billingType, &p.PricePerGB, &p.PricePerDay, &disconnectOnZero, &allowPasswordless, &active, &p.SortOrder, &created); err != nil {
 		return p, err
 	}
 	p.IsActive = active == 1
 	p.DisconnectOnZero = disconnectOnZero == 1
+	p.AllowPasswordless = allowPasswordless == 1
 	if billingType.Valid {
 		p.BillingType = billingType.String
 	} else {
@@ -1994,20 +2012,30 @@ func (s *Server) deleteNode(w http.ResponseWriter, id int64) {
 	}
 	defer tx.Rollback()
 
-	// Clean up all related tables within a transaction
-	tables := []string{
-		"node_vpn_configs",
-		"node_tasks",
-		"node_status",
-		"node_services",
-		"node_usage_snapshots",
-		"node_diagnostics",
+	// Clean up all related tables within a transaction (explicit queries, no concatenation)
+	if _, err := tx.Exec(`DELETE FROM node_vpn_configs WHERE node_id=?`, id); err != nil {
+		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": fmt.Sprintf("failed to clean node_vpn_configs: %v", err)})
+		return
 	}
-	for _, table := range tables {
-		if _, err := tx.Exec(`DELETE FROM `+table+` WHERE node_id=?`, id); err != nil {
-			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": fmt.Sprintf("failed to clean %s: %v", table, err)})
-			return
-		}
+	if _, err := tx.Exec(`DELETE FROM node_tasks WHERE node_id=?`, id); err != nil {
+		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": fmt.Sprintf("failed to clean node_tasks: %v", err)})
+		return
+	}
+	if _, err := tx.Exec(`DELETE FROM node_status WHERE node_id=?`, id); err != nil {
+		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": fmt.Sprintf("failed to clean node_status: %v", err)})
+		return
+	}
+	if _, err := tx.Exec(`DELETE FROM node_services WHERE node_id=?`, id); err != nil {
+		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": fmt.Sprintf("failed to clean node_services: %v", err)})
+		return
+	}
+	if _, err := tx.Exec(`DELETE FROM node_usage_snapshots WHERE node_id=?`, id); err != nil {
+		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": fmt.Sprintf("failed to clean node_usage_snapshots: %v", err)})
+		return
+	}
+	if _, err := tx.Exec(`DELETE FROM node_diagnostics WHERE node_id=?`, id); err != nil {
+		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": fmt.Sprintf("failed to clean node_diagnostics: %v", err)})
+		return
 	}
 
 	if _, err := tx.Exec(`DELETE FROM nodes WHERE id=?`, id); err != nil {
@@ -2482,7 +2510,13 @@ func scanNodeTask(row interface{ Scan(dest ...any) error }) (NodeTask, error) {
 
 func validNodeTaskAction(action string) bool {
 	switch action {
-	case "service.restart", "service.status", "service.reload", "agent.status":
+	case "service.restart", "service.status", "service.reload", "service.stop", "agent.status",
+		"agent.update", "agent.reload_config",
+		"vpn.disconnect-user", "vpn.apply_outbound",
+		"wireguard.setup", "wireguard.add_peer", "wireguard.remove_peer",
+		"wireguard.update_config", "wireguard.sync_config",
+		"cert.distribute",
+		"backup.collect_configs", "backup.restore_configs":
 		return true
 	default:
 		return false
@@ -2621,11 +2655,13 @@ func (s *Server) portalPaymentMethods(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) listPaymentMethods(w http.ResponseWriter, activeOnly bool) {
-	where := "1=1"
+	var rows *sql.Rows
+	var err error
 	if activeOnly {
-		where = "is_active=1"
+		rows, err = s.DB.Query(`SELECT id,name,type,COALESCE(JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.instructions')),''),is_active,sort_order,created_at FROM payment_methods WHERE is_active=1 ORDER BY sort_order ASC, id DESC`)
+	} else {
+		rows, err = s.DB.Query(`SELECT id,name,type,COALESCE(JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.instructions')),''),is_active,sort_order,created_at FROM payment_methods ORDER BY is_active DESC, sort_order ASC, id DESC`)
 	}
-	rows, err := s.DB.Query(`SELECT id,name,type,COALESCE(JSON_UNQUOTE(JSON_EXTRACT(config_json,'$.instructions')),''),is_active,sort_order,created_at FROM payment_methods WHERE ` + where + ` ORDER BY is_active DESC, sort_order ASC, id DESC`)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
@@ -2895,7 +2931,9 @@ func (s *Server) createTicket(w http.ResponseWriter, r *http.Request, senderType
 	}
 	s.logAudit(actor, "ticket.created", "ticket", strconv.FormatInt(id, 10), nil, map[string]any{"username": in.Username, "subject": in.Subject}, clientIP(r))
 	severity := "info"
-	if in.Priority == "high" { severity = "warning" }
+	if in.Priority == "high" {
+		severity = "warning"
+	}
 	s.createEvent("ticket", severity, fmt.Sprintf("New ticket #%d: %s", id, in.Subject), fmt.Sprintf("Ticket #%d created by %s for %s", id, actor, in.Username), actor, in.Username)
 	if senderType == "customer" {
 		s.broadcastNotification(map[string]any{
@@ -2940,7 +2978,9 @@ func (s *Server) replyTicket(w http.ResponseWriter, r *http.Request, id int64, s
 	if senderType == "admin" {
 		sender, _, _ = s.currentAdmin(r)
 	}
-	var in struct{ Message string `json:"message"` }
+	var in struct {
+		Message string `json:"message"`
+	}
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad_json"})
 		return
@@ -3252,7 +3292,9 @@ func (s *Server) setPaymentStatus(w http.ResponseWriter, r *http.Request, id int
 	actor, _, _ := s.currentAdmin(r)
 	s.logAudit(actor, "payment.status_"+status, "payment", strconv.FormatInt(id, 10), map[string]any{"old_status": oldStatus}, map[string]any{"new_status": status}, clientIP(r))
 	severity := "info"
-	if status == "rejected" { severity = "warning" }
+	if status == "rejected" {
+		severity = "warning"
+	}
 	s.createEvent("payment", severity, fmt.Sprintf("Payment %s #%d", status, id), fmt.Sprintf("Payment #%d for %s was %s", id, username, status), actor, username)
 	writeJSON(w, map[string]any{"ok": true, "intent_type": intentType})
 }
@@ -3601,8 +3643,10 @@ func (s *Server) portalProfiles(w http.ResponseWriter, r *http.Request) {
 	var psk string
 	_ = s.DB.QueryRow(`SELECT COALESCE(ipsec_psk,'') FROM vpn_core_settings WHERE id=1`).Scan(&psk)
 	psk = strings.TrimSpace(psk)
+	passwordlessAvailable := s.canUsePasswordless(username)
 	writeJSON(w, map[string]any{
-		"ok": true,
+		"ok":                     true,
+		"passwordless_available": passwordlessAvailable,
 		"profiles": []map[string]any{
 			{
 				"type":      "openvpn",
@@ -3655,7 +3699,13 @@ func (s *Server) portalProfileDownload(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case strings.HasSuffix(path, "/openvpn.ovpn"):
 		nodeID, _ := strconv.ParseInt(r.URL.Query().Get("node_id"), 10, 64)
-		profile := s.openVPNProfile(username, r, nodeID)
+		passwordless := r.URL.Query().Get("passwordless") == "true"
+		var profile string
+		if passwordless && s.canUsePasswordless(username) {
+			profile = s.openVPNProfilePasswordless(username, r, nodeID)
+		} else {
+			profile = s.openVPNProfile(username, r, nodeID)
+		}
 		filename := safeFilename(username) + "-openvpn.ovpn"
 		w.Header().Set("Content-Type", "application/x-openvpn-profile; charset=utf-8")
 		w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
@@ -3708,17 +3758,51 @@ func (s *Server) openVPNEndpoint(r *http.Request) (host string, port int, proto 
 }
 
 func (s *Server) openVPNProfile(username string, r *http.Request, nodeID int64) string {
+	return s.openVPNProfileWithAuth(username, r, nodeID, true)
+}
+
+func (s *Server) openVPNProfilePasswordless(username string, r *http.Request, nodeID int64) string {
+	return s.openVPNProfileWithAuth(username, r, nodeID, false)
+}
+
+// canUsePasswordless checks if a customer is allowed to generate passwordless configs.
+// Requires: global setting enabled AND customer's plan allows passwordless.
+func (s *Server) canUsePasswordless(username string) bool {
+	// Check global setting
+	var enabled string
+	_ = s.DB.QueryRow(`SELECT setting_value FROM panel_settings WHERE setting_key='passwordless_configs_enabled'`).Scan(&enabled)
+	if enabled != "true" {
+		return false
+	}
+	// Check per-plan setting
+	var allowPasswordless int
+	err := s.DB.QueryRow(`SELECT COALESCE(p.allow_passwordless, 0) FROM customers c JOIN plans p ON p.id = c.plan_id WHERE c.username = ? AND c.deleted_at IS NULL LIMIT 1`, username).Scan(&allowPasswordless)
+	if err != nil {
+		return false
+	}
+	return allowPasswordless == 1
+}
+
+func (s *Server) openVPNProfileWithAuth(username string, r *http.Request, nodeID int64, withAuth bool) string {
 	host, port, proto, nodeName := s.openVPNEndpointNode(r, nodeID)
 	if nodeName == "" {
 		nodeName = host
 	}
 	caBlock := inlineOpenVPNBlock("ca", getenvFirst("PANEL_OPENVPN_CA_FILE", "/etc/openvpn/server/ca.crt", "/etc/openvpn/easy-rsa/pki/ca.crt"))
 	tlsCryptBlock := inlineOpenVPNBlock("tls-crypt", getenvFirst("PANEL_OPENVPN_TLS_CRYPT_FILE", "/etc/openvpn/server/tc.key", "/etc/openvpn/server/tls-crypt.key", "/etc/openvpn/server/ta.key"))
+
+	authLine := "auth-user-pass\n"
+	authComment := "# Login with your VPN username/password when OpenVPN asks for credentials."
+	if !withAuth {
+		authLine = ""
+		authComment = "# Passwordless mode — no credentials required."
+	}
+
 	return fmt.Sprintf(`# KorisPanel generated OpenVPN profile
 # User: %s
 # Node: %s
 # Generated: %s
-# Login with your VPN username/password when OpenVPN asks for credentials.
+%s
 client
 dev tun
 proto %s
@@ -3729,15 +3813,14 @@ persist-key
 persist-tun
 remote-cert-tls server
 setenv CLIENT_CERT 0
-auth-user-pass
-auth-nocache
+%sauth-nocache
 auth SHA256
 data-ciphers AES-256-GCM:AES-128-GCM:CHACHA20-POLY1305
 data-ciphers-fallback AES-256-GCM
 explicit-exit-notify 1
 verb 3
 pull
-%s%s`, username, nodeName, time.Now().UTC().Format(time.RFC3339), proto, host, port, caBlock, tlsCryptBlock)
+%s%s`, username, nodeName, time.Now().UTC().Format(time.RFC3339), authComment, proto, host, port, authLine, caBlock, tlsCryptBlock)
 }
 
 func getenvFirst(envName string, paths ...string) string {
@@ -3957,7 +4040,7 @@ func (s *Server) portalPlans(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method", http.StatusMethodNotAllowed)
 		return
 	}
-	rows, err := s.DB.Query(`SELECT id,name,data_gb,speed_mbps,duration_days,price,billing_type,price_per_gb,price_per_day,disconnect_on_zero,is_active,sort_order,created_at FROM plans WHERE is_active=1 ORDER BY sort_order ASC, id DESC`)
+	rows, err := s.DB.Query(`SELECT id,name,data_gb,speed_mbps,duration_days,price,billing_type,price_per_gb,price_per_day,disconnect_on_zero,allow_passwordless,is_active,sort_order,created_at FROM plans WHERE is_active=1 ORDER BY sort_order ASC, id DESC`)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
@@ -4004,7 +4087,7 @@ func (s *Server) portalRenew(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	plan, err := scanPlan(s.DB.QueryRow(`SELECT id,name,data_gb,speed_mbps,duration_days,price,is_active,sort_order,created_at FROM plans WHERE id=? LIMIT 1`, in.PlanID))
+	plan, err := scanPlan(s.DB.QueryRow(`SELECT id,name,data_gb,speed_mbps,duration_days,price,billing_type,price_per_gb,price_per_day,disconnect_on_zero,allow_passwordless,is_active,sort_order,created_at FROM plans WHERE id=? LIMIT 1`, in.PlanID))
 	if err == sql.ErrNoRows {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "plan_not_found"})
 		return
@@ -4163,8 +4246,12 @@ func (s *Server) portalPayments(w http.ResponseWriter, r *http.Request) {
 			var intentID sql.NullInt64
 			var created, updated sql.NullTime
 			if err := rows.Scan(&p.ID, &p.Username, &p.Amount, &p.Method, &p.Status, &p.IntentType, &intentID, &p.IntentLabel, &created, &updated); err == nil {
-				if p.IntentType == "" { p.IntentType = "wallet_topup" }
-				if intentID.Valid { p.IntentID = &intentID.Int64 }
+				if p.IntentType == "" {
+					p.IntentType = "wallet_topup"
+				}
+				if intentID.Valid {
+					p.IntentID = &intentID.Int64
+				}
 				if created.Valid {
 					p.CreatedAt = created.Time.Format(time.RFC3339)
 				}
@@ -4274,25 +4361,26 @@ func (s *Server) nodePush(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method", http.StatusMethodNotAllowed)
 		return
 	}
+	limitBody(w, r, 5<<20) // 5MB for node push (includes per-user bandwidth data)
 	var in struct {
-		Token         string            `json:"token"`
-		Hostname      string            `json:"hostname"`
-		PublicIP      string            `json:"public_ip"`
-		PublicIPv6    string            `json:"public_ipv6"`
-		OS            string            `json:"os"`
-		CPUPercent    float64           `json:"cpu_percent"`
-		RAMPercent    float64           `json:"ram_percent"`
-		DiskPercent   float64           `json:"disk_percent"`
-		RxBps         int64             `json:"rx_bps"`
-		TxBps         int64             `json:"tx_bps"`
-		RxBytes       int64             `json:"rx_bytes"`
-		TxBytes       int64             `json:"tx_bytes"`
-		OnlineUsers   int               `json:"online_users"`
-		OpenVPNStatus string            `json:"openvpn_status"`
-		L2TPStatus    string            `json:"l2tp_status"`
-		IKEv2Status   string            `json:"ikev2_status"`
-		Services      map[string]string `json:"services"`
-		Diagnostics   *DiagnosticsReport `json:"diagnostics,omitempty"`
+		Token            string             `json:"token"`
+		Hostname         string             `json:"hostname"`
+		PublicIP         string             `json:"public_ip"`
+		PublicIPv6       string             `json:"public_ipv6"`
+		OS               string             `json:"os"`
+		CPUPercent       float64            `json:"cpu_percent"`
+		RAMPercent       float64            `json:"ram_percent"`
+		DiskPercent      float64            `json:"disk_percent"`
+		RxBps            int64              `json:"rx_bps"`
+		TxBps            int64              `json:"tx_bps"`
+		RxBytes          int64              `json:"rx_bytes"`
+		TxBytes          int64              `json:"tx_bytes"`
+		OnlineUsers      int                `json:"online_users"`
+		OpenVPNStatus    string             `json:"openvpn_status"`
+		L2TPStatus       string             `json:"l2tp_status"`
+		IKEv2Status      string             `json:"ikev2_status"`
+		Services         map[string]string  `json:"services"`
+		Diagnostics      *DiagnosticsReport `json:"diagnostics,omitempty"`
 		PerUserBandwidth []struct {
 			IP      string `json:"ip"`
 			ClassID string `json:"class_id"`
@@ -4300,7 +4388,7 @@ func (s *Server) nodePush(w http.ResponseWriter, r *http.Request) {
 			TxBps   int64  `json:"tx_bps"`
 		} `json:"per_user_bandwidth,omitempty"`
 		WireguardPeers []struct {
-			PublicKey      string `json:"public_key"`
+			PublicKey     string `json:"public_key"`
 			LastHandshake int64  `json:"last_handshake"`
 			RxBytes       int64  `json:"rx_bytes"`
 			TxBytes       int64  `json:"tx_bytes"`
@@ -4463,6 +4551,11 @@ func (s *Server) requireAdmin(next http.HandlerFunc) http.HandlerFunc {
 		}
 		next(w, r)
 	}
+}
+
+// RequireAdmin is the exported version of requireAdmin for use by the main package.
+func (s *Server) RequireAdmin(next http.HandlerFunc) http.HandlerFunc {
+	return s.requireAdmin(next)
 }
 
 func (s *Server) requireCustomer(next http.HandlerFunc) http.HandlerFunc {
@@ -5193,8 +5286,8 @@ func (s *Server) backupImport(w http.ResponseWriter, r *http.Request) {
 	defer file.Close()
 
 	var backup struct {
-		Version    int                      `json:"version"`
-		ExportedAt string                   `json:"exported_at"`
+		Version    int                         `json:"version"`
+		ExportedAt string                      `json:"exported_at"`
 		Tables     map[string][]map[string]any `json:"tables"`
 	}
 	if err := json.NewDecoder(file).Decode(&backup); err != nil {
@@ -5795,64 +5888,64 @@ rules:
 
 	translations := map[string]map[string]string{
 		"en": {
-			"title":     "Unified Secure Access Portal",
-			"status":    "Status",
-			"usage":     "Usage Summary",
-			"download":  "Download OpenVPN Profile",
-			"server":    "Server",
-			"username":  "Username",
-			"l2tp_psk":  "L2TP PSK",
-			"unlimited": "Unlimited",
-			"online":    "Online",
-			"offline":   "Offline",
-			"langs":     `LANGS: <a href="?token=%s&lang=en">EN</a> · <a href="?token=%s&lang=fa">FA</a> · <a href="?token=%s&lang=ru">RU</a> · <a href="?token=%s&lang=zh">ZH</a>`,
+			"title":       "Unified Secure Access Portal",
+			"status":      "Status",
+			"usage":       "Usage Summary",
+			"download":    "Download OpenVPN Profile",
+			"server":      "Server",
+			"username":    "Username",
+			"l2tp_psk":    "L2TP PSK",
+			"unlimited":   "Unlimited",
+			"online":      "Online",
+			"offline":     "Offline",
+			"langs":       `LANGS: <a href="?token=%s&lang=en">EN</a> · <a href="?token=%s&lang=fa">FA</a> · <a href="?token=%s&lang=ru">RU</a> · <a href="?token=%s&lang=zh">ZH</a>`,
 			"guide_title": "Manual Setup Connection Guides",
-			"guide_desc": "For Windows, iOS & macOS native setups: Add an L2TP/IPSec VPN connection. Use the Server Address above, select Username/Password authentication, and enter the pre-shared secret (PSK) provided by your administrator.",
+			"guide_desc":  "For Windows, iOS & macOS native setups: Add an L2TP/IPSec VPN connection. Use the Server Address above, select Username/Password authentication, and enter the pre-shared secret (PSK) provided by your administrator.",
 		},
 		"fa": {
-			"title":     "پورتال دسترسی امن یکپارچه",
-			"status":    "وضعیت",
-			"usage":     "خلاصه مصرف",
-			"download":  "دانلود فایل تنظیمات OpenVPN",
-			"server":    "سرور",
-			"username":  "نام کاربری",
-			"l2tp_psk":  "کلید L2TP PSK",
-			"unlimited": "نامحدود",
-			"online":    "متصل",
-			"offline":   "قطع",
-			"langs":     `زبان‌ها: <a href="?token=%s&lang=en">EN</a> · <a href="?token=%s&lang=fa">FA</a> · <a href="?token=%s&lang=ru">RU</a> · <a href="?token=%s&lang=zh">ZH</a>`,
+			"title":       "پورتال دسترسی امن یکپارچه",
+			"status":      "وضعیت",
+			"usage":       "خلاصه مصرف",
+			"download":    "دانلود فایل تنظیمات OpenVPN",
+			"server":      "سرور",
+			"username":    "نام کاربری",
+			"l2tp_psk":    "کلید L2TP PSK",
+			"unlimited":   "نامحدود",
+			"online":      "متصل",
+			"offline":     "قطع",
+			"langs":       `زبان‌ها: <a href="?token=%s&lang=en">EN</a> · <a href="?token=%s&lang=fa">FA</a> · <a href="?token=%s&lang=ru">RU</a> · <a href="?token=%s&lang=zh">ZH</a>`,
 			"guide_title": "راهنمای اتصال دستی",
-			"guide_desc": "برای تنظیمات بومی ویندوز، iOS و macOS: یک اتصال VPN از نوع L2TP/IPSec اضافه کنید. از آدرس سرور بالا استفاده کنید، نوع تایید هویت را روی Username/Password بگذارید، و کلید مشترک (PSK) را وارد کنید.",
+			"guide_desc":  "برای تنظیمات بومی ویندوز، iOS و macOS: یک اتصال VPN از نوع L2TP/IPSec اضافه کنید. از آدرس سرور بالا استفاده کنید، نوع تایید هویت را روی Username/Password بگذارید، و کلید مشترک (PSK) را وارد کنید.",
 		},
 		"ru": {
-			"title":     "Единый портал безопасного доступа",
-			"status":    "Статус",
-			"usage":     "Сводка использования",
-			"download":  "Скачать профиль OpenVPN",
-			"server":    "Сервер",
-			"username":  "Имя пользователя",
-			"l2tp_psk":  "L2TP PSK",
-			"unlimited": "Безлимитный",
-			"online":    "Онлайн",
-			"offline":   "Оффлайн",
-			"langs":     `Языки: <a href="?token=%s&lang=en">EN</a> · <a href="?token=%s&lang=fa">FA</a> · <a href="?token=%s&lang=ru">RU</a> · <a href="?token=%s&lang=zh">ZH</a>`,
+			"title":       "Единый портал безопасного доступа",
+			"status":      "Статус",
+			"usage":       "Сводка использования",
+			"download":    "Скачать профиль OpenVPN",
+			"server":      "Сервер",
+			"username":    "Имя пользователя",
+			"l2tp_psk":    "L2TP PSK",
+			"unlimited":   "Безлимитный",
+			"online":      "Онлайн",
+			"offline":     "Оффлайн",
+			"langs":       `Языки: <a href="?token=%s&lang=en">EN</a> · <a href="?token=%s&lang=fa">FA</a> · <a href="?token=%s&lang=ru">RU</a> · <a href="?token=%s&lang=zh">ZH</a>`,
 			"guide_title": "Инструкции по ручной настройке",
-			"guide_desc": "Для стандартных подключений Windows, iOS и macOS: Добавьте VPN-подключение L2TP/IPSec. Используйте адрес сервера выше, выберите аутентификацию по имени пользователя/паролю и введите общий ключ (PSK).",
+			"guide_desc":  "Для стандартных подключений Windows, iOS и macOS: Добавьте VPN-подключение L2TP/IPSec. Используйте адрес сервера выше, выберите аутентификацию по имени пользователя/паролю и введите общий ключ (PSK).",
 		},
 		"zh": {
-			"title":     "统一安全访问门户",
-			"status":    "状态",
-			"usage":     "用量摘要",
-			"download":  "下载 OpenVPN 配置文件",
-			"server":    "服务器",
-			"username":  "用户名",
-			"l2tp_psk":  "L2TP 预共享密钥",
-			"unlimited": "无限制",
-			"online":    "在线",
-			"offline":   "离线",
-			"langs":     `语言: <a href="?token=%s&lang=en">EN</a> · <a href="?token=%s&lang=fa">FA</a> · <a href="?token=%s&lang=ru">RU</a> · <a href="?token=%s&lang=zh">ZH</a>`,
+			"title":       "统一安全访问门户",
+			"status":      "状态",
+			"usage":       "用量摘要",
+			"download":    "下载 OpenVPN 配置文件",
+			"server":      "服务器",
+			"username":    "用户名",
+			"l2tp_psk":    "L2TP 预共享密钥",
+			"unlimited":   "无限制",
+			"online":      "在线",
+			"offline":     "离线",
+			"langs":       `语言: <a href="?token=%s&lang=en">EN</a> · <a href="?token=%s&lang=fa">FA</a> · <a href="?token=%s&lang=ru">RU</a> · <a href="?token=%s&lang=zh">ZH</a>`,
 			"guide_title": "手动连接配置指南",
-			"guide_desc": "对于 Windows、iOS 和 macOS 原生设置：添加 L2TP/IPSec VPN 连接。使用上方的服务器地址，选择用户名/密码身份验证，然后输入预共享密钥 (PSK)。",
+			"guide_desc":  "对于 Windows、iOS 和 macOS 原生设置：添加 L2TP/IPSec VPN 连接。使用上方的服务器地址，选择用户名/密码身份验证，然后输入预共享密钥 (PSK)。",
 		},
 	}
 
@@ -6068,8 +6161,12 @@ func (s *Server) liveSessionsPayload() []map[string]any {
 				if dt > 0.1 {
 					rxSpeed = float64(rx-prev.InputBytes) / 1024.0 / dt
 					txSpeed = float64(tx-prev.OutputBytes) / 1024.0 / dt
-					if rxSpeed < 0 { rxSpeed = 0 }
-					if txSpeed < 0 { txSpeed = 0 }
+					if rxSpeed < 0 {
+						rxSpeed = 0
+					}
+					if txSpeed < 0 {
+						txSpeed = 0
+					}
 				}
 			}
 			s.prevSessionBytes[id] = SessionBytes{
@@ -6153,9 +6250,16 @@ func (s *Server) killSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate nasIP to prevent command injection (must be a valid IP address)
+	if net.ParseIP(nasIP) == nil {
+		nasIP = "127.0.0.1"
+	}
+
 	go func() {
-		cmdStr := fmt.Sprintf("echo 'User-Name=%s,Acct-Session-Id=%s' | radclient -x %s:3799 disconnect testing123", username, sessionID, nasIP)
-		_ = exec.Command("sh", "-c", cmdStr).Run()
+		attrs := fmt.Sprintf("User-Name=%s,Acct-Session-Id=%s", username, sessionID)
+		cmd := exec.Command("radclient", "-x", nasIP+":3799", "disconnect", "testing123")
+		cmd.Stdin = strings.NewReader(attrs)
+		_ = cmd.Run()
 	}()
 
 	_, err = s.DB.Exec(`UPDATE radacct SET acctstoptime=NOW() WHERE radacctid=?`, in.ID)
@@ -6283,8 +6387,14 @@ func (s *Server) disconnectCustomerSessions(username string) {
 		var sessionID, nasIP string
 		if err := rows.Scan(&id, &sessionID, &nasIP); err == nil {
 			go func(u, sID, ip string) {
-				cmdStr := fmt.Sprintf("echo 'User-Name=%s,Acct-Session-Id=%s' | radclient -x %s:3799 disconnect testing123", u, sID, ip)
-				_ = exec.Command("sh", "-c", cmdStr).Run()
+				// Validate nasIP to prevent command injection
+				if net.ParseIP(ip) == nil {
+					ip = "127.0.0.1"
+				}
+				attrs := fmt.Sprintf("User-Name=%s,Acct-Session-Id=%s", u, sID)
+				cmd := exec.Command("radclient", "-x", ip+":3799", "disconnect", "testing123")
+				cmd.Stdin = strings.NewReader(attrs)
+				_ = cmd.Run()
 			}(username, sessionID, nasIP)
 
 			_, _ = s.DB.Exec(`UPDATE radacct SET acctstoptime=NOW() WHERE radacctid=?`, id)
@@ -6373,6 +6483,15 @@ func writeJSONCode(w http.ResponseWriter, code int, v any) {
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(v)
 }
+
+// limitBody wraps the request body with a max size reader (1MB default for JSON endpoints).
+// Returns false and writes a 413 error if the limit would be exceeded.
+func limitBody(w http.ResponseWriter, r *http.Request, maxBytes int64) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
+}
+
+// maxJSONBody is the default max size for JSON request bodies (1MB).
+const maxJSONBody int64 = 1 << 20
 
 // ErrorResponse represents a structured error returned by the API.
 type ErrorResponse struct {
@@ -6694,9 +6813,6 @@ func (s *Server) certificateByID(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method", http.StatusMethodNotAllowed)
 	}
 }
-
-
-
 
 // ========== Panel Settings ==========
 

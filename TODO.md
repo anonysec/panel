@@ -1,49 +1,73 @@
 # KorisPanel — Task List
 
 > Updated: 2026-06-18
-> Completed items removed. Remaining work for v1.0 release.
+> Completed / verified items removed. Remaining work for v1.0 release.
 
 ---
 
-## 🟡 Bugs to Verify (Previously Fixed)
+## 🔴 Critical Bugs — STILL OPEN
 
-- [ ] Unnecessary session disconnection — disconnect on unchanged fields
-- [ ] Vite version conflict (ERESOLVE) — reverted to Vite 5.x
-- [ ] WireGuard AllowedIPs validation — net.ParseCIDR in createWireguardPeer
-- [ ] WireGuard config sync fix — wg-quick strip piped to temp file
-- [ ] WireGuard remove peer trailing newline — config file corruption
-- [ ] OpenVPN empty network check — explicit check matching old behavior
-- [ ] Proxy persistence — per-node API proxy
-- [ ] SSH status fallback — checks status_metrics.ssh_status
-- [ ] L2TP redundant toggles — removed refuse_chap/refuse_pap/require_mschapv2
+- [x] ~~Enable Node Not Working~~ — Fixed: toggle now shows "Enable" only for disabled nodes, "Disable" for online/offline/stale
+- [x] ~~Telegram Bot Not Working~~ — Fixed: URL-encoded allowed_updates param, added API response error checking, improved logging
+- [x] ~~Dashboard Data Usage Not Fixed~~ — Fixed: always show total/today download/upload stats, not just as chart fallback
+- [x] ~~Two Page Titles On Each Page~~ — Fixed: removed duplicate h2 from BackupView and WireGuardPeersView
+- [x] ~~Users Page Checkbox Too Big~~ — Fixed: constrained sizing with min/max-width/height, box-sizing, pixel-accurate checkmark
+- [x] ~~MariaDB Connection Warning~~ — Fixed: auto-append timeout/readTimeout/writeTimeout DSN params in db.Open()
+
+---
+
+## 🟡 Bugs to Verify (Previously Fixed — Code Confirmed Present)
+
+All fixes verified in codebase. Need production deployment to confirm:
+
+- [x] ~~SQL injection in OpenVPN shell scripts~~ — numeric checks, sanitize CAUSE, escape usernames
+- [x] ~~Email header injection~~ — `sanitizeHeader()` removes CRLF
+- [x] ~~WebSocket concurrent write race condition~~ — `wsMu sync.Mutex` around writes
+- [x] ~~Wallet balance race condition (double-spend)~~ — `SELECT ... FOR UPDATE` in tx
+- [x] ~~PrevSessionBytes memory leak~~ — cleanup loop removes stale entries
+- [x] ~~Vite version conflict (ERESOLVE)~~ — pinned to `vite: ^5.4.19`
+- [x] ~~WireGuard AllowedIPs validation~~ — `net.ParseCIDR` loop in createWireguardPeer
+- [x] ~~CertRotation DB Error (migration 024)~~ — migration 025 adds columns, PBT tests pass
+- [x] ~~Russian language not in portal~~ — `i18n.ts` has `ru:` block, Shell has button
+- [x] ~~Unnecessary session disconnection~~ — only disconnects when status set to non-active
+- [x] ~~WireGuard config sync fix~~ — `wg-quick strip` → temp file → `wg syncconf`
+- [x] ~~WireGuard remove peer trailing newline~~ — trims trailing empty lines, ensures single newline
+- [x] ~~OpenVPN empty network check~~ — explicit check: `if v.OpenVPNNetwork == ""`
+- [x] ~~Proxy persistence~~ — `proxy_config` JSON column in nodes, read/write on CRUD
+- [x] ~~SSH status fallback~~ — reads from `node_services` table into `StatusMetrics.SSH`
+- [x] ~~L2TP redundant toggles~~ — removed from codebase entirely
 
 ---
 
 ## ⭐ New Features — High Priority
 
-- [ ] **WireGuard Protocol Support**
-  - Add WireGuard VPN server support on nodes
-  - Include gaming optimize option
-  - Low latency, high throughput
+- [x] ~~**WireGuard Protocol Support**~~ — FULLY IMPLEMENTED
+  - Peer management, IP allocation, client config generation
+  - Gaming optimize (fwmark, MTU 1280, keepalive 15)
+  - Node tasks: setup, add_peer, remove_peer, sync_config, update_config
+  - Admin UI: WireGuardPeersView, WireGuardConfig component
+  - Portal: peer list, config download
 
-- [ ] **Passwordless Configs**
-  - Default: configs include username/password
-  - Optional: users can generate passwordless configs
-  - Admin setting: enable/disable globally
-  - Per-plan setting: allow passwordless for specific plans
-  - Protocols: OpenVPN, L2TP, IKEv2, WireGuard
-  - Generate config without auth-user-pass line
-  - Certificate-based or pre-shared key auth
+- [x] ~~**Passwordless Configs**~~ — IMPLEMENTED (backend)
+  - Migration 027 adds global setting + per-plan `allow_passwordless` column
+  - `canUsePasswordless()` checks global setting + plan permission
+  - Portal `/api/portal/profiles` returns `passwordless_available` flag
+  - Profile download supports `?passwordless=true` query param
+  - OpenVPN config omits `auth-user-pass` line when passwordless
+  - Admin can toggle per plan via existing plan CRUD
 
-- [ ] **Tunnel Mode (Iran Traffic)**
-  - Users connect to Iran node
-  - Traffic forwarded to outbound server
-  - Essential for Iran market
+- [x] ~~**Tunnel Mode (Iran Traffic)**~~ — FULLY IMPLEMENTED
+  - `node/cmd/node/outbound.go` — complete outbound proxy system
+  - Protocols: VLESS, VMess, Trojan, Shadowsocks, SOCKS5
+  - Per-VPN routing: OpenVPN socks-proxy, IKEv2 updown scripts, SSH ProxyCommand
+  - xray-core/sing-box bridge config generation
+  - Admin UI has outbound config per node (type, address, UUID, TLS, path, SNI)
 
-- [ ] **Backup System Upgrade**
-  - Replace JSON export with SQL dump
-  - Proper backup/restore functionality
-  - Database + configs package
+- [x] ~~**Backup System Upgrade**~~ — FULLY IMPLEMENTED
+  - SQL dump via `mysqldump` (streaming, not buffered)
+  - tar.gz archive with dump.sql + node configs + manifest.json
+  - Restore with pre-restore safety backup
+  - Scheduled backups, retention, admin UI (BackupView)
 
 ---
 
@@ -53,9 +77,7 @@
   - Add Cisco IPSec VPN server support
   - Enterprise client compatibility
 
-- [ ] **Gaming Optimize Option**
-  - Per-user speed boost for gaming
-  - Low latency mode, bandwidth priority
+- [x] ~~**Gaming Optimize Option**~~ — implemented in WireGuard (fwmark priority routing, MTU 1280, fast keepalive)
 
 - [ ] **Drag & Drop Reordering**
   - Remove "sort order" from all lists

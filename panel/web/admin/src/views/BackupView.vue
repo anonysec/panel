@@ -167,7 +167,6 @@ onUnmounted(() => {
 <template>
   <div class="page backup-view">
     <header class="page-header">
-      <h2 class="page-title">Backup Management</h2>
       <KButton variant="primary" :loading="creating" @click="handleCreate">
         Create Backup Now
       </KButton>
@@ -278,12 +277,6 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
-}
-
-.page-title {
-  margin: 0;
-  font-size: var(--text-lg);
-  font-weight: var(--font-semibold);
 }
 
 .section-title {

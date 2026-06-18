@@ -152,7 +152,7 @@ async function handleCreateNode() {
 }
 
 async function toggleNode(id: number, currentStatus: string) {
-  const enable = currentStatus !== 'online'
+  const enable = currentStatus === 'disabled'
   await store.updateNode(id, enable)
 }
 
@@ -562,7 +562,7 @@ onMounted(() => {
                   {{ t('btn.edit') }}
                 </KButton>
                 <KButton variant="ghost" size="sm" @click="toggleNode(node.id, node.status)">
-                  {{ node.status === 'online' ? t('btn.disable') : t('btn.enable') }}
+                  {{ node.status === 'disabled' ? t('btn.enable') : t('btn.disable') }}
                 </KButton>
                 <KButton variant="danger" size="sm" @click="handleDeleteNode(node.id, node.name)">
                   {{ t('btn.delete') }}

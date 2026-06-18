@@ -13,6 +13,17 @@ import (
 )
 
 func Open(dsn string) (*sql.DB, error) {
+	// Append connection timeout params if not already specified in the DSN.
+	// This prevents "Aborted connection ... Got an error reading communication packets"
+	// by ensuring client-side timeouts are shorter than MariaDB's wait_timeout.
+	if !strings.Contains(dsn, "timeout=") {
+		sep := "&"
+		if !strings.Contains(dsn, "?") {
+			sep = "?"
+		}
+		dsn += sep + "timeout=10s&readTimeout=30s&writeTimeout=30s"
+	}
+
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {
 		return nil, err

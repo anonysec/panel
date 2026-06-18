@@ -52,12 +52,12 @@ func New(cfg Config, db *sql.DB) *Bot {
 // Start begins the bot in long-polling mode.
 func (b *Bot) Start() {
 	if !b.cfg.Enabled || b.cfg.Token == "" {
-		log.Println("[bot] disabled or no token configured")
+		log.Printf("[bot] disabled (enabled=%v, token_set=%v, admin_chats=%d)", b.cfg.Enabled, b.cfg.Token != "", len(b.cfg.AdminChats))
 		return
 	}
 
+	log.Printf("[bot] starting long-polling mode (admin_chats=%d)", len(b.cfg.AdminChats))
 	go b.pollLoop()
-	log.Println("[bot] long-polling mode started")
 }
 
 // Stop gracefully stops the bot.
@@ -175,7 +175,7 @@ func (b *Bot) pollLoop() {
 }
 
 func (b *Bot) getUpdates(offset int64) ([]Update, error) {
-	url := fmt.Sprintf("%s/getUpdates?offset=%d&timeout=25&allowed_updates=[\"message\",\"callback_query\"]", b.apiURL, offset)
+	url := fmt.Sprintf("%s/getUpdates?offset=%d&timeout=25&allowed_updates=%s", b.apiURL, offset, "%5B%22message%22%2C%22callback_query%22%5D")
 	resp, err := b.client.Get(url)
 	if err != nil {
 		return nil, err
@@ -183,11 +183,15 @@ func (b *Bot) getUpdates(offset int64) ([]Update, error) {
 	defer resp.Body.Close()
 
 	var result struct {
-		OK     bool     `json:"ok"`
-		Result []Update `json:"result"`
+		OK          bool     `json:"ok"`
+		Result      []Update `json:"result"`
+		Description string   `json:"description"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, err
+	}
+	if !result.OK {
+		return nil, fmt.Errorf("telegram API error: %s", result.Description)
 	}
 	return result.Result, nil
 }
@@ -862,17 +866,18 @@ func (b *Bot) answerCallback(callbackID, text string) {
 func (b *Bot) apiCall(method string, payload map[string]any) {
 	body, err := json.Marshal(payload)
 	if err != nil {
+		log.Printf("[bot] failed to marshal payload for %s: %v", method, err)
 		return
 	}
 	resp, err := b.client.Post(b.apiURL+"/"+method, "application/json", bytes.NewReader(body))
 	if err != nil {
-		log.Printf("[bot] API %s error: %v", method, err)
+		log.Printf("[bot] API %s network error: %v", method, err)
 		return
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode/100 != 2 {
 		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		log.Printf("[bot] API %s failed %s: %s", method, resp.Status, string(respBody))
+		log.Printf("[bot] API %s failed %d: %s", method, resp.StatusCode, string(respBody))
 	}
 }
 

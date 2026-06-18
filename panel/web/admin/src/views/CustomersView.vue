@@ -537,14 +537,20 @@ onMounted(() => {
 :deep(.k-table__checkbox) {
   appearance: none;
   -webkit-appearance: none;
-  width: 14px;
-  height: 14px;
-  border: 2px solid var(--color-border);
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  min-height: 16px;
+  max-width: 16px;
+  max-height: 16px;
+  box-sizing: border-box;
+  border: 1.5px solid var(--color-border);
   border-radius: var(--radius-sm);
   background: var(--color-surface);
   cursor: pointer;
   position: relative;
   flex-shrink: 0;
+  vertical-align: middle;
   transition: all var(--duration-fast);
 }
 
@@ -560,16 +566,13 @@ onMounted(() => {
 :deep(.k-table__checkbox:checked::after) {
   content: '';
   position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  top: 2px;
+  left: 5px;
+  width: 4px;
+  height: 8px;
   border: solid #fff;
   border-width: 0 2px 2px 0;
-  width: 25%;
-  height: 50%;
-  margin: auto;
-  transform: rotate(45deg) translateY(-1px);
+  transform: rotate(45deg);
 }
 
 :deep(.k-table__checkbox:indeterminate) {
@@ -582,7 +585,7 @@ onMounted(() => {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 50%;
+  width: 8px;
   height: 2px;
   background: #fff;
   border-radius: 1px;

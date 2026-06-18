@@ -127,7 +127,6 @@ onMounted(() => {
 <template>
   <div class="page wireguard-peers-view">
     <header class="page-header">
-      <h2>{{ t('wireguard.peers') }}</h2>
       <KButton variant="primary" icon="+" @click="showCreateDialog = true">
         {{ t('wireguard.create_peer') }}
       </KButton>
@@ -219,12 +218,6 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-}
-
-.page-header h2 {
-  margin: 0;
-  font-size: var(--text-lg);
-  font-weight: var(--font-semibold);
 }
 
 .filter-row {

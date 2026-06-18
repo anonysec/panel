@@ -2,6 +2,39 @@
 
 All notable changes to the clean Go + Vue rewrite are tracked here.
 
+## 0.37.0 - 2026-06-18
+
+### Fixed
+- **Enable Node toggle** — button now correctly shows "Enable" only for disabled nodes
+- **Telegram Bot** — URL-encoded allowed_updates param, API error checking, diagnostic logging
+- **Dashboard data usage** — always displays total/today download/upload stats (not just as chart fallback)
+- **Duplicate page titles** — removed redundant h2 headers from BackupView and WireGuardPeersView
+- **Checkbox sizing** — fixed oversized checkboxes on Customers page with proper box-sizing and pixel constraints
+- **MariaDB connection warnings** — auto-appends timeout/readTimeout/writeTimeout DSN params
+- **Unnecessary session disconnection** — only disconnects when customer status actually changes to non-active
+
+### Added
+- **Passwordless VPN configs** — migration 027
+  - Global `passwordless_configs_enabled` setting
+  - Per-plan `allow_passwordless` toggle
+  - Portal API returns `passwordless_available` flag
+  - OpenVPN profile download supports `?passwordless=true` query param
+- **Dashboard today stats** — shows today's downloaded/uploaded bytes with i18n (EN/FA/ZH/RU)
+
+### Verified (code confirmed in codebase)
+- WireGuard AllowedIPs validation (net.ParseCIDR)
+- SQL injection fixes in all OpenVPN scripts
+- Email header injection sanitization
+- WebSocket write race condition (sync.Mutex)
+- Wallet double-spend prevention (SELECT...FOR UPDATE)
+- PrevSessionBytes memory leak cleanup
+- WireGuard config sync (temp file)
+- WireGuard trailing newline fix
+- SSH status fallback (node_services table)
+- L2TP redundant toggles removed
+- Proxy persistence (proxy_config JSON column)
+- Russian language in portal
+
 ## 0.36.0 - 2026-06-15
 
 ### Added

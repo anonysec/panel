@@ -17,6 +17,10 @@ dist/
 .DS_Store
 Thumbs.db
 
+# Secrets / TLS
+*.pem
+.env
+
 # IDE
 .idea/
 .vscode/

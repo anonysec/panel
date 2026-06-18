@@ -110,17 +110,25 @@ function formatDuration(seconds: number): string {
           />
         </div>
         <div v-else class="traffic-fallback">
-          <div class="traffic-live">
-            <div class="traffic-stat">
-              <span class="traffic-stat__label">{{ t('dashboard.total_downloaded') }}</span>
-              <span class="traffic-stat__value">{{ formatBytes(totalDownloaded) }}</span>
-            </div>
-            <div class="traffic-stat">
-              <span class="traffic-stat__label">{{ t('dashboard.total_uploaded') }}</span>
-              <span class="traffic-stat__value">{{ formatBytes(totalUploaded) }}</span>
-            </div>
-          </div>
           <p class="traffic-note">{{ t('dashboard.chart_loading') }}</p>
+        </div>
+        <div class="traffic-live">
+          <div class="traffic-stat">
+            <span class="traffic-stat__label">{{ t('dashboard.total_downloaded') }}</span>
+            <span class="traffic-stat__value">{{ formatBytes(totalDownloaded) }}</span>
+          </div>
+          <div class="traffic-stat">
+            <span class="traffic-stat__label">{{ t('dashboard.total_uploaded') }}</span>
+            <span class="traffic-stat__value">{{ formatBytes(totalUploaded) }}</span>
+          </div>
+          <div class="traffic-stat">
+            <span class="traffic-stat__label">{{ t('dashboard.today_downloaded') }}</span>
+            <span class="traffic-stat__value">{{ formatBytes(realtime.stats.today_input_bytes) }}</span>
+          </div>
+          <div class="traffic-stat">
+            <span class="traffic-stat__label">{{ t('dashboard.today_uploaded') }}</span>
+            <span class="traffic-stat__value">{{ formatBytes(realtime.stats.today_output_bytes) }}</span>
+          </div>
         </div>
       </div>
       <div class="chart-panel chart-panel--donut">
