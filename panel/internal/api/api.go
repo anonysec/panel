@@ -29,6 +29,7 @@ import (
 	"KorisPanel/panel/internal/health"
 	"KorisPanel/panel/internal/notify"
 	"KorisPanel/panel/internal/templates"
+	"KorisPanel/panel/internal/wireguard"
 
 	"github.com/gorilla/websocket"
 )
@@ -6451,10 +6452,25 @@ func (s *Server) upsertNodeVPNConfig(w http.ResponseWriter, r *http.Request, nod
 		return
 	}
 	in.Protocol = strings.ToLower(strings.TrimSpace(in.Protocol))
-	if in.Protocol != "openvpn" && in.Protocol != "l2tp" && in.Protocol != "ikev2" && in.Protocol != "ssh" {
+	if in.Protocol != "openvpn" && in.Protocol != "l2tp" && in.Protocol != "ikev2" && in.Protocol != "ssh" && in.Protocol != "wireguard" {
 		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid_protocol"})
 		return
 	}
+
+	// WireGuard-specific validation: stricter port range and network CIDR
+	if in.Protocol == "wireguard" {
+		if err := wireguard.ValidatePort(in.Port); err != nil {
+			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid_port"})
+			return
+		}
+		if strings.TrimSpace(in.Network) != "" {
+			if err := wireguard.ValidateNetworkCIDR(strings.TrimSpace(in.Network)); err != nil {
+				writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid_network_cidr"})
+				return
+			}
+		}
+	}
+
 	if in.Port <= 0 || in.Port > 65535 {
 		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid_port"})
 		return

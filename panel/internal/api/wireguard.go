@@ -89,9 +89,92 @@ func (s *Server) createWireguardPeer(w http.ResponseWriter, r *http.Request) {
 		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad_json"})
 		return
 	}
-	if in.NodeID <= 0 || in.AllowedIPs == "" {
-		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "node_id_and_allowed_ips_required"})
+	if in.NodeID <= 0 {
+		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "node_id_required"})
 		return
+	}
+
+	// Auto-allocate IP if allowed_ips not provided
+	if in.AllowedIPs == "" {
+		// Fetch the node's WireGuard network CIDR and extra_json for dual-stack
+		var networkCIDR string
+		var cfgExtraJSON []byte
+		err := s.DB.QueryRow(`SELECT network, COALESCE(extra_json,'{}') FROM node_vpn_configs WHERE node_id=? AND protocol='wireguard' LIMIT 1`, in.NodeID).Scan(&networkCIDR, &cfgExtraJSON)
+		if err != nil {
+			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "wireguard_config_not_found_for_node"})
+			return
+		}
+
+		// Check for IPv6 network in extra_json for dual-stack support
+		var networkIPv6 string
+		var cfgExtra map[string]any
+		if err := json.Unmarshal(cfgExtraJSON, &cfgExtra); err == nil {
+			if v, ok := cfgExtra["network_ipv6"].(string); ok && v != "" {
+				networkIPv6 = v
+			}
+		}
+
+		// Query active peer IPs for the node
+		rows, err := s.DB.Query(`SELECT allowed_ips FROM wg_peers WHERE node_id=? AND status='active'`, in.NodeID)
+		if err != nil {
+			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+			return
+		}
+		defer rows.Close()
+
+		var usedIPs []string
+		for rows.Next() {
+			var allowedIPs string
+			if err := rows.Scan(&allowedIPs); err != nil {
+				writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+				return
+			}
+			// Extract the IP without prefix length (e.g., "10.66.66.2/24" -> "10.66.66.2")
+			for _, seg := range strings.Split(allowedIPs, ",") {
+				seg = strings.TrimSpace(seg)
+				if ip, _, err := net.ParseCIDR(seg); err == nil {
+					usedIPs = append(usedIPs, ip.String())
+				} else if parsed := net.ParseIP(seg); parsed != nil {
+					usedIPs = append(usedIPs, parsed.String())
+				}
+			}
+		}
+		if err := rows.Err(); err != nil {
+			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+			return
+		}
+
+		// Allocate next available IPv4 address
+		allocatedIP, err := wireguard.AllocateNextIP(networkCIDR, usedIPs)
+		if err != nil {
+			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "ip_pool_exhausted"})
+			return
+		}
+
+		// Format with prefix length from the network CIDR
+		formattedIP, err := wireguard.FormatWithPrefix(allocatedIP, networkCIDR)
+		if err != nil {
+			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "ip_format_failed"})
+			return
+		}
+
+		// Dual-stack: also allocate from IPv6 pool if configured
+		if networkIPv6 != "" {
+			allocatedIPv6, err := wireguard.AllocateNextIP(networkIPv6, usedIPs)
+			if err != nil {
+				writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "ipv6_pool_exhausted"})
+				return
+			}
+			formattedIPv6, err := wireguard.FormatWithPrefix(allocatedIPv6, networkIPv6)
+			if err != nil {
+				writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "ipv6_format_failed"})
+				return
+			}
+			// Combine IPv4 and IPv6 as comma-separated dual-stack address
+			formattedIP = formattedIP + ", " + formattedIPv6
+		}
+
+		in.AllowedIPs = formattedIP
 	}
 
 	// Validate each comma-separated CIDR segment in AllowedIPs
@@ -228,8 +311,9 @@ func (s *Server) wireguardPeerConfig(w http.ResponseWriter, r *http.Request, id 
 		return
 	}
 
-	// Parse extra_json for server_public_key and DNS
+	// Parse extra_json for server_public_key, DNS, and gaming_optimize
 	var extra map[string]any
+	var gamingOptimize bool
 	if err := json.Unmarshal(extraJSON, &extra); err == nil {
 		if v, ok := extra["server_public_key"].(string); ok {
 			serverPublicKey = v
@@ -239,6 +323,9 @@ func (s *Server) wireguardPeerConfig(w http.ResponseWriter, r *http.Request, id 
 		}
 		if v, ok := extra["dns_2"].(string); ok {
 			dns2 = v
+		}
+		if v, ok := extra["gaming_optimize"].(bool); ok {
+			gamingOptimize = v
 		}
 	}
 
@@ -271,6 +358,7 @@ func (s *Server) wireguardPeerConfig(w http.ResponseWriter, r *http.Request, id 
 		ServerPublicKey: serverPublicKey,
 		PresharedKey:    peer.PresharedKey,
 		Endpoint:        serverEndpoint,
+		GamingOptimize:  gamingOptimize,
 	})
 
 	// Return as downloadable text file

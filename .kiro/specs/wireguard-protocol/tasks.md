@@ -6,15 +6,15 @@ This plan implements the remaining WireGuard VPN protocol features for KorisPane
 
 ## Tasks
 
-- [ ] 1. Backend core modules (validation, IP allocation)
-  - [ ] 1.1 Create IP allocation module `panel/internal/wireguard/ipalloc.go`
+- [x] 1. Backend core modules (validation, IP allocation)
+  - [x] 1.1 Create IP allocation module `panel/internal/wireguard/ipalloc.go`
     - Implement `AllocateNextIP(networkCIDR string, usedIPs []string) (string, error)` that finds the next available IP in the subnet
     - Implement `ParseSubnetRange(networkCIDR string) (first, last net.IP, bits int, err error)` for subnet boundary calculation
     - Skip network address, broadcast address (IPv4), and gateway (.1 / ::1) from allocation
     - Support both IPv4 and IPv6 CIDRs
     - _Requirements: 3.2, 3.5, 11.1, 11.4_
 
-  - [ ] 1.2 Create validation module `panel/internal/wireguard/validation.go`
+  - [x] 1.2 Create validation module `panel/internal/wireguard/validation.go`
     - Implement `ValidatePort(port int) error` — accepts 1024–65535 inclusive
     - Implement `ValidateNetworkCIDR(cidr string) error` — validates via `net.ParseCIDR` for IPv4 and IPv6
     - Implement `ValidateWireGuardKey(key string) error` — 44-char base64 decoding to exactly 32 bytes
@@ -41,20 +41,20 @@ This plan implements the remaining WireGuard VPN protocol features for KorisPane
     - **Validates: Requirements 3.1**
 
 - [ ] 2. Backend API enhancements (IP allocation integration, gaming optimize, config improvements)
-  - [ ] 2.1 Integrate IP allocation into peer creation handler in `panel/internal/api/wireguard.go`
+  - [x] 2.1 Integrate IP allocation into peer creation handler in `panel/internal/api/wireguard.go`
     - Query active peer IPs for the node: `SELECT allowed_ips FROM wg_peers WHERE node_id=? AND status='active'`
     - Fetch node's WireGuard network CIDR from `node_vpn_configs.extra_json`
     - Call `wireguard.AllocateNextIP(networkCIDR, usedIPs)` to auto-assign IP when `allowed_ips` not provided
     - Return `ip_pool_exhausted` error when no IPs available
     - _Requirements: 3.2, 3.5, 3.6_
 
-  - [ ] 2.2 Add port and CIDR validation to WireGuard config endpoints
+  - [x] 2.2 Add port and CIDR validation to WireGuard config endpoints
     - Validate port (1024–65535) and network CIDR before inserting/updating `node_vpn_configs`
     - Validate on the existing `nodeVPNConfig` handler when `protocol=wireguard`
     - Return structured 400 errors (`invalid_port`, `invalid_network_cidr`)
     - _Requirements: 1.6, 1.7, 2.4_
 
-  - [ ] 2.3 Add gaming optimize support to config generation in `panel/internal/wireguard/clientconfig.go`
+  - [x] 2.3 Add gaming optimize support to config generation in `panel/internal/wireguard/clientconfig.go`
     - Extend `ClientConfig` struct with `GamingOptimize bool` and `MTU int` fields
     - When `GamingOptimize=true`: add `MTU = 1280` to [Interface], set `PersistentKeepalive = 15`
     - When `GamingOptimize=false`: keep default behavior (no MTU line, `PersistentKeepalive = 25`)
@@ -80,7 +80,7 @@ This plan implements the remaining WireGuard VPN protocol features for KorisPane
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 4. Node agent task handlers (setup, update_config, gaming optimize)
-  - [ ] 4.1 Implement `wireguard.setup` task handler in `node/cmd/node/main.go`
+  - [x] 4.1 Implement `wireguard.setup` task handler in `node/cmd/node/main.go`
     - Accept payload: `{port, network, dns_1, dns_2, mtu}`
     - Generate server key pair using `wg genkey | wg pubkey`
     - Write `/etc/wireguard/wg0.conf` with [Interface] section (PrivateKey, Address=network.1/cidr, ListenPort, DNS)

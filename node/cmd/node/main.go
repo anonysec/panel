@@ -34,6 +34,17 @@ type DiagnosticsReport struct {
 	MemAllocBytes int64  `json:"mem_alloc_bytes"`
 }
 
+// WireGuardPeerStat holds per-peer statistics from `wg show wg0 dump`.
+type WireGuardPeerStat struct {
+	PublicKey        string `json:"public_key"`
+	Endpoint         string `json:"endpoint"`
+	AllowedIPs       string `json:"allowed_ips"`
+	LatestHandshake  int64  `json:"latest_handshake"`
+	RxBytes          int64  `json:"rx_bytes"`
+	TxBytes          int64  `json:"tx_bytes"`
+	Active           bool   `json:"active"`
+}
+
 type Push struct {
 	Token         string             `json:"token"`
 	Type          string             `json:"type"`
@@ -53,10 +64,12 @@ type Push struct {
 	OpenVPNStatus string             `json:"openvpn_status"`
 	L2TPStatus    string             `json:"l2tp_status"`
 	IKEv2Status   string             `json:"ikev2_status"`
-	WireGuardStatus string           `json:"wireguard_status"`
-	Services         map[string]string  `json:"services"`
-	Diagnostics      *DiagnosticsReport `json:"diagnostics,omitempty"`
-	PerUserBandwidth []UserBandwidth    `json:"per_user_bandwidth,omitempty"`
+	WireGuardStatus    string              `json:"wireguard_status"`
+	Services           map[string]string   `json:"services"`
+	Diagnostics        *DiagnosticsReport  `json:"diagnostics,omitempty"`
+	PerUserBandwidth   []UserBandwidth     `json:"per_user_bandwidth,omitempty"`
+	WireGuardPeers       []WireGuardPeerStat `json:"wireguard_peers,omitempty"`
+	WireGuardActivePeers int                 `json:"wireguard_active_peers"`
 }
 
 type Task struct {
@@ -250,6 +263,11 @@ func main() {
 		// Collect per-user bandwidth from tc
 		bw := collector.Collect("tun0")
 		push.PerUserBandwidth = bw
+
+		// Collect WireGuard peer statistics
+		wgPeers, wgActive := collectWireGuardPeers()
+		push.WireGuardPeers = wgPeers
+		push.WireGuardActivePeers = wgActive
 
 		ok, errMsg := postJSON(client, panel+"/api/node/push", token, push, log)
 		if ok {
@@ -511,6 +529,8 @@ func executeTask(task Task, cfg *config.Config, envFile string, log *logger.Logg
 			changesList[k] = map[string]string{"old": v[0], "new": v[1]}
 		}
 		return "succeeded", map[string]any{"changes": changesList}, ""
+	case "wireguard.setup":
+		return executeWireGuardSetup(payload)
 	case "wireguard.add_peer":
 		pubKey := fmt.Sprint(payload["public_key"])
 		psk := fmt.Sprint(payload["preshared_key"])
@@ -642,6 +662,8 @@ func executeTask(task Task, cfg *config.Config, envFile string, log *logger.Logg
 			}
 		}
 		return "succeeded", map[string]any{"cert_path": cleanPath, "validation": validationResult}, ""
+	case "wireguard.update_config":
+		return executeWireGuardUpdateConfig(payload)
 	case "wireguard.sync_config":
 		// Use wg-quick strip to produce a config without wg-quick directives (Address, DNS, etc.)
 		stripCmd := exec.Command("wg-quick", "strip", "wg0")
@@ -877,6 +899,331 @@ func executeBackupRestoreConfigs(payload map[string]any, log *logger.Logger) (st
 	}
 
 	return "succeeded", result, ""
+}
+
+// executeWireGuardSetup handles the "wireguard.setup" task: generates a server key pair,
+// writes /etc/wireguard/wg0.conf, and starts the WireGuard service.
+func executeWireGuardSetup(payload map[string]any) (string, map[string]any, string) {
+	// Extract payload fields with defaults
+	port := 51820
+	if p, ok := payload["port"].(float64); ok && p > 0 {
+		port = int(p)
+	}
+	network := "10.66.66.0/24"
+	if n, ok := payload["network"].(string); ok && n != "" {
+		network = n
+	}
+	dns1 := "1.1.1.1"
+	if d, ok := payload["dns_1"].(string); ok && d != "" {
+		dns1 = d
+	}
+	dns2 := "8.8.8.8"
+	if d, ok := payload["dns_2"].(string); ok && d != "" {
+		dns2 = d
+	}
+	mtu := 1420
+	if m, ok := payload["mtu"].(float64); ok && m > 0 {
+		mtu = int(m)
+	}
+
+	// Parse network CIDR to derive server address (first host = .1)
+	ip, ipNet, err := net.ParseCIDR(network)
+	if err != nil {
+		return "failed", map[string]any{}, fmt.Sprintf("invalid network CIDR: %s", err.Error())
+	}
+	_ = ip
+	// Compute gateway address: network base + 1
+	serverIP := make(net.IP, len(ipNet.IP))
+	copy(serverIP, ipNet.IP)
+	// Increment last byte for gateway
+	if len(serverIP) == 4 {
+		serverIP[3] = serverIP[3] + 1
+	} else if len(serverIP) == 16 {
+		serverIP[15] = serverIP[15] + 1
+	}
+	// Get prefix length
+	ones, _ := ipNet.Mask.Size()
+	serverAddress := fmt.Sprintf("%s/%d", serverIP.String(), ones)
+
+	// Generate server private key
+	genKeyCmd := exec.Command("wg", "genkey")
+	privateKeyBytes, err := genKeyCmd.Output()
+	if err != nil {
+		return "failed", map[string]any{}, fmt.Sprintf("wg genkey failed: %s", err.Error())
+	}
+	privateKey := strings.TrimSpace(string(privateKeyBytes))
+
+	// Derive public key from private key
+	pubKeyCmd := exec.Command("wg", "pubkey")
+	pubKeyCmd.Stdin = strings.NewReader(privateKey)
+	publicKeyBytes, err := pubKeyCmd.Output()
+	if err != nil {
+		return "failed", map[string]any{}, fmt.Sprintf("wg pubkey failed: %s", err.Error())
+	}
+	publicKey := strings.TrimSpace(string(publicKeyBytes))
+
+	// Build wg0.conf content
+	dnsLine := dns1
+	if dns2 != "" {
+		dnsLine = dns1 + ", " + dns2
+	}
+	confContent := fmt.Sprintf("[Interface]\nPrivateKey = %s\nAddress = %s\nListenPort = %d\nDNS = %s\nMTU = %d\n",
+		privateKey, serverAddress, port, dnsLine, mtu)
+
+	// Ensure /etc/wireguard directory exists
+	if err := os.MkdirAll("/etc/wireguard", 0700); err != nil {
+		return "failed", map[string]any{}, fmt.Sprintf("create /etc/wireguard: %s", err.Error())
+	}
+
+	// Write wg0.conf
+	if err := os.WriteFile("/etc/wireguard/wg0.conf", []byte(confContent), 0600); err != nil {
+		return "failed", map[string]any{}, fmt.Sprintf("write wg0.conf: %s", err.Error())
+	}
+
+	// Enable wg-quick@wg0 service
+	enableCmd := exec.Command("systemctl", "enable", "wg-quick@wg0")
+	if out, err := enableCmd.CombinedOutput(); err != nil {
+		return "failed", map[string]any{"output": string(out)}, fmt.Sprintf("systemctl enable wg-quick@wg0: %s", err.Error())
+	}
+
+	// Start WireGuard interface
+	upCmd := exec.Command("wg-quick", "up", "wg0")
+	if out, err := upCmd.CombinedOutput(); err != nil {
+		return "failed", map[string]any{"output": string(out)}, fmt.Sprintf("wg-quick up wg0: %s", err.Error())
+	}
+
+	return "succeeded", map[string]any{"server_public_key": publicKey}, ""
+}
+
+// executeWireGuardUpdateConfig handles the "wireguard.update_config" task: rewrites the
+// [Interface] section of /etc/wireguard/wg0.conf preserving [Peer] blocks, applies the
+// new config via wg syncconf, and handles gaming optimize routing rules.
+func executeWireGuardUpdateConfig(payload map[string]any) (string, map[string]any, string) {
+	// Extract payload fields with defaults
+	port := 51820
+	if p, ok := payload["port"].(float64); ok && p > 0 {
+		port = int(p)
+	}
+	network := "10.66.66.0/24"
+	if n, ok := payload["network"].(string); ok && n != "" {
+		network = n
+	}
+	dns1 := "1.1.1.1"
+	if d, ok := payload["dns_1"].(string); ok && d != "" {
+		dns1 = d
+	}
+	dns2 := "8.8.8.8"
+	if d, ok := payload["dns_2"].(string); ok && d != "" {
+		dns2 = d
+	}
+	mtu := 1420
+	if m, ok := payload["mtu"].(float64); ok && m > 0 {
+		mtu = int(m)
+	}
+	gamingOptimize := false
+	if g, ok := payload["gaming_optimize"].(bool); ok {
+		gamingOptimize = g
+	}
+
+	// Parse network CIDR to derive server address (first host = .1)
+	_, ipNet, err := net.ParseCIDR(network)
+	if err != nil {
+		return "failed", map[string]any{}, fmt.Sprintf("invalid network CIDR: %s", err.Error())
+	}
+	serverIP := make(net.IP, len(ipNet.IP))
+	copy(serverIP, ipNet.IP)
+	if len(serverIP) == 4 {
+		serverIP[3] = serverIP[3] + 1
+	} else if len(serverIP) == 16 {
+		serverIP[15] = serverIP[15] + 1
+	}
+	ones, _ := ipNet.Mask.Size()
+	serverAddress := fmt.Sprintf("%s/%d", serverIP.String(), ones)
+
+	// Read existing config to extract [Peer] blocks
+	confFile := "/etc/wireguard/wg0.conf"
+	existingData, err := os.ReadFile(confFile)
+	if err != nil {
+		return "failed", map[string]any{}, fmt.Sprintf("read wg0.conf: %s", err.Error())
+	}
+
+	// Extract the private key from existing config
+	privateKey := extractPrivateKey(string(existingData))
+	if privateKey == "" {
+		return "failed", map[string]any{}, "could not find PrivateKey in existing wg0.conf"
+	}
+
+	// Extract all [Peer] blocks from existing config
+	peerBlocks := extractPeerBlocks(string(existingData))
+
+	// Override MTU for gaming optimize
+	if gamingOptimize {
+		mtu = 1280
+	}
+
+	// Build new [Interface] section
+	dnsLine := dns1
+	if dns2 != "" {
+		dnsLine = dns1 + ", " + dns2
+	}
+	var confBuilder strings.Builder
+	confBuilder.WriteString("[Interface]\n")
+	confBuilder.WriteString(fmt.Sprintf("PrivateKey = %s\n", privateKey))
+	confBuilder.WriteString(fmt.Sprintf("Address = %s\n", serverAddress))
+	confBuilder.WriteString(fmt.Sprintf("ListenPort = %d\n", port))
+	confBuilder.WriteString(fmt.Sprintf("DNS = %s\n", dnsLine))
+	confBuilder.WriteString(fmt.Sprintf("MTU = %d\n", mtu))
+
+	// Append [Peer] blocks
+	for _, peer := range peerBlocks {
+		confBuilder.WriteString("\n")
+		confBuilder.WriteString(peer)
+	}
+
+	// Write the updated config
+	if err := os.WriteFile(confFile, []byte(confBuilder.String()), 0600); err != nil {
+		return "failed", map[string]any{}, fmt.Sprintf("write wg0.conf: %s", err.Error())
+	}
+
+	// Apply config using wg syncconf (strip wg-quick directives first)
+	stripCmd := exec.Command("wg-quick", "strip", "wg0")
+	strippedConf, err := stripCmd.Output()
+	if err != nil {
+		return "failed", map[string]any{}, fmt.Sprintf("wg-quick strip: %s", err.Error())
+	}
+	tmpFile, err := os.CreateTemp("", "wg-update-*.conf")
+	if err != nil {
+		return "failed", map[string]any{}, fmt.Sprintf("create temp file: %s", err.Error())
+	}
+	tmpPath := tmpFile.Name()
+	defer os.Remove(tmpPath)
+	if _, err := tmpFile.Write(strippedConf); err != nil {
+		tmpFile.Close()
+		return "failed", map[string]any{}, fmt.Sprintf("write temp file: %s", err.Error())
+	}
+	tmpFile.Close()
+	syncCmd := exec.Command("wg", "syncconf", "wg0", tmpPath)
+	if out, err := syncCmd.CombinedOutput(); err != nil {
+		return "failed", map[string]any{"output": string(out)}, fmt.Sprintf("wg syncconf: %s", err.Error())
+	}
+
+	// Apply gaming optimize rules
+	if gamingOptimize {
+		if err := applyGamingOptimize(); err != nil {
+			return "failed", map[string]any{}, fmt.Sprintf("apply gaming optimize: %s", err.Error())
+		}
+	} else {
+		if err := removeGamingOptimize(mtu); err != nil {
+			return "failed", map[string]any{}, fmt.Sprintf("remove gaming optimize: %s", err.Error())
+		}
+	}
+
+	return "succeeded", map[string]any{"message": "config updated", "gaming_optimize": gamingOptimize}, ""
+}
+
+// extractPrivateKey reads the PrivateKey value from a WireGuard config string.
+func extractPrivateKey(config string) string {
+	for _, line := range strings.Split(config, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "PrivateKey") {
+			parts := strings.SplitN(trimmed, "=", 2)
+			if len(parts) == 2 {
+				return strings.TrimSpace(parts[1])
+			}
+		}
+	}
+	return ""
+}
+
+// extractPeerBlocks extracts all [Peer] sections from a WireGuard config string.
+// Each returned block includes the [Peer] header and all its key-value lines, ending with a newline.
+func extractPeerBlocks(config string) []string {
+	lines := strings.Split(config, "\n")
+	var peers []string
+	var current []string
+	inPeer := false
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.EqualFold(trimmed, "[Peer]") {
+			if inPeer && len(current) > 0 {
+				peers = append(peers, strings.Join(current, "\n")+"\n")
+			}
+			inPeer = true
+			current = []string{line}
+			continue
+		}
+		if strings.HasPrefix(trimmed, "[") && inPeer {
+			// New section that's not [Peer] — flush current peer
+			if len(current) > 0 {
+				peers = append(peers, strings.Join(current, "\n")+"\n")
+			}
+			inPeer = false
+			current = nil
+			continue
+		}
+		if inPeer {
+			current = append(current, line)
+		}
+	}
+	// Flush last peer block
+	if inPeer && len(current) > 0 {
+		// Trim trailing empty lines from the last peer block
+		for len(current) > 0 && strings.TrimSpace(current[len(current)-1]) == "" {
+			current = current[:len(current)-1]
+		}
+		if len(current) > 0 {
+			peers = append(peers, strings.Join(current, "\n")+"\n")
+		}
+	}
+	return peers
+}
+
+// applyGamingOptimize applies fwmark-based priority routing and reduced MTU for gaming.
+func applyGamingOptimize() error {
+	// Set fwmark on wg0
+	cmd := exec.Command("wg", "set", "wg0", "fwmark", "51820")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("wg set fwmark: %s (%s)", err.Error(), string(out))
+	}
+
+	// Add ip rule for priority routing (ignore error if already exists)
+	cmd = exec.Command("ip", "rule", "add", "not", "fwmark", "51820", "table", "51820", "priority", "100")
+	cmd.CombinedOutput() // Ignore error if rule already exists
+
+	// Add default route in table 51820 (ignore error if already exists)
+	cmd = exec.Command("ip", "route", "add", "default", "dev", "wg0", "table", "51820")
+	cmd.CombinedOutput() // Ignore error if route already exists
+
+	// Set interface MTU to 1280
+	cmd = exec.Command("ip", "link", "set", "wg0", "mtu", "1280")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("set mtu 1280: %s (%s)", err.Error(), string(out))
+	}
+
+	return nil
+}
+
+// removeGamingOptimize removes fwmark routing rules and reverts MTU.
+func removeGamingOptimize(mtu int) error {
+	// Remove ip rule (ignore error if not present)
+	cmd := exec.Command("ip", "rule", "del", "not", "fwmark", "51820", "table", "51820")
+	cmd.CombinedOutput()
+
+	// Remove route (ignore error if not present)
+	cmd = exec.Command("ip", "route", "del", "default", "dev", "wg0", "table", "51820")
+	cmd.CombinedOutput()
+
+	// Revert MTU to specified value (or default 1420)
+	if mtu <= 0 {
+		mtu = 1420
+	}
+	cmd = exec.Command("ip", "link", "set", "wg0", "mtu", strconv.Itoa(mtu))
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("set mtu %d: %s (%s)", mtu, err.Error(), string(out))
+	}
+
+	return nil
 }
 
 // removePeerFromConfig removes a [Peer] block with the given public key from a WireGuard config.
@@ -1414,4 +1761,62 @@ func netBytes() (rx, tx int64) {
 func round2(v float64) float64 {
 	n, _ := strconv.ParseFloat(fmt.Sprintf("%.2f", v), 64)
 	return n
+}
+
+// collectWireGuardPeers runs `wg show wg0 dump` and parses peer statistics.
+// Returns the peer list and a count of active peers (handshake within 3 minutes).
+// If wg0 doesn't exist or the command fails, returns nil and 0.
+func collectWireGuardPeers() ([]WireGuardPeerStat, int) {
+	cmd := exec.Command("wg", "show", "wg0", "dump")
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, 0
+	}
+	return parseWgDump(string(out), time.Now().Unix())
+}
+
+// parseWgDump parses the tab-separated output of `wg show wg0 dump`.
+// The first line is the interface line (private_key, listen_port, fwmark); subsequent lines are peers.
+// Peer line format: public_key \t preshared_key \t endpoint \t allowed_ips \t latest_handshake \t transfer_rx \t transfer_tx \t persistent_keepalive
+func parseWgDump(output string, nowUnix int64) ([]WireGuardPeerStat, int) {
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	if len(lines) < 2 {
+		return nil, 0
+	}
+
+	var peers []WireGuardPeerStat
+	activePeers := 0
+
+	// Skip first line (interface info), parse peer lines
+	for _, line := range lines[1:] {
+		fields := strings.Split(line, "\t")
+		if len(fields) < 7 {
+			continue
+		}
+		pubKey := fields[0]
+		endpoint := fields[2]
+		allowedIPs := fields[3]
+		handshake, _ := strconv.ParseInt(fields[4], 10, 64)
+		rxBytes, _ := strconv.ParseInt(fields[5], 10, 64)
+		txBytes, _ := strconv.ParseInt(fields[6], 10, 64)
+
+		// Active = handshake within last 3 minutes (180 seconds)
+		active := handshake > 0 && (nowUnix-handshake) < 180
+
+		peers = append(peers, WireGuardPeerStat{
+			PublicKey:        pubKey,
+			Endpoint:         endpoint,
+			AllowedIPs:       allowedIPs,
+			LatestHandshake:  handshake,
+			RxBytes:          rxBytes,
+			TxBytes:          txBytes,
+			Active:           active,
+		})
+
+		if active {
+			activePeers++
+		}
+	}
+
+	return peers, activePeers
 }
