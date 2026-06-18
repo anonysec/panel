@@ -7,7 +7,7 @@ import (
 	"log"
 	"time"
 
-	"koris-next/panel/internal/notify"
+	"KorisPanel/panel/internal/notify"
 )
 
 // DiagnosticsEngine orchestrates health checks, computes scores,

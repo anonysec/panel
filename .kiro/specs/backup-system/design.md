@@ -83,7 +83,7 @@ type Service struct {
 
 // Config holds backup service configuration loaded from panel_settings.
 type Config struct {
-    StorageDir     string // default: /opt/koris-next/backups/
+    StorageDir     string // default: /opt/KorisPanel/backups/
     Schedule       string // "daily:02", "weekly:sun:02", "disabled"
     RetentionCount int    // default: 7
     DBUser         string
@@ -282,7 +282,7 @@ backup-2024-06-15-020000.tar.gz
 | Scenario | Response | Recovery |
 |----------|----------|----------|
 | mysqldump failure (non-zero exit) | Backup status "failed", error_message = stderr | Admin checks DB credentials/connectivity |
-| Storage directory not writable | Backup status "failed", error = "storage_dir_not_writable" | Admin fixes permissions on /opt/koris-next/backups/ |
+| Storage directory not writable | Backup status "failed", error = "storage_dir_not_writable" | Admin fixes permissions on /opt/KorisPanel/backups/ |
 | Node config collection timeout (60s) | Node marked "skipped" in manifest, backup continues | Retry backup later or fix node connectivity |
 | Disk space insufficient | Backup status "failed", error from OS write | Admin frees disk space or adjusts retention |
 | Concurrent backup attempt | 409 Conflict `{"error": "backup_in_progress"}` | Wait for current backup to complete |

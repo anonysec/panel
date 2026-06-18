@@ -4,7 +4,7 @@ set -euo pipefail
 export GOTOOLCHAIN=local
 
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-INSTALL_DIR="/opt/koris-next/panel"
+INSTALL_DIR="/opt/KorisPanel/panel"
 
 cd "$PROJECT_DIR"
 

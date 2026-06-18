@@ -15,15 +15,15 @@ import (
 	"strings"
 	"time"
 
-	"koris-next/panel/internal/api"
-	"koris-next/panel/internal/backup"
-	"koris-next/panel/internal/bot"
-	"koris-next/panel/internal/certrotation"
-	"koris-next/panel/internal/config"
-	"koris-next/panel/internal/db"
-	"koris-next/panel/internal/notify"
-	"koris-next/panel/internal/ratelimit"
-	"koris-next/panel/internal/sessions"
+	"KorisPanel/panel/internal/api"
+	"KorisPanel/panel/internal/backup"
+	"KorisPanel/panel/internal/bot"
+	"KorisPanel/panel/internal/certrotation"
+	"KorisPanel/panel/internal/config"
+	"KorisPanel/panel/internal/db"
+	"KorisPanel/panel/internal/notify"
+	"KorisPanel/panel/internal/ratelimit"
+	"KorisPanel/panel/internal/sessions"
 )
 
 func dbNameFromDSN(dsn string) string {

@@ -19,9 +19,9 @@ import (
 	"syscall"
 	"time"
 
-	"koris-next/node/internal/config"
-	"koris-next/node/internal/logger"
-	"koris-next/node/internal/updater"
+	"KorisPanel/node/internal/config"
+	"KorisPanel/node/internal/logger"
+	"KorisPanel/node/internal/updater"
 )
 
 const agentVersion = "0.36.0"

@@ -6,7 +6,7 @@ inclusion: always
 
 ## Backend (Go)
 
-- **Go 1.22** | Module: `koris-next`
+- **Go 1.22** | Module: `KorisPanel`
 - **HTTP**: `net/http` with `http.ServeMux` — no external router
 - **Database**: MySQL via `github.com/go-sql-driver/mysql`
 - **WebSocket**: `github.com/gorilla/websocket`

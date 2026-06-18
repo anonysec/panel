@@ -1,4 +1,4 @@
-module koris-next
+module KorisPanel
 
 go 1.22
 

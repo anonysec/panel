@@ -23,12 +23,12 @@ import (
 	"sync"
 	"time"
 
-	"koris-next/panel/internal/auth"
-	"koris-next/panel/internal/backup"
-	"koris-next/panel/internal/config"
-	"koris-next/panel/internal/health"
-	"koris-next/panel/internal/notify"
-	"koris-next/panel/internal/templates"
+	"KorisPanel/panel/internal/auth"
+	"KorisPanel/panel/internal/backup"
+	"KorisPanel/panel/internal/config"
+	"KorisPanel/panel/internal/health"
+	"KorisPanel/panel/internal/notify"
+	"KorisPanel/panel/internal/templates"
 
 	"github.com/gorilla/websocket"
 )

@@ -34,7 +34,7 @@ func Load() Config {
 		if !devMode {
 			log.Fatalf("FATAL: PANEL_SESSION_SECRET is required in production. Set PANEL_DEV_MODE=true for development.")
 		}
-		sessionSecret = "koris-next-dev-session-secret"
+		sessionSecret = "KorisPanel-dev-session-secret"
 		log.Println("[SECURITY WARNING] PANEL_SESSION_SECRET is not set. Using insecure default. Set PANEL_SESSION_SECRET in production!")
 	}
 
@@ -98,8 +98,8 @@ func Load() Config {
 		SessionSecret:  sessionSecret,
 		Version:        getenv("PANEL_VERSION", "next-dev"),
 		PublicBase:     getenv("PANEL_PUBLIC_BASE", "/dashboard"),
-		AdminWebDir:    getenv("PANEL_ADMIN_WEB_DIR", "/opt/koris-next/panel/web/admin/www"),
-		PortalWebDir:   getenv("PANEL_PORTAL_WEB_DIR", "/opt/koris-next/panel/web/portal/www"),
+		AdminWebDir:    getenv("PANEL_ADMIN_WEB_DIR", "/opt/KorisPanel/panel/web/admin/www"),
+		PortalWebDir:   getenv("PANEL_PORTAL_WEB_DIR", "/opt/KorisPanel/panel/web/portal/www"),
 		TemplateDir:    getenv("PANEL_TEMPLATE_DIR", "/etc/koris/templates/"),
 		SecureCookies:  secureCookies,
 		TrustedProxies: trustedProxies,

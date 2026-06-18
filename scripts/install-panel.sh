@@ -85,21 +85,21 @@ go mod tidy
 go build -o /usr/local/bin/panel ./panel/cmd/panel
 chmod +x /usr/local/bin/panel
 
-mkdir -p /opt/koris-next/panel/web
-copy_dir "$ROOT/panel/migrations" /opt/koris-next/panel/migrations
-copy_dir "$ROOT/panel/web/admin/www" /opt/koris-next/panel/web/admin/www
-copy_dir "$ROOT/panel/web/portal/www" /opt/koris-next/panel/web/portal/www
+mkdir -p /opt/KorisPanel/panel/web
+copy_dir "$ROOT/panel/migrations" /opt/KorisPanel/panel/migrations
+copy_dir "$ROOT/panel/web/admin/www" /opt/KorisPanel/panel/web/admin/www
+copy_dir "$ROOT/panel/web/portal/www" /opt/KorisPanel/panel/web/portal/www
 
 mkdir -p /etc/panel
 cat > /etc/panel/panel.env <<ENV
 PANEL_ADDR='${PANEL_ADDR}'
 PANEL_DB_DSN='${DB_USER}:${DB_PASS}@tcp(127.0.0.1:3306)/${DB_NAME}?parseTime=true&multiStatements=true&charset=utf8mb4,utf8'
-PANEL_MIGRATIONS='/opt/koris-next/panel/migrations'
+PANEL_MIGRATIONS='/opt/KorisPanel/panel/migrations'
 PANEL_SETUP_KEY='${SETUP_KEY}'
 PANEL_SESSION_SECRET='${SESSION_SECRET}'
 PANEL_PUBLIC_BASE='/dashboard'
-PANEL_ADMIN_WEB_DIR='/opt/koris-next/panel/web/admin/www'
-PANEL_PORTAL_WEB_DIR='/opt/koris-next/panel/web/portal/www'
+PANEL_ADMIN_WEB_DIR='/opt/KorisPanel/panel/web/admin/www'
+PANEL_PORTAL_WEB_DIR='/opt/KorisPanel/panel/web/portal/www'
 PANEL_VERSION='${VERSION}'
 ENV
 chmod 600 /etc/panel/panel.env

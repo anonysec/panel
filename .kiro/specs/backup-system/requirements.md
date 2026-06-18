@@ -17,7 +17,7 @@ Upgrade the KorisPanel backup system from the current basic JSON export to a com
 - **Retention_Policy**: A configurable rule that determines how many backups to keep and when to delete older backups
 - **Backup_Schedule**: A cron-like configuration defining when automatic backups are created (daily, weekly, or custom)
 - **Admin_UI**: The Vue 3 admin dashboard SPA for managing all panel resources
-- **Storage_Directory**: The local filesystem path where backups are stored (/opt/koris-next/backups/)
+- **Storage_Directory**: The local filesystem path where backups are stored (/opt/KorisPanel/backups/)
 - **Checksum**: A SHA-256 hash computed over the Backup_Archive for integrity verification
 
 ## Requirements
@@ -56,7 +56,7 @@ Upgrade the KorisPanel backup system from the current basic JSON export to a com
 1. THE Backup_Service SHALL package the SQL_Dump and collected node configs into a single .tar.gz Backup_Archive
 2. THE Backup_Service SHALL name the archive file using the format "backup-{YYYY-MM-DD-HHmmss}.tar.gz"
 3. THE Backup_Archive SHALL contain the following structure: dump.sql at the root, configs/ directory with node subdirectories, and manifest.json at the root
-4. THE Backup_Service SHALL store the completed Backup_Archive in the Storage_Directory (/opt/koris-next/backups/)
+4. THE Backup_Service SHALL store the completed Backup_Archive in the Storage_Directory (/opt/KorisPanel/backups/)
 5. THE Backup_Service SHALL create the Storage_Directory with permissions 0750 if the directory does not exist
 
 ### Requirement 4: Backup Metadata and Integrity Verification

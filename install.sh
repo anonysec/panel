@@ -21,7 +21,7 @@ OS=$ID
 
 REPO="anonysec/panel"
 BRANCH="main"
-INSTALL_DIR="/opt/koris-next"
+INSTALL_DIR="/opt/KorisPanel"
 CONFIG_DIR="/etc/panel"
 
 # Banner
@@ -135,10 +135,10 @@ else
 fi
 
 # Install files
-mkdir -p /opt/koris-next/panel/web/admin /opt/koris-next/panel/web/portal
-cp -a "$INSTALL_DIR/panel/migrations" /opt/koris-next/panel/migrations 2>/dev/null || true
-cp -a "$INSTALL_DIR/panel/web/admin/www" /opt/koris-next/panel/web/admin/www 2>/dev/null || true
-cp -a "$INSTALL_DIR/panel/web/portal/www" /opt/koris-next/panel/web/portal/www 2>/dev/null || true
+mkdir -p /opt/KorisPanel/panel/web/admin /opt/KorisPanel/panel/web/portal
+cp -a "$INSTALL_DIR/panel/migrations" /opt/KorisPanel/panel/migrations 2>/dev/null || true
+cp -a "$INSTALL_DIR/panel/web/admin/www" /opt/KorisPanel/panel/web/admin/www 2>/dev/null || true
+cp -a "$INSTALL_DIR/panel/web/portal/www" /opt/KorisPanel/panel/web/portal/www 2>/dev/null || true
 
 # VPN hook scripts
 if [[ -d "$INSTALL_DIR/scripts/openvpn" ]]; then
@@ -154,13 +154,13 @@ mkdir -p "$CONFIG_DIR"
 cat > "${CONFIG_DIR}/panel.env" <<ENV
 PANEL_ADDR='${PANEL_ADDR}'
 PANEL_DB_DSN='${DB_USER}:${DB_PASS}@tcp(127.0.0.1:3306)/${DB_NAME}?parseTime=true&multiStatements=true&charset=utf8mb4,utf8'
-PANEL_MIGRATIONS='/opt/koris-next/panel/migrations'
+PANEL_MIGRATIONS='/opt/KorisPanel/panel/migrations'
 PANEL_SETUP_KEY='${SETUP_KEY}'
 PANEL_SESSION_SECRET='${SESSION_SECRET}'
 PANEL_SECRET='${PANEL_SECRET}'
 PANEL_PUBLIC_BASE='/dashboard'
-PANEL_ADMIN_WEB_DIR='/opt/koris-next/panel/web/admin/www'
-PANEL_PORTAL_WEB_DIR='/opt/koris-next/panel/web/portal/www'
+PANEL_ADMIN_WEB_DIR='/opt/KorisPanel/panel/web/admin/www'
+PANEL_PORTAL_WEB_DIR='/opt/KorisPanel/panel/web/portal/www'
 PANEL_VERSION='${VERSION}'
 ENV
 chmod 600 "${CONFIG_DIR}/panel.env"

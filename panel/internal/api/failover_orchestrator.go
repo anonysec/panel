@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"time"
 
-	"koris-next/panel/internal/notify"
+	"KorisPanel/panel/internal/notify"
 )
 
 // FailoverOrchestrator coordinates a failover event through its full lifecycle:

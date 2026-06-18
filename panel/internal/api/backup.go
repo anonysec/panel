@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"koris-next/panel/internal/backup"
+	"KorisPanel/panel/internal/backup"
 )
 
 // backupList handles GET /api/admin/backups — lists all backup records.

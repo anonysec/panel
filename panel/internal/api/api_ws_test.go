@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"testing"
 
-	"koris-next/panel/internal/config"
+	"KorisPanel/panel/internal/config"
 )
 
 func TestCheckWSOrigin(t *testing.T) {

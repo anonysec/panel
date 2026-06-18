@@ -62,7 +62,7 @@ func New(db *sql.DB, cfg Config) *Service {
 // and extracts DB credentials from the PANEL_DB_DSN environment variable.
 func LoadConfigFromDB(db *sql.DB) Config {
 	cfg := Config{
-		StorageDir:     "/opt/koris-next/backups/",
+		StorageDir:     "/opt/KorisPanel/backups/",
 		Schedule:       "daily:02",
 		RetentionCount: 7,
 	}

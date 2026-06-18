@@ -25,7 +25,7 @@ This plan replaces the current minimal SQL dump goroutine in panel/cmd/panel/mai
 
   - [ ] 1.3 Create backup naming and storage utilities `panel/internal/backup/storage.go`
     - Implement generateFilename(time.Time) returning "backup-{YYYY-MM-DD-HHmmss}.tar.gz"
-    - Implement ensureStorageDir(path) to create /opt/koris-next/backups/ with 0750 permissions
+    - Implement ensureStorageDir(path) to create /opt/KorisPanel/backups/ with 0750 permissions
     - Implement listArchiveFiles(dir) to scan storage directory for existing .tar.gz files
     - _Requirements: 3.2, 3.4, 3.5_
 
@@ -244,7 +244,7 @@ This plan replaces the current minimal SQL dump goroutine in panel/cmd/panel/mai
 
 - Tasks marked with `*` are property-based tests that can be skipped for faster MVP delivery
 - The existing `mysqlCredsFromDSN` function in main.go is reused by the backup service
-- Storage path /opt/koris-next/backups/ replaces the old /var/backups/koris-next/ path
+- Storage path /opt/KorisPanel/backups/ replaces the old /var/backups/KorisPanel/ path
 - The backup service uses a sync.Mutex for concurrent prevention (simple, appropriate for single-process deployment)
 - Node config collection has a 60-second timeout per node; nodes that timeout are still listed in the manifest as "skipped"
 - The pre-restore safety backup ensures admins can always roll back a failed restore

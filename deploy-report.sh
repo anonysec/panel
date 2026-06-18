@@ -5,7 +5,7 @@
 # deploy-report.sh — Posts deploy diagnostics to a GitHub Issue for remote debugging.
 
 # Source environment from common locations where the token might be stored
-[ -f /opt/koris-next/panel.env ] && source /opt/koris-next/panel.env
+[ -f /opt/KorisPanel/panel.env ] && source /opt/KorisPanel/panel.env
 [ -f /etc/panel-env ] && source /etc/panel-env
 [ -f /root/.panel-token ] && source /root/.panel-token
 [ -f ~/.bashrc ] && source ~/.bashrc 2>/dev/null
@@ -34,7 +34,7 @@ MYSQL_LOGS=$(journalctl -u mariadb -n 10 --no-pager -o short-iso 2>&1 || echo "n
 NODE_AGENT_LOGS=$(journalctl -u node-agent -n 15 --no-pager -o short-iso 2>&1 || echo "not available")
 SERVICE_STATUS=$(systemctl is-active panel 2>/dev/null || echo "unknown")
 HEALTH_CHECK=$(curl -s --max-time 5 "http://${PANEL_ADDR}/api/health" 2>/dev/null || echo "health check failed")
-PANEL_VERSION=$(cat /opt/koris-next/VERSION 2>/dev/null || echo "unknown")
+PANEL_VERSION=$(cat /opt/KorisPanel/VERSION 2>/dev/null || echo "unknown")
 HOSTNAME=$(hostname 2>/dev/null || echo "unknown")
 DATE=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
 

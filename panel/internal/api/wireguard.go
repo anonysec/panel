@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"koris-next/panel/internal/wireguard"
+	"KorisPanel/panel/internal/wireguard"
 )
 
 // WgPeer represents a WireGuard peer record from the database.

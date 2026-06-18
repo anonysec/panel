@@ -1,7 +1,7 @@
 # Project Structure
 
 ```
-koris-next/
+KorisPanel/
 ├── panel/                      # Main panel application
 │   ├── cmd/panel/main.go       # Entrypoint: starts HTTP server, workers, bot
 │   ├── internal/               # Internal packages (not importable externally)

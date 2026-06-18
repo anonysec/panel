@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"koris-next/node/internal/logger"
+	"KorisPanel/node/internal/logger"
 )
 
 func TestFailureTracker_InitialState(t *testing.T) {

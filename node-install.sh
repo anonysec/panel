@@ -18,7 +18,7 @@ OS=$ID
 
 REPO="anonysec/panel"
 BRANCH="main"
-INSTALL_DIR="/opt/koris-next"
+INSTALL_DIR="/opt/KorisPanel"
 
 clear
 echo -e "${bold}${blue}"

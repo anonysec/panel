@@ -1,4 +1,4 @@
-# KorisPanel / koris-next Changelog
+# KorisPanel / KorisPanel Changelog
 
 All notable changes to the clean Go + Vue rewrite are tracked here.
 
@@ -219,7 +219,7 @@ All notable changes to the clean Go + Vue rewrite are tracked here.
   - Auto-limits active customers when `radacct` usage exceeds `Max-Data`.
   - Closes stale RADIUS sessions with no update in 5 minutes.
   - Marks stale nodes offline after 5 minutes of no push.
-  - Daily SQL backup at 02:00 via `mysqldump` to `/var/backups/koris-next/db-YYYY-MM-DD.sql.gz`.
+  - Daily SQL backup at 02:00 via `mysqldump` to `/var/backups/KorisPanel/db-YYYY-MM-DD.sql.gz`.
 
 ### Changed
 - `/api/health` version is now `0.19.0`.

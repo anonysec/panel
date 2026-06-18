@@ -19,7 +19,7 @@ cd "$ROOT"
 go mod tidy
 go build -o /usr/local/bin/panel-node ./node/cmd/node
 chmod +x /usr/local/bin/panel-node
-mkdir -p /etc/panel-node /opt/koris-next
+mkdir -p /etc/panel-node /opt/KorisPanel
 cat > /etc/panel-node/node.env <<ENV
 PANEL_URL='${PANEL_URL}'
 NODE_TOKEN='${NODE_TOKEN}'

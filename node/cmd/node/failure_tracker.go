@@ -3,7 +3,7 @@ package main
 import (
 	"time"
 
-	"koris-next/node/internal/logger"
+	"KorisPanel/node/internal/logger"
 )
 
 // FailureTracker tracks consecutive push failures and logs an error

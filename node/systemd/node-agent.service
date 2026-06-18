@@ -10,7 +10,7 @@ ExecStart=/usr/local/bin/panel-node
 Restart=always
 RestartSec=3
 User=root
-WorkingDirectory=/opt/koris-next
+WorkingDirectory=/opt/KorisPanel
 
 [Install]
 WantedBy=multi-user.target

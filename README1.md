@@ -205,7 +205,7 @@ koris update
 
 Or manually:
 ```bash
-cd /opt/koris-next
+cd /opt/KorisPanel
 git pull origin main
 bash deploy.sh
 ```

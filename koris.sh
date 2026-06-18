@@ -9,7 +9,7 @@ info()  { echo -e "${green}[+]${plain} $*"; }
 warn()  { echo -e "${yellow}[!]${plain} $*"; }
 error() { echo -e "${red}[-]${plain} $*"; }
 
-INSTALL_DIR="/opt/koris-next"
+INSTALL_DIR="/opt/KorisPanel"
 PANEL_ENV="/etc/panel/panel.env"
 NODE_ENV="/etc/panel-node/node.env"
 
