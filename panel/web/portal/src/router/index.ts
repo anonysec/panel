@@ -10,6 +10,7 @@ const router = createRouter({
       children: [
         { path: '', name: 'portal-home', component: () => import('@/views/SinglePageView.vue') },
         { path: 'profile', name: 'portal-profile', component: () => import('@/views/ProfileView.vue') },
+        { path: 'wireguard', name: 'portal-wireguard', component: () => import('@/views/WireGuardPeersView.vue') },
       ]
     },
     { path: '/login', name: 'portal-login', component: () => import('@/views/LoginView.vue') },

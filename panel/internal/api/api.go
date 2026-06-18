@@ -383,6 +383,8 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/api/portal/payment-methods", s.requireCustomer(s.portalPaymentMethods))
 	mux.HandleFunc("/api/portal/tickets", s.requireCustomer(s.portalTickets))
 	mux.HandleFunc("/api/portal/tickets/", s.requireCustomer(s.portalTicketByID))
+	mux.HandleFunc("/api/portal/wireguard/peers", s.requireCustomer(s.portalWireguardPeers))
+	mux.HandleFunc("/api/portal/wireguard/peers/", s.requireCustomer(s.portalWireguardPeerByID))
 	mux.HandleFunc("/api/node/push", s.nodePush)
 	mux.HandleFunc("/api/node/agent/version", s.agentVersion)
 	mux.HandleFunc("/api/node/agent/download", s.agentDownload)
@@ -935,6 +937,10 @@ func (s *Server) createCustomer(w http.ResponseWriter, r *http.Request) {
 	if err := tx.Commit(); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
+	}
+	// Auto-provision WireGuard peer on WireGuard-enabled nodes
+	if in.PlanID != nil && *in.PlanID > 0 {
+		s.autoProvisionWireGuardPeer(customerID)
 	}
 	actor, _, _ = s.currentAdmin(r)
 	s.logAudit(actor, "customer.created", "customer", strconv.FormatInt(customerID, 10), nil, map[string]any{"username": in.Username}, clientIP(r))
@@ -1542,6 +1548,8 @@ func (s *Server) renewCustomer(w http.ResponseWriter, r *http.Request, id int64)
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
+	// Auto-provision WireGuard peer on subscription renewal/activation
+	s.autoProvisionWireGuardPeer(id)
 	actor, _, _ = s.currentAdmin(r)
 	s.createEvent("plan", "info", fmt.Sprintf("Plan applied: %s", plan.Name), fmt.Sprintf("Admin %s applied plan %s to %s", actor, plan.Name, username), actor, username)
 	writeJSON(w, map[string]any{"ok": true, "plan": plan, "wallet_deducted": plan.Price})
@@ -3234,6 +3242,13 @@ func (s *Server) setPaymentStatus(w http.ResponseWriter, r *http.Request, id int
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
+	// Auto-provision WireGuard peer when plan renewal payment is approved
+	if status == "approved" && intentType == "plan_renewal" && intentID.Valid {
+		var custID int64
+		if s.DB.QueryRow(`SELECT id FROM customers WHERE username=? AND deleted_at IS NULL LIMIT 1`, username).Scan(&custID) == nil {
+			s.autoProvisionWireGuardPeer(custID)
+		}
+	}
 	actor, _, _ := s.currentAdmin(r)
 	s.logAudit(actor, "payment.status_"+status, "payment", strconv.FormatInt(id, 10), map[string]any{"old_status": oldStatus}, map[string]any{"new_status": status}, clientIP(r))
 	severity := "info"
@@ -4074,6 +4089,8 @@ func (s *Server) portalRenew(w http.ResponseWriter, r *http.Request) {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
+	// Auto-provision WireGuard peer on portal subscription renewal
+	s.autoProvisionWireGuardPeer(customerID)
 	writeJSON(w, map[string]any{"ok": true, "renewed": true, "payment_required": false, "wallet_deducted": plan.Price, "plan": plan})
 }
 
@@ -4282,6 +4299,13 @@ func (s *Server) nodePush(w http.ResponseWriter, r *http.Request) {
 			RxBps   int64  `json:"rx_bps"`
 			TxBps   int64  `json:"tx_bps"`
 		} `json:"per_user_bandwidth,omitempty"`
+		WireguardPeers []struct {
+			PublicKey      string `json:"public_key"`
+			LastHandshake int64  `json:"last_handshake"`
+			RxBytes       int64  `json:"rx_bytes"`
+			TxBytes       int64  `json:"tx_bytes"`
+		} `json:"wireguard_peers,omitempty"`
+		WireguardActivePeers int `json:"wireguard_active_peers"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad_json"})
@@ -4389,6 +4413,22 @@ func (s *Server) nodePush(w http.ResponseWriter, r *http.Request) {
 			}
 			_, _ = s.DB.Exec(`INSERT INTO user_bandwidth_snapshots(node_id, username, ip, rx_bps, tx_bps) VALUES(?,?,?,?,?)`,
 				nodeID, username, bw.IP, bw.RxBps, bw.TxBps)
+		}
+	}
+
+	// Update WireGuard peer stats from node push
+	if len(in.WireguardPeers) > 0 {
+		for _, wp := range in.WireguardPeers {
+			if wp.PublicKey == "" {
+				continue
+			}
+			var handshakeAt *time.Time
+			if wp.LastHandshake > 0 {
+				t := time.Unix(wp.LastHandshake, 0)
+				handshakeAt = &t
+			}
+			_, _ = s.DB.Exec(`UPDATE wg_peers SET last_handshake_at=?, rx_bytes=?, tx_bytes=? WHERE public_key=? AND node_id=?`,
+				handshakeAt, wp.RxBytes, wp.TxBytes, wp.PublicKey, nodeID)
 		}
 	}
 

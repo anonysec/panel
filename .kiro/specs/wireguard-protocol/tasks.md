@@ -40,7 +40,7 @@ This plan implements the remaining WireGuard VPN protocol features for KorisPane
     - Generate multiple key pairs; verify each is 44-char base64 decoding to exactly 32 bytes
     - **Validates: Requirements 3.1**
 
-- [ ] 2. Backend API enhancements (IP allocation integration, gaming optimize, config improvements)
+- [x] 2. Backend API enhancements (IP allocation integration, gaming optimize, config improvements)
   - [x] 2.1 Integrate IP allocation into peer creation handler in `panel/internal/api/wireguard.go`
     - Query active peer IPs for the node: `SELECT allowed_ips FROM wg_peers WHERE node_id=? AND status='active'`
     - Fetch node's WireGuard network CIDR from `node_vpn_configs.extra_json`
@@ -71,15 +71,15 @@ This plan implements the remaining WireGuard VPN protocol features for KorisPane
     - Generate configs with gaming_optimize=true/false; verify MTU and PersistentKeepalive values match expected
     - **Validates: Requirements 7.2, 7.3, 7.6**
 
-  - [ ] 2.6 Add dual-stack support to config generation
+  - [x] 2.6 Add dual-stack support to config generation
     - Support comma-separated IPv4+IPv6 addresses in the `Address` field
     - When node has both `network` (IPv4) and `network_ipv6` (IPv6) in extra_json, allocate from both and combine
     - _Requirements: 11.1, 11.2, 11.3_
 
-- [ ] 3. Checkpoint - Ensure all backend core tests pass
+- [x] 3. Checkpoint - Ensure all backend core tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 4. Node agent task handlers (setup, update_config, gaming optimize)
+- [x] 4. Node agent task handlers (setup, update_config, gaming optimize)
   - [x] 4.1 Implement `wireguard.setup` task handler in `node/cmd/node/main.go`
     - Accept payload: `{port, network, dns_1, dns_2, mtu}`
     - Generate server key pair using `wg genkey | wg pubkey`
@@ -89,7 +89,7 @@ This plan implements the remaining WireGuard VPN protocol features for KorisPane
     - On failure, return descriptive error message
     - _Requirements: 1.1, 1.2, 1.3, 1.5_
 
-  - [ ] 4.2 Implement `wireguard.update_config` task handler in `node/cmd/node/main.go`
+  - [x] 4.2 Implement `wireguard.update_config` task handler in `node/cmd/node/main.go`
     - Accept payload: `{port, network, dns_1, dns_2, mtu, gaming_optimize}`
     - Rewrite [Interface] section of `/etc/wireguard/wg0.conf` preserving [Peer] blocks
     - Run `wg syncconf wg0 <stripped_conf>` to apply changes without dropping peers
@@ -97,7 +97,7 @@ This plan implements the remaining WireGuard VPN protocol features for KorisPane
     - If `gaming_optimize=false`: remove fwmark rules, revert MTU to specified/1420
     - _Requirements: 2.2, 2.3, 7.4, 7.5, 12.4_
 
-  - [ ] 4.3 Extend node status push with WireGuard peer statistics
+  - [x] 4.3 Extend node status push with WireGuard peer statistics
     - Parse output of `wg show wg0 dump` to extract per-peer latest-handshake and transfer bytes
     - Add `wireguard_peers` array and `wireguard_active_peers` count to push payload
     - Active peer = last handshake within 3 minutes of current time
@@ -113,24 +113,24 @@ This plan implements the remaining WireGuard VPN protocol features for KorisPane
     - Generate random peer lists with various handshake timestamps; verify count equals peers with handshake within 3 minutes
     - **Validates: Requirements 5.3, 10.2**
 
-- [ ] 5. Backend API — Portal endpoints and status ingestion
-  - [ ] 5.1 Implement portal WireGuard peer list endpoint `GET /api/portal/wireguard/peers`
+- [x] 5. Backend API — Portal endpoints and status ingestion
+  - [x] 5.1 Implement portal WireGuard peer list endpoint `GET /api/portal/wireguard/peers`
     - Return only peers where `customer_id` matches authenticated customer session
     - Include peer ID, node info, status, allowed_ips, created_at
     - _Requirements: 8.1_
 
-  - [ ] 5.2 Implement portal config download `GET /api/portal/wireguard/peers/{id}/config`
+  - [x] 5.2 Implement portal config download `GET /api/portal/wireguard/peers/{id}/config`
     - Verify peer belongs to authenticated customer (return 403 if not)
     - Generate and serve .conf file with correct Content-Type and Content-Disposition headers
     - _Requirements: 8.2, 8.3, 6.2_
 
-  - [ ] 5.3 Implement portal QR code endpoint `GET /api/portal/wireguard/peers/{id}/qr`
+  - [x] 5.3 Implement portal QR code endpoint `GET /api/portal/wireguard/peers/{id}/qr`
     - Generate QR code PNG from the config file content
     - Use a lightweight Go QR library (e.g., `github.com/skip2/go-qrcode`)
     - Verify peer belongs to authenticated customer (403 if not)
     - _Requirements: 8.4_
 
-  - [ ] 5.4 Implement peer status ingestion from node push
+  - [x] 5.4 Implement peer status ingestion from node push
     - In the existing `/api/node/push` handler, parse `wireguard_peers` array from payload
     - Update `wg_peers` table: `last_handshake_at`, `rx_bytes`, `tx_bytes` for each reported peer (matched by public_key + node_id)
     - Update node's WireGuard service status display data
@@ -142,14 +142,14 @@ This plan implements the remaining WireGuard VPN protocol features for KorisPane
     - File: `panel/web/shared/src/__tests__/wireguard.test.ts` using fast-check
     - **Validates: Requirements 8.1, 8.3**
 
-- [ ] 6. Plan integration (auto-provision and revoke)
-  - [ ] 6.1 Implement auto-provisioning on subscription activation
+- [x] 6. Plan integration (auto-provision and revoke)
+  - [x] 6.1 Implement auto-provisioning on subscription activation
     - When a subscription is created/activated on a WireGuard-enabled node, auto-create a WireGuard peer for the customer
     - Hook into existing subscription creation flow in `panel/internal/api/api.go`
     - Call peer creation logic (generate keys, allocate IP, dispatch wireguard.add_peer task)
     - _Requirements: 9.3_
 
-  - [ ] 6.2 Implement auto-revocation on subscription termination
+  - [x] 6.2 Implement auto-revocation on subscription termination
     - When a subscription is terminated/expired, revoke associated WireGuard peers
     - Set peer status to 'revoked', dispatch `wireguard.remove_peer` task
     - Release IP back to pool (revoked peers excluded from active query)
@@ -160,11 +160,11 @@ This plan implements the remaining WireGuard VPN protocol features for KorisPane
     - Generate random active peer sets, revoke one, verify its IP is no longer in the "used" set
     - **Validates: Requirements 4.1, 4.4**
 
-- [ ] 7. Checkpoint - Ensure all backend tests pass
+- [x] 7. Checkpoint - Ensure all backend tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 8. Frontend admin — WireGuard management views
-  - [ ] 8.1 Create WireGuard config panel component `panel/web/admin/src/components/WireGuardConfig.vue`
+- [x] 8. Frontend admin — WireGuard management views
+  - [x] 8.1 Create WireGuard config panel component `panel/web/admin/src/components/WireGuardConfig.vue`
     - Form fields: listen port, network CIDR, primary DNS, secondary DNS, MTU
     - Gaming Optimize toggle
     - Enable/Disable WireGuard toggle (without removing peers)
@@ -172,7 +172,7 @@ This plan implements the remaining WireGuard VPN protocol features for KorisPane
     - Integrate into existing node detail view (NodesView.vue)
     - _Requirements: 2.1, 2.5, 7.1, 9.2_
 
-  - [ ] 8.2 Create WireGuard peer list view `panel/web/admin/src/views/WireGuardPeersView.vue`
+  - [x] 8.2 Create WireGuard peer list view `panel/web/admin/src/views/WireGuardPeersView.vue`
     - Table columns: ID, customer username, node, public key (truncated), allowed IPs, status, last handshake, RX/TX bytes
     - Filters: by node, by status (active/revoked), by customer
     - Download config button per peer
@@ -180,34 +180,34 @@ This plan implements the remaining WireGuard VPN protocol features for KorisPane
     - Register route in admin router
     - _Requirements: 5.1, 5.2_
 
-  - [ ] 8.3 Create peer creation dialog `panel/web/admin/src/components/WireGuardPeerCreate.vue`
+  - [x] 8.3 Create peer creation dialog `panel/web/admin/src/components/WireGuardPeerCreate.vue`
     - Fields: select node (WireGuard-enabled only), optionally select customer
     - IP auto-assigned (show assigned IP after creation)
     - Triggers POST to `/api/wireguard/peers`
     - _Requirements: 3.1, 3.2, 3.6_
 
-  - [ ] 8.4 Create `useWireGuard` composable `panel/web/admin/src/composables/useWireGuard.ts`
+  - [x] 8.4 Create `useWireGuard` composable `panel/web/admin/src/composables/useWireGuard.ts`
     - Functions: `fetchPeers(filters)`, `createPeer(data)`, `deletePeer(id)`, `downloadConfig(id)`, `saveNodeWireGuardConfig(nodeId, config)`
     - _Requirements: 5.1, 3.1, 4.1, 6.1, 2.1_
 
-  - [ ] 8.5 Display WireGuard service status on node detail/list
+  - [x] 8.5 Display WireGuard service status on node detail/list
     - Show WireGuard service status badge (running/stopped/error) on the node list and detail views
     - Show warning indicator when WireGuard configured but service not running
     - _Requirements: 10.3, 10.4_
 
-- [ ] 9. Frontend portal — WireGuard download and QR
-  - [ ] 9.1 Create WireGuard peers view `panel/web/portal/src/views/WireGuardPeersView.vue`
+- [x] 9. Frontend portal — WireGuard download and QR
+  - [x] 9.1 Create WireGuard peers view `panel/web/portal/src/views/WireGuardPeersView.vue`
     - List customer's WireGuard peers with status and node info
     - Download .conf button per peer
     - Show QR code button per peer (opens modal with QR image)
     - Register route in portal router
     - _Requirements: 8.1, 8.2, 8.4_
 
-  - [ ] 9.2 Create `useWireGuardPortal` composable `panel/web/portal/src/composables/useWireGuardPortal.ts`
+  - [x] 9.2 Create `useWireGuardPortal` composable `panel/web/portal/src/composables/useWireGuardPortal.ts`
     - Functions: `fetchMyPeers()`, `downloadConfig(peerId)`, `getQRCodeUrl(peerId)`
     - _Requirements: 8.1, 8.2, 8.4_
 
-- [ ] 10. Final checkpoint - Ensure all tests pass
+- [x] 10. Final checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 ## Notes

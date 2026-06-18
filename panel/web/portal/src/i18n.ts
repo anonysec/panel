@@ -51,6 +51,19 @@ const messages: Record<Locale, Record<string, string>> = {
     'portal.vpn.noProfiles': 'No VPN files yet',
     'portal.vpn.noProfilesDesc': 'Your connection files will show up here when ready.',
 
+    // WireGuard section
+    'portal.wireguard.title': 'WireGuard VPN',
+    'portal.wireguard.subtitle': 'Your WireGuard connections.',
+    'portal.wireguard.noPeers': 'No WireGuard peers',
+    'portal.wireguard.noPeersDesc': 'Your WireGuard connections will appear here when configured.',
+    'portal.wireguard.download': 'Download .conf',
+    'portal.wireguard.qrCode': 'QR Code',
+    'portal.wireguard.qrTitle': 'WireGuard QR Code',
+    'portal.wireguard.qrAlt': 'WireGuard configuration QR code',
+    'portal.wireguard.qrHint': 'Scan this code with the WireGuard app on your phone.',
+    'portal.wireguard.status_active': 'Active',
+    'portal.wireguard.status_revoked': 'Revoked',
+
     // Support section
     'portal.support.title': 'Help & Support',
 
@@ -121,6 +134,19 @@ const messages: Record<Locale, Record<string, string>> = {
     'portal.vpn.unavailable': 'ندارد',
     'portal.vpn.noProfiles': 'هنوز فایلی نیست',
     'portal.vpn.noProfilesDesc': 'فایل‌های اتصال شما وقتی آماده شوند اینجا نمایش داده می‌شوند.',
+
+    // WireGuard section
+    'portal.wireguard.title': 'وایرگارد VPN',
+    'portal.wireguard.subtitle': 'اتصالات وایرگارد شما.',
+    'portal.wireguard.noPeers': 'پیری وجود ندارد',
+    'portal.wireguard.noPeersDesc': 'اتصالات وایرگارد شما هنگام پیکربندی اینجا نمایش داده می‌شوند.',
+    'portal.wireguard.download': 'دانلود .conf',
+    'portal.wireguard.qrCode': 'کد QR',
+    'portal.wireguard.qrTitle': 'کد QR وایرگارد',
+    'portal.wireguard.qrAlt': 'کد QR پیکربندی وایرگارد',
+    'portal.wireguard.qrHint': 'این کد را با اپلیکیشن وایرگارد روی گوشی خود اسکن کنید.',
+    'portal.wireguard.status_active': 'فعال',
+    'portal.wireguard.status_revoked': 'لغو شده',
 
     // Support section
     'portal.support.title': 'کمک و پشتیبانی',
@@ -193,6 +219,19 @@ const messages: Record<Locale, Record<string, string>> = {
     'portal.vpn.noProfiles': '暂无VPN文件',
     'portal.vpn.noProfilesDesc': '连接文件准备好后会显示在这里。',
 
+    // WireGuard section
+    'portal.wireguard.title': 'WireGuard VPN',
+    'portal.wireguard.subtitle': '您的WireGuard连接。',
+    'portal.wireguard.noPeers': '没有WireGuard节点',
+    'portal.wireguard.noPeersDesc': '配置完成后，您的WireGuard连接将显示在这里。',
+    'portal.wireguard.download': '下载 .conf',
+    'portal.wireguard.qrCode': '二维码',
+    'portal.wireguard.qrTitle': 'WireGuard 二维码',
+    'portal.wireguard.qrAlt': 'WireGuard配置二维码',
+    'portal.wireguard.qrHint': '用手机上的WireGuard应用扫描此码。',
+    'portal.wireguard.status_active': '活跃',
+    'portal.wireguard.status_revoked': '已撤销',
+
     // Support section
     'portal.support.title': '帮助与支持',
 
@@ -263,6 +302,19 @@ const messages: Record<Locale, Record<string, string>> = {
     'portal.vpn.unavailable': 'Н/Д',
     'portal.vpn.noProfiles': 'Пока нет файлов VPN',
     'portal.vpn.noProfilesDesc': 'Файлы подключения появятся здесь, когда будут готовы.',
+
+    // WireGuard section
+    'portal.wireguard.title': 'WireGuard VPN',
+    'portal.wireguard.subtitle': 'Ваши подключения WireGuard.',
+    'portal.wireguard.noPeers': 'Нет WireGuard узлов',
+    'portal.wireguard.noPeersDesc': 'Ваши подключения WireGuard появятся здесь после настройки.',
+    'portal.wireguard.download': 'Скачать .conf',
+    'portal.wireguard.qrCode': 'QR-код',
+    'portal.wireguard.qrTitle': 'WireGuard QR-код',
+    'portal.wireguard.qrAlt': 'QR-код конфигурации WireGuard',
+    'portal.wireguard.qrHint': 'Отсканируйте этот код приложением WireGuard на телефоне.',
+    'portal.wireguard.status_active': 'Активен',
+    'portal.wireguard.status_revoked': 'Отозван',
 
     // Apps section
     'portal.apps.title': 'Скачать приложения',

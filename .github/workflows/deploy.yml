@@ -1,9 +1,13 @@
-name: Deploy to Ubuntu Server
+name: Deploy to Ubuntu Server (DISABLED - using SSH from local)
+
+# DISABLED: Deploy is done manually via SSH from local machine.
+# To re-enable, uncomment the triggers below.
+# on:
+#   push:
+#     branches: [main]
+#   workflow_dispatch:
 
 on:
-  push:
-    branches: [main]
-
   workflow_dispatch:
 
 jobs:

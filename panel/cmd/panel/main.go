@@ -58,9 +58,28 @@ func startWorker(db *sql.DB) {
 	ticker := time.NewTicker(time.Minute)
 	go func() {
 		for range ticker.C {
+			// Find customers about to expire (for WireGuard auto-revocation)
+			expRows, expErr := db.Query(`SELECT c.id FROM customers c JOIN (SELECT username, MAX(expires_at) as max_expires FROM subscriptions WHERE status='active' GROUP BY username) s ON c.username=s.username WHERE c.status='active' AND s.max_expires <= NOW()`)
+			var expiringCustomerIDs []int64
+			if expErr == nil {
+				for expRows.Next() {
+					var cid int64
+					if expRows.Scan(&cid) == nil {
+						expiringCustomerIDs = append(expiringCustomerIDs, cid)
+					}
+				}
+				expRows.Close()
+			}
+
 			if _, err := db.Exec(`UPDATE customers c JOIN (SELECT username, MAX(expires_at) as max_expires FROM subscriptions WHERE status='active' GROUP BY username) s ON c.username=s.username SET c.status='expired' WHERE c.status='active' AND s.max_expires <= NOW()`); err != nil {
 				log.Printf("[worker] expire subscriptions: %v", err)
 			}
+
+			// Auto-revoke WireGuard peers for expired customers
+			for _, cid := range expiringCustomerIDs {
+				api.AutoRevokeWireGuardPeersByDB(db, cid)
+			}
+
 			if _, err := db.Exec(`UPDATE customers c JOIN radcheck r ON c.username=r.username AND r.attribute='Max-Data' JOIN (SELECT username, COALESCE(SUM(acctinputoctets+acctoutputoctets),0) AS used FROM radacct GROUP BY username) a ON c.username=a.username SET c.status='limited' WHERE c.status='active' AND CAST(r.value AS UNSIGNED) > 0 AND a.used >= CAST(r.value AS UNSIGNED)`); err != nil {
 				log.Printf("[worker] data limit enforcement: %v", err)
 			}
