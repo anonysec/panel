@@ -121,6 +121,13 @@ const userStatusData = computed(() => {
   ]
 })
 
+const donutColors = [
+  'var(--color-primary)',
+  'var(--color-accent)',
+  'var(--color-brand-2)',
+  'var(--color-success)',
+]
+
 const recentUsers = computed(() => customers.list.slice(0, 6))
 
 function formatBytes(bytes: number): string {
@@ -222,8 +229,21 @@ function formatDuration(seconds: number): string {
           :data="userStatusData"
           :height="200"
           :animate="true"
+          :interactive="true"
         />
         <KSkeleton v-else variant="rect" :width="'100%'" :height="200" />
+        <!-- Status Legend -->
+        <div v-if="customers.list.length > 0" class="donut-legend">
+          <div
+            v-for="(item, i) in userStatusData"
+            :key="item.label"
+            class="donut-legend__item"
+          >
+            <span class="donut-legend__dot" :style="{ background: donutColors[i] }" />
+            <span class="donut-legend__label">{{ item.label }}</span>
+            <span class="donut-legend__value">{{ item.value }}</span>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -379,6 +399,13 @@ function formatDuration(seconds: number): string {
 
 .panel { padding: var(--space-4); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); }
 .panel-title { margin: 0; font-size: var(--text-sm); font-weight: var(--font-semibold); color: var(--color-text); }
+
+/* ─── Donut Legend ─── */
+.donut-legend { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--color-border); }
+.donut-legend__item { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); }
+.donut-legend__dot { width: 10px; height: 10px; border-radius: var(--radius-full); flex-shrink: 0; }
+.donut-legend__label { flex: 1; color: var(--color-muted); }
+.donut-legend__value { font-weight: var(--font-semibold); color: var(--color-text); }
 
 .mini-table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
 .mini-table th { text-align: left; padding: var(--space-2) var(--space-3); color: var(--color-muted); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: var(--tracking-wider); border-bottom: 1px solid var(--color-border); }

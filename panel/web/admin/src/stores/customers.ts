@@ -205,13 +205,17 @@ export const useCustomersStore = defineStore('customers', () => {
       result = list.value.filter((c) => c.status === filters.value.status)
     }
 
-    // Search filter: match against username and display_name
+    // Search filter: match against username, display_name, plan, status, id, credit
     const query = filters.value.search.trim().toLowerCase()
     if (query) {
       result = result.filter(
         (c) =>
           c.username.toLowerCase().includes(query) ||
-          c.display_name.toLowerCase().includes(query)
+          c.display_name.toLowerCase().includes(query) ||
+          (c.plan ?? '').toLowerCase().includes(query) ||
+          c.status.toLowerCase().includes(query) ||
+          String(c.id).includes(query) ||
+          String(c.credit).includes(query)
       )
     }
 
