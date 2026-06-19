@@ -425,10 +425,11 @@ func executeTask(task Task, cfg *config.Config, envFile string, log *logger.Logg
 		if task.Action == "service.reload" {
 			verb = "reload"
 		}
-		cmd := exec.Command("systemctl", verb, service)
+		unitName := serviceToUnit(service)
+		cmd := exec.Command("systemctl", verb, unitName)
 		out, err := cmd.CombinedOutput()
 		if err != nil {
-			return "failed", map[string]any{"service": service, "output": string(out)}, err.Error()
+			return "failed", map[string]any{"service": service, "unit": unitName, "output": string(out)}, err.Error()
 		}
 		return "succeeded", map[string]any{"service": service, "output": string(out), "status": serviceStatus(service)}, ""
 	case "service.stop":
@@ -436,10 +437,11 @@ func executeTask(task Task, cfg *config.Config, envFile string, log *logger.Logg
 		if service == "" {
 			return "failed", map[string]any{}, "invalid service"
 		}
-		cmd := exec.Command("systemctl", "stop", service)
+		unitName := serviceToUnit(service)
+		cmd := exec.Command("systemctl", "stop", unitName)
 		out, err := cmd.CombinedOutput()
 		if err != nil {
-			return "failed", map[string]any{"service": service, "output": string(out)}, err.Error()
+			return "failed", map[string]any{"service": service, "unit": unitName, "output": string(out)}, err.Error()
 		}
 		return "succeeded", map[string]any{"service": service, "output": string(out), "status": serviceStatus(service)}, ""
 	case "agent.update":
@@ -1377,6 +1379,44 @@ func normalizeService(input string) string {
 	}
 }
 
+// serviceToUnit maps a normalized logical service name to the actual systemd unit name.
+// It tries to detect which unit is available on the system.
+func serviceToUnit(service string) string {
+	switch service {
+	case "openvpn":
+		// Prefer openvpn-server@server (modern), fallback to openvpn@server
+		if checkUnit("openvpn-server@server") != "stopped" {
+			return "openvpn-server@server"
+		}
+		return "openvpn@server"
+	case "strongswan":
+		// Ubuntu uses strongswan-starter, others use ipsec or strongswan
+		if checkUnit("strongswan-starter") != "stopped" || unitExists("strongswan-starter") {
+			return "strongswan-starter"
+		}
+		if unitExists("ipsec") {
+			return "ipsec"
+		}
+		return "strongswan"
+	case "ssh":
+		if checkUnit("sshd") == "running" {
+			return "sshd"
+		}
+		return "ssh"
+	default:
+		return service
+	}
+}
+
+// unitExists checks if a systemd unit is loaded (exists in systemd).
+func unitExists(unit string) bool {
+	out, err := exec.Command("systemctl", "list-unit-files", unit+".service", "--no-legend").Output()
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(string(out)) != ""
+}
+
 // isValidVPNUsername checks that a username contains only safe characters.
 // Allowed: alphanumeric, dots, hyphens, underscores, and @ signs.
 // This prevents injection of management protocol commands via newlines or control characters.
@@ -1658,6 +1698,15 @@ func serviceStatus(service string) string {
 		if err == nil {
 			status := strings.TrimSpace(string(out))
 			if status == "active" {
+				return "running"
+			}
+		}
+		return "stopped"
+	case "strongswan", "ikev2", "ipsec":
+		// Try strongswan-starter (Ubuntu), then ipsec, then strongswan
+		for _, unit := range []string{"strongswan-starter", "ipsec", "strongswan"} {
+			status := checkUnit(unit)
+			if status == "running" {
 				return "running"
 			}
 		}

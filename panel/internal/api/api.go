@@ -6788,7 +6788,7 @@ func (s *Server) upsertNodeVPNConfig(w http.ResponseWriter, r *http.Request, nod
 	serviceMap := map[string]string{
 		"openvpn":   "openvpn-server@server",
 		"l2tp":      "xl2tpd",
-		"ikev2":     "strongswan",
+		"ikev2":     "strongswan-starter",
 		"ssh":       "ssh",
 		"wireguard": "wg-quick@wg0",
 	}
