@@ -20,6 +20,7 @@
 ### Infrastructure
 - Cross-platform build (Windows/Mac/Linux)
 - Nginx management API (domain, SSL, certbot)
+- HAProxy TCP load balancer (auto-generated config from active nodes)
 - TLS fallback (if cert invalid, falls back to HTTP)
 - Node config sync from panel (name, token, PANEL_URL)
 - Auto-start/stop services on protocol toggle
@@ -81,8 +82,7 @@
 
 ## 🔮 Future (Post v1.0)
 
-- Xray/VLESS smart TCP proxy (per-user routing)
-- HAProxy integration
+- Xray/VLESS smart TCP proxy (per-user routing via HAProxy backend maps)
 - Cisco IPSec protocol
 - Anti-DPI integration
 - Package distribution (.deb/.rpm)
