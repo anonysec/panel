@@ -6783,6 +6783,25 @@ func (s *Server) upsertNodeVPNConfig(w http.ResponseWriter, r *http.Request, nod
 
 	actor, _, _ := s.currentAdmin(r)
 	s.logAudit(actor, "node.vpn_config_updated", "node", strconv.FormatInt(nodeID, 10), nil, map[string]any{"protocol": in.Protocol, "port": in.Port, "enabled": in.Enabled}, clientIP(r))
+
+	// Auto-start/stop service on the node when toggled
+	serviceMap := map[string]string{
+		"openvpn":   "openvpn-server@server",
+		"l2tp":      "xl2tpd",
+		"ikev2":     "strongswan",
+		"ssh":       "ssh",
+		"wireguard": "wg-quick@wg0",
+	}
+	if svcName, ok := serviceMap[in.Protocol]; ok {
+		action := "service.stop"
+		if in.Enabled {
+			action = "service.restart"
+		}
+		payload, _ := json.Marshal(map[string]any{"service": svcName})
+		_, _ = s.DB.Exec(`INSERT INTO node_tasks(node_id, action, payload_json, status, created_by) VALUES(?, ?, ?, 'pending', ?)`,
+			nodeID, action, string(payload), actor)
+	}
+
 	writeJSON(w, map[string]any{"ok": true})
 }
 
