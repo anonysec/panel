@@ -972,16 +972,6 @@ onMounted(() => {
                     <div v-if="showAdvanced" class="form-group">
                       <h5 class="form-group__title">{{ t('nodes.group_performance') }}</h5>
                       <div class="protocol-form__grid">
-                        <KFormField :name="`${proto}-max-clients`" :label="t('nodes.max_clients')">
-                          <template #default="{ fieldId }">
-                            <KInput :id="fieldId" v-model="configForm.max_clients" type="number" placeholder="0" />
-                          </template>
-                        </KFormField>
-                        <KFormField :name="`${proto}-conn-limit`" :label="t('nodes.conn_limit')">
-                          <template #default="{ fieldId }">
-                            <KInput :id="fieldId" v-model="configForm.conn_limit" type="number" placeholder="0" />
-                          </template>
-                        </KFormField>
                         <template v-if="proto === 'openvpn'">
                           <KFormField :name="`${proto}-keepalive`" :label="t('nodes.keepalive')">
                             <template #default="{ fieldId }">
