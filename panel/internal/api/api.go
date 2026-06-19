@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"math"
 	"net"
 	"net/http"
@@ -2001,6 +2002,43 @@ func (s *Server) setNodeStatus(w http.ResponseWriter, id int64, status string) {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
+
+	// When disabling a node, disconnect all active sessions on it and revoke WireGuard peers
+	if status == "disabled" {
+		// Get node's NAS IP for RADIUS disconnect
+		var nasIP string
+		_ = s.DB.QueryRow(`SELECT public_ip FROM nodes WHERE id=?`, id).Scan(&nasIP)
+		if nasIP == "" {
+			nasIP = "127.0.0.1"
+		}
+
+		// Disconnect all active RADIUS sessions originating from this node
+		rows, err := s.DB.Query(`SELECT radacctid, username, acctsessionid FROM radacct WHERE acctstoptime IS NULL AND nasipaddress=?`, nasIP)
+		if err == nil {
+			defer rows.Close()
+			for rows.Next() {
+				var radID int64
+				var username, sessionID string
+				if rows.Scan(&radID, &username, &sessionID) == nil {
+					// Close the session in radacct
+					_, _ = s.DB.Exec(`UPDATE radacct SET acctstoptime=NOW(), acctterminatecause='Admin-Node-Disabled' WHERE radacctid=?`, radID)
+					// Send CoA disconnect (best effort)
+					go func(u, sid, ip string) {
+						attrs := fmt.Sprintf("User-Name=%s,Acct-Session-Id=%s", u, sid)
+						cmd := exec.Command("radclient", "-x", ip+":3799", "disconnect", "testing123")
+						cmd.Stdin = strings.NewReader(attrs)
+						_ = cmd.Run()
+					}(username, sessionID, nasIP)
+				}
+			}
+		}
+
+		// Revoke WireGuard peers on this node
+		_, _ = s.DB.Exec(`UPDATE wg_peers SET status='revoked' WHERE node_id=? AND status='active'`, id)
+
+		log.Printf("[node] disabled node %d, disconnected sessions and revoked WG peers", id)
+	}
+
 	writeJSON(w, map[string]any{"ok": true})
 }
 
