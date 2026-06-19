@@ -409,6 +409,7 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/api/resellers/checkout", s.requireAdmin(s.resellerCheckout))
 	mux.HandleFunc("/api/resellers/payments", s.requireAdmin(s.resellerPayments))
 	mux.HandleFunc("/api/sessions/kill", s.requireAdmin(s.killSession))
+	mux.HandleFunc("/portal/sub/", s.subscriptionLink)
 	mux.HandleFunc("/portal/sub", s.subscriptionLink)
 	mux.HandleFunc("/api/nodes/vpn-config/", s.requireAdmin(s.nodeVPNConfig))
 	mux.HandleFunc("/api/wireguard/peers", s.requireAdmin(s.wireguardPeers))
