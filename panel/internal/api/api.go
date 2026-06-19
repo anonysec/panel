@@ -400,6 +400,8 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/api/reports/bandwidth", s.requireAdmin(s.bandwidthReport))
 	mux.HandleFunc("/api/reports/uptime", s.requireAdmin(s.uptimeReport))
 	mux.HandleFunc("/api/reports/wallets", s.requireAdmin(s.walletSummary))
+	mux.HandleFunc("/api/admin/haproxy/apply", s.requireAdmin(s.haproxyApply))
+	mux.HandleFunc("/api/admin/haproxy/status", s.requireAdmin(s.haproxyStatus))
 	mux.HandleFunc("/api/diagnostics", s.requireAdmin(s.diagnostics))
 	mux.HandleFunc("/api/resellers", s.requireAdmin(s.resellers))
 	mux.HandleFunc("/api/resellers/transactions", s.requireAdmin(s.resellerTransactions))

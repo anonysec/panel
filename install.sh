@@ -64,7 +64,7 @@ case "$OS" in
         apt-get update -qq >/dev/null 2>&1
         apt-get install -y -qq git curl openssl ca-certificates mariadb-server \
             freeradius freeradius-mysql freeradius-utils nginx golang-go iproute2 \
-            wireguard-tools openvpn easy-rsa strongswan xl2tpd certbot python3-certbot-nginx >/dev/null 2>&1
+            wireguard-tools openvpn easy-rsa strongswan xl2tpd certbot python3-certbot-nginx haproxy >/dev/null 2>&1
         # Node.js for frontend build
         if ! command -v npm >/dev/null 2>&1; then
             curl -fsSL https://deb.nodesource.com/setup_20.x 2>/dev/null | bash - >/dev/null 2>&1 || true
@@ -74,7 +74,7 @@ case "$OS" in
     centos|almalinux|rocky|rhel|fedora)
         dnf install -y -q git curl openssl ca-certificates mariadb-server \
             freeradius freeradius-mysql freeradius-utils nginx golang iproute \
-            wireguard-tools openvpn strongswan xl2tpd certbot python3-certbot-nginx >/dev/null 2>&1
+            wireguard-tools openvpn strongswan xl2tpd certbot python3-certbot-nginx haproxy >/dev/null 2>&1
         ;;
     *) fatal "Unsupported OS: $OS" ;;
 esac
