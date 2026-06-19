@@ -3702,31 +3702,39 @@ func (s *Server) portalProfiles(w http.ResponseWriter, r *http.Request) {
 	psk = strings.TrimSpace(psk)
 	passwordlessAvailable := s.canUsePasswordless(username)
 
-	// Build filename from node name (supports emoji/UTF-8)
-	fileBase := safeFilename(nodeName)
-	if fileBase == "" {
-		fileBase = safeFilename(username)
+	// Build filenames:
+	// - OpenVPN with auth: generic config, use node name only (e.g. "🇩🇪Germany.ovpn")
+	// - Passwordless / mobileconfig: per-user, use "username-nodename" (e.g. "john-🇩🇪Germany.ovpn")
+	nodeBase := safeFilename(nodeName)
+	if nodeBase == "" {
+		nodeBase = "vpn"
 	}
+	userBase := safeFilename(username)
+	genericFilename := nodeBase + ".ovpn"
+	perUserOvpn := userBase + "-" + nodeBase + ".ovpn"
+	perUserL2TP := userBase + "-" + nodeBase + ".mobileconfig"
+	perUserIKEv2 := userBase + "-" + nodeBase + "-ikev2.mobileconfig"
 
 	writeJSON(w, map[string]any{
 		"ok":                     true,
 		"passwordless_available": passwordlessAvailable,
 		"profiles": []map[string]any{
 			{
-				"type":      "openvpn",
-				"name":      "OpenVPN — " + nodeName,
-				"filename":  fileBase + ".ovpn",
-				"available": host != "",
-				"remote":    host,
-				"port":      port,
-				"protocol":  proto,
-				"node":      nodeName,
-				"download":  fmt.Sprintf("/api/portal/profiles/openvpn.ovpn?node_id=%d", nodeID),
+				"type":                  "openvpn",
+				"name":                  "OpenVPN — " + nodeName,
+				"filename":              genericFilename,
+				"filename_passwordless": perUserOvpn,
+				"available":             host != "",
+				"remote":                host,
+				"port":                  port,
+				"protocol":              proto,
+				"node":                  nodeName,
+				"download":              fmt.Sprintf("/api/portal/profiles/openvpn.ovpn?node_id=%d", nodeID),
 			},
 			{
 				"type":      "l2tp",
 				"name":      "L2TP/IPSec — " + nodeName,
-				"filename":  fileBase + "-l2tp.mobileconfig",
+				"filename":  perUserL2TP,
 				"available": host != "" && psk != "",
 				"remote":    host,
 				"port":      1701,
@@ -3737,7 +3745,7 @@ func (s *Server) portalProfiles(w http.ResponseWriter, r *http.Request) {
 			{
 				"type":      "ikev2",
 				"name":      "IKEv2 — " + nodeName,
-				"filename":  fileBase + "-ikev2.mobileconfig",
+				"filename":  perUserIKEv2,
 				"available": host != "",
 				"remote":    host,
 				"port":      500,
@@ -3771,11 +3779,17 @@ func (s *Server) portalProfileDownload(w http.ResponseWriter, r *http.Request) {
 			profile = s.openVPNProfile(username, r, nodeID)
 		}
 		_, _, _, nodeName := s.openVPNEndpointNode(r, nodeID)
-		fileBase := safeFilename(nodeName)
-		if fileBase == "" {
-			fileBase = safeFilename(username)
+		nodeBase := safeFilename(nodeName)
+		if nodeBase == "" {
+			nodeBase = "vpn"
 		}
-		filename := fileBase + ".ovpn"
+		// Passwordless configs are per-user; standard OpenVPN is generic (node name only)
+		var filename string
+		if passwordless {
+			filename = safeFilename(username) + "-" + nodeBase + ".ovpn"
+		} else {
+			filename = nodeBase + ".ovpn"
+		}
 		w.Header().Set("Content-Type", "application/x-openvpn-profile; charset=utf-8")
 		w.Header().Set("Content-Disposition", `attachment; filename*=UTF-8''`+url.PathEscape(filename))
 		w.Header().Set("Cache-Control", "no-store")
@@ -3784,11 +3798,12 @@ func (s *Server) portalProfileDownload(w http.ResponseWriter, r *http.Request) {
 		nodeID, _ := strconv.ParseInt(r.URL.Query().Get("node_id"), 10, 64)
 		profile := s.l2tpMobileConfig(username, r, nodeID)
 		_, _, _, nodeName := s.openVPNEndpointNode(r, nodeID)
-		fileBase := safeFilename(nodeName)
-		if fileBase == "" {
-			fileBase = safeFilename(username)
+		nodeBase := safeFilename(nodeName)
+		if nodeBase == "" {
+			nodeBase = "vpn"
 		}
-		filename := fileBase + "-l2tp.mobileconfig"
+		// mobileconfig embeds username — always per-user
+		filename := safeFilename(username) + "-" + nodeBase + ".mobileconfig"
 		w.Header().Set("Content-Type", "application/x-apple-aspen-config; charset=utf-8")
 		w.Header().Set("Content-Disposition", `attachment; filename*=UTF-8''`+url.PathEscape(filename))
 		w.Header().Set("Cache-Control", "no-store")
@@ -3797,11 +3812,12 @@ func (s *Server) portalProfileDownload(w http.ResponseWriter, r *http.Request) {
 		nodeID, _ := strconv.ParseInt(r.URL.Query().Get("node_id"), 10, 64)
 		profile := s.ikev2MobileConfig(username, r, nodeID)
 		_, _, _, nodeName := s.openVPNEndpointNode(r, nodeID)
-		fileBase := safeFilename(nodeName)
-		if fileBase == "" {
-			fileBase = safeFilename(username)
+		nodeBase := safeFilename(nodeName)
+		if nodeBase == "" {
+			nodeBase = "vpn"
 		}
-		filename := fileBase + "-ikev2.mobileconfig"
+		// mobileconfig embeds username — always per-user
+		filename := safeFilename(username) + "-" + nodeBase + "-ikev2.mobileconfig"
 		w.Header().Set("Content-Type", "application/x-apple-aspen-config; charset=utf-8")
 		w.Header().Set("Content-Disposition", `attachment; filename*=UTF-8''`+url.PathEscape(filename))
 		w.Header().Set("Cache-Control", "no-store")
