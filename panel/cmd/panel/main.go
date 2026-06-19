@@ -242,7 +242,7 @@ func processPaygBilling(db *sql.DB) {
 	for _, c := range customers {
 		// Get last deduction time for this user
 		var lastDeduction time.Time
-		err := db.QueryRow(`SELECT COALESCE(MAX(created_at), '2000-01-01') FROM payg_deductions WHERE username = ?`, c.Username).Scan(&lastDeduction)
+		err := db.QueryRow(`SELECT COALESCE(MAX(created_at), CAST('2000-01-01' AS DATETIME)) FROM payg_deductions WHERE username = ?`, c.Username).Scan(&lastDeduction)
 		if err != nil {
 			log.Printf("[worker] payg last deduction for %s: %v", c.Username, err)
 			continue

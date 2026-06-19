@@ -111,8 +111,11 @@ tmp_table_size = 64M
 max_heap_table_size = 64M
 skip-name-resolve
 MYCNF
+
+# MariaDB security: bind to localhost only
+sed -i 's/^bind-address\s*=.*/bind-address = 127.0.0.1/' /etc/mysql/mariadb.conf.d/50-server.cnf 2>/dev/null || true
 systemctl restart mariadb >/dev/null 2>&1
-info "Database ready (optimized)."
+info "Database ready (optimized, bound to localhost)."
 
 # FreeRADIUS
 info "Configuring FreeRADIUS..."
@@ -277,6 +280,65 @@ nginx -t >/dev/null 2>&1 && systemctl reload nginx
 # Management CLI
 cp "$INSTALL_DIR/koris.sh" /usr/local/bin/koris 2>/dev/null || true
 chmod +x /usr/local/bin/koris 2>/dev/null || true
+
+# Security hardening
+info "Applying security hardening..."
+
+# Swap (2GB) if none exists
+if ! swapon --show | grep -q '/'; then
+    TOTAL_RAM_MB=$(free -m | awk '/Mem:/{print $2}')
+    SWAP_SIZE="2G"
+    [[ $TOTAL_RAM_MB -ge 8000 ]] && SWAP_SIZE="4G"
+    fallocate -l "$SWAP_SIZE" /swapfile 2>/dev/null || dd if=/dev/zero of=/swapfile bs=1M count=${SWAP_SIZE%G}000 status=none
+    chmod 600 /swapfile
+    mkswap /swapfile >/dev/null 2>&1
+    swapon /swapfile
+    grep -q '/swapfile' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
+    # Tune swappiness for a server workload
+    sysctl -w vm.swappiness=10 >/dev/null 2>&1
+    grep -q 'vm.swappiness' /etc/sysctl.conf || echo 'vm.swappiness=10' >> /etc/sysctl.conf
+    info "Swap configured (${SWAP_SIZE})."
+fi
+
+# fail2ban
+if ! command -v fail2ban-client >/dev/null 2>&1; then
+    apt-get install -y -qq fail2ban >/dev/null 2>&1 || dnf install -y -q fail2ban >/dev/null 2>&1 || true
+fi
+if command -v fail2ban-client >/dev/null 2>&1; then
+    cat > /etc/fail2ban/jail.local <<F2B
+[DEFAULT]
+bantime = 3600
+findtime = 600
+maxretry = 5
+ignoreip = 127.0.0.1/8
+
+[sshd]
+enabled = true
+port = ssh
+maxretry = 3
+bantime = 7200
+
+[nginx-limit-req]
+enabled = true
+port = http,https
+logpath = /var/log/nginx/error.log
+maxretry = 10
+findtime = 60
+bantime = 600
+
+[nginx-botsearch]
+enabled = true
+port = http,https
+logpath = /var/log/nginx/access.log
+maxretry = 10
+findtime = 60
+bantime = 3600
+F2B
+    systemctl enable --now fail2ban >/dev/null 2>&1
+    info "fail2ban installed (SSH + Nginx jails)."
+fi
+
+info "Security hardening complete."
 
 # Result
 SERVER_IP=$(curl -fsS4 --max-time 3 https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}')
