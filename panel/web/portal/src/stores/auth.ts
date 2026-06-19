@@ -55,8 +55,13 @@ export const usePortalAuthStore = defineStore('portal-auth', () => {
   const totpRequired = ref(false)
 
   // ─── API composable ───────────────────────────────────────────────────────
+  // Track whether a login attempt is in progress to suppress onUnauthorized redirect
+  const isLoggingIn = ref(false)
+
   const { get, post, loading, error } = useApi({
     onUnauthorized: () => {
+      // Don't redirect to login if we're already on the login page (during login attempt)
+      if (isLoggingIn.value) return
       // On 401, clear session state and redirect to portal login
       user.value = null
       isAuthenticated.value = false
@@ -94,6 +99,7 @@ export const usePortalAuthStore = defineStore('portal-auth', () => {
    * POST /api/auth/customer → { ok, username, totp_required? }
    */
   async function login(params: { username: string; password: string; totp_code?: string }): Promise<boolean> {
+    isLoggingIn.value = true
     try {
       const res = await post<LoginResponse>('/api/auth/customer', params)
 
@@ -105,8 +111,16 @@ export const usePortalAuthStore = defineStore('portal-auth', () => {
       totpRequired.value = false
       await checkAuth()
       return true
-    } catch {
+    } catch (err: any) {
+      // Expose the error message so LoginView can display it
+      if (err && err.message) {
+        error.value = err.message === 'Unauthorized' ? 'Invalid username or password' : err.message
+      } else {
+        error.value = 'Invalid username or password'
+      }
       return false
+    } finally {
+      isLoggingIn.value = false
     }
   }
 

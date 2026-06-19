@@ -87,25 +87,20 @@ const navGroups = computed<NavGroup[]>(() => [
         label: t('nav.tickets'),
         icon: 'tickets',
       },
-      {
-        route: 'wireguard',
-        label: 'WireGuard',
-        icon: 'wireguard',
-      },
     ],
   },
   {
     title: t('nav.group_system'),
     items: [
       {
-        route: 'backups',
-        label: t('nav.backups'),
-        icon: 'backups',
-      },
-      {
         route: 'settings',
         label: t('nav.settings'),
         icon: 'settings',
+      },
+      {
+        route: 'backups',
+        label: t('nav.backups'),
+        icon: 'backups',
       },
     ],
   },

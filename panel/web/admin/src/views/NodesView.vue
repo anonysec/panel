@@ -469,6 +469,7 @@ onMounted(() => {
 <template>
   <div class="page nodes-view">
     <header class="page-header">
+      <KButton variant="ghost" size="sm" @click="$router.push({ name: 'wireguard' })">{{ t('wireguard.peers') }}</KButton>
       <KButton variant="primary" icon="+" @click="showAddForm = true">{{ t('nodes.add_node') }}</KButton>
     </header>
 
