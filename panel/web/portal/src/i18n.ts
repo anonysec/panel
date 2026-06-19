@@ -69,6 +69,14 @@ const messages: Record<Locale, Record<string, string>> = {
     // Support section
     'portal.support.title': 'Help & Support',
 
+    // Promo Code
+    'portal.promo.title': 'Promo Code',
+    'portal.promo.placeholder': 'Enter code',
+    'portal.promo.apply': 'Apply',
+    'portal.promo.success_percent': '{value}% discount applied!',
+    'portal.promo.success_fixed': '${value} discount applied!',
+    'portal.promo.invalid': 'Invalid or expired promo code.',
+
     // Apps section
     'portal.apps.title': 'Download Apps',
     'portal.apps.desc': 'Get the app for your device to connect easily.',
@@ -154,6 +162,14 @@ const messages: Record<Locale, Record<string, string>> = {
 
     // Support section
     'portal.support.title': 'کمک و پشتیبانی',
+
+    // Promo Code
+    'portal.promo.title': 'کد تخفیف',
+    'portal.promo.placeholder': 'کد را وارد کنید',
+    'portal.promo.apply': 'اعمال',
+    'portal.promo.success_percent': '{value}% تخفیف اعمال شد!',
+    'portal.promo.success_fixed': '${value} تخفیف اعمال شد!',
+    'portal.promo.invalid': 'کد تخفیف نامعتبر یا منقضی شده.',
 
     // Apps section
     'portal.apps.title': 'دانلود اپلیکیشن',
@@ -241,6 +257,14 @@ const messages: Record<Locale, Record<string, string>> = {
     // Support section
     'portal.support.title': '帮助与支持',
 
+    // Promo Code
+    'portal.promo.title': '优惠码',
+    'portal.promo.placeholder': '输入优惠码',
+    'portal.promo.apply': '应用',
+    'portal.promo.success_percent': '已应用{value}%折扣！',
+    'portal.promo.success_fixed': '已应用${value}折扣！',
+    'portal.promo.invalid': '优惠码无效或已过期。',
+
     // Apps section
     'portal.apps.title': '下载应用',
     'portal.apps.desc': '下载适合您设备的应用，轻松连接。',
@@ -327,6 +351,14 @@ const messages: Record<Locale, Record<string, string>> = {
     // Apps section
     'portal.apps.title': 'Скачать приложения',
     'portal.apps.desc': 'Скачайте приложение для вашего устройства.',
+
+    // Promo Code
+    'portal.promo.title': 'Промокод',
+    'portal.promo.placeholder': 'Введите код',
+    'portal.promo.apply': 'Применить',
+    'portal.promo.success_percent': 'Скидка {value}% применена!',
+    'portal.promo.success_fixed': 'Скидка ${value} применена!',
+    'portal.promo.invalid': 'Недействительный или истекший промокод.',
 
     // Support section
     'portal.support.title': 'Помощь и поддержка',

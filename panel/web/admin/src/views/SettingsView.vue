@@ -11,13 +11,14 @@ import KFormField from '@koris/ui/KFormField.vue'
 import KInput from '@koris/ui/KInput.vue'
 import KSelect from '@koris/ui/KSelect.vue'
 import KButton from '@koris/ui/KButton.vue'
+import KStatusPill from '@koris/ui/KStatusPill.vue'
 import BackupView from '@/views/BackupView.vue'
 
 const props = defineProps<{ tab?: string }>()
 
 const { t, locale: currentLocale, setLocale } = useI18n()
 const { mode: currentMode, theme: currentTheme, setMode, setTheme } = useTheme()
-const { get, put, patch } = useApi()
+const { get, post, put, patch, del } = useApi()
 const toast = useToast()
 const activeTab = ref(props.tab || 'panel-settings')
 const saving = ref(false)
@@ -28,6 +29,7 @@ const tabs = computed(() => [
   { key: 'app-links', label: t('settings.app_links') },
   { key: 'telegram', label: t('settings.telegram') },
   { key: 'certificates', label: t('settings.certificates') },
+  { key: 'promo-codes', label: t('settings.promo_codes') },
   { key: 'backup', label: t('settings.backup') },
 ])
 
@@ -441,8 +443,91 @@ async function handleImportFile(event: Event): Promise<void> {
   }
 }
 
+// ─── Promo Codes ────────────────────────────────────────────────────────────
+interface PromoCode {
+  id: number
+  code: string
+  type: string
+  value: number
+  max_uses: number
+  used_count: number
+  is_active: boolean
+  expires_at: string
+  created_at: string
+}
+
+const promoCodes = ref<PromoCode[]>([])
+const loadingPromos = ref(false)
+const showPromoForm = ref(false)
+const savingPromo = ref(false)
+const promoForm = ref({
+  code: '',
+  type: 'percent',
+  value: '',
+  max_uses: '',
+  expires_at: '',
+})
+
+const promoTypeOptions = computed(() => [
+  { label: t('settings.promo_type_percent'), value: 'percent' },
+  { label: t('settings.promo_type_fixed'), value: 'fixed' },
+])
+
+async function loadPromoCodes(): Promise<void> {
+  loadingPromos.value = true
+  try {
+    const res = await get<{ ok: boolean; promo_codes: PromoCode[] }>('/api/promo-codes')
+    promoCodes.value = res.promo_codes || []
+  } catch {
+    // keep empty
+  } finally {
+    loadingPromos.value = false
+  }
+}
+
+async function createPromoCode(): Promise<void> {
+  savingPromo.value = true
+  try {
+    await post<{ ok: boolean; id: number }>('/api/promo-codes', {
+      code: promoForm.value.code,
+      type: promoForm.value.type,
+      value: parseFloat(promoForm.value.value) || 0,
+      max_uses: parseInt(promoForm.value.max_uses) || 0,
+      expires_at: promoForm.value.expires_at || undefined,
+    })
+    toast.success(t('settings.promo_create_success'))
+    showPromoForm.value = false
+    promoForm.value = { code: '', type: 'percent', value: '', max_uses: '', expires_at: '' }
+    await loadPromoCodes()
+  } catch {
+    toast.error(t('settings.promo_create_error'))
+  } finally {
+    savingPromo.value = false
+  }
+}
+
+async function togglePromoActive(promo: PromoCode): Promise<void> {
+  try {
+    await patch<{ ok: boolean }>(`/api/promo-codes/${promo.id}`, { is_active: !promo.is_active })
+    promo.is_active = !promo.is_active
+    toast.success(t('settings.promo_toggle_success'))
+  } catch {
+    toast.error(t('settings.promo_toggle_error'))
+  }
+}
+
+async function deletePromoCode(promo: PromoCode): Promise<void> {
+  try {
+    await del<{ ok: boolean }>(`/api/promo-codes/${promo.id}`)
+    promoCodes.value = promoCodes.value.filter(p => p.id !== promo.id)
+    toast.success(t('settings.promo_delete_success'))
+  } catch {
+    toast.error(t('settings.promo_delete_error'))
+  }
+}
+
 onMounted(async () => {
-  await Promise.all([loadPanelSettings(), loadThresholds(), loadTelegramSettings(), loadWarningConfig(), loadAppLinks(), loadCertStatus()])
+  await Promise.all([loadPanelSettings(), loadThresholds(), loadTelegramSettings(), loadWarningConfig(), loadAppLinks(), loadCertStatus(), loadPromoCodes()])
 })
 </script>
 
@@ -763,6 +848,91 @@ onMounted(async () => {
         </div>
       </template>
 
+      <!-- Promo Codes -->
+      <template #promo-codes>
+        <div class="settings-panel">
+          <div class="promo-header">
+            <h4 class="section-title">{{ t('settings.promo_codes') }}</h4>
+            <KButton variant="primary" size="sm" @click="showPromoForm = !showPromoForm">
+              {{ showPromoForm ? t('btn.cancel') : t('settings.promo_create') }}
+            </KButton>
+          </div>
+
+          <!-- Create Form -->
+          <form v-if="showPromoForm" class="settings-form promo-form" @submit.prevent="createPromoCode">
+            <KFormField name="promo-code" :label="t('settings.promo_code')">
+              <template #default="{ fieldId }">
+                <KInput :id="fieldId" v-model="promoForm.code" placeholder="SUMMER20" />
+              </template>
+            </KFormField>
+            <KFormField name="promo-type" :label="t('settings.promo_type')">
+              <template #default="{ fieldId }">
+                <KSelect :id="fieldId" v-model="promoForm.type" :options="promoTypeOptions" />
+              </template>
+            </KFormField>
+            <KFormField name="promo-value" :label="t('settings.promo_value')">
+              <template #default="{ fieldId }">
+                <KInput :id="fieldId" v-model="promoForm.value" type="number" placeholder="20" />
+              </template>
+            </KFormField>
+            <KFormField name="promo-max-uses" :label="t('settings.promo_max_uses')">
+              <template #default="{ fieldId }">
+                <KInput :id="fieldId" v-model="promoForm.max_uses" type="number" placeholder="100" />
+              </template>
+            </KFormField>
+            <KFormField name="promo-expires" :label="t('settings.promo_expires_at')">
+              <template #default="{ fieldId }">
+                <KInput :id="fieldId" v-model="promoForm.expires_at" type="date" />
+              </template>
+            </KFormField>
+            <KButton type="submit" variant="primary" :loading="savingPromo">
+              {{ t('settings.promo_save') }}
+            </KButton>
+          </form>
+
+          <!-- Table -->
+          <div v-if="loadingPromos" class="text-muted text-sm">{{ t('settings.promo_loading') }}</div>
+          <div v-else-if="!promoCodes.length" class="text-muted text-sm">{{ t('settings.promo_empty') }}</div>
+          <div v-else class="promo-table-wrap">
+            <table class="promo-table">
+              <thead>
+                <tr>
+                  <th>{{ t('settings.promo_col_code') }}</th>
+                  <th>{{ t('settings.promo_col_type') }}</th>
+                  <th>{{ t('settings.promo_col_value') }}</th>
+                  <th>{{ t('settings.promo_col_usage') }}</th>
+                  <th>{{ t('settings.promo_col_status') }}</th>
+                  <th>{{ t('settings.promo_col_expiry') }}</th>
+                  <th>{{ t('settings.promo_col_actions') }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="promo in promoCodes" :key="promo.id">
+                  <td><code>{{ promo.code }}</code></td>
+                  <td>{{ promo.type === 'percent' ? t('settings.promo_type_percent') : t('settings.promo_type_fixed') }}</td>
+                  <td>{{ promo.type === 'percent' ? `${promo.value}%` : `$${promo.value}` }}</td>
+                  <td>{{ promo.used_count }} / {{ promo.max_uses || '∞' }}</td>
+                  <td>
+                    <KStatusPill :variant="promo.is_active ? 'active' : 'disabled'">
+                      {{ promo.is_active ? t('status.active') : t('status.disabled') }}
+                    </KStatusPill>
+                  </td>
+                  <td>{{ promo.expires_at || '—' }}</td>
+                  <td class="promo-actions">
+                    <KButton variant="ghost" size="sm" @click="togglePromoActive(promo)">
+                      {{ promo.is_active ? t('btn.disable') : t('btn.enable') }}
+                    </KButton>
+                    <KButton variant="ghost" size="sm" @click="deletePromoCode(promo)">
+                      {{ t('btn.delete') }}
+                    </KButton>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </template>
+
       <!-- Backup -->
       <template #backup>
         <BackupView />
@@ -850,5 +1020,15 @@ onMounted(async () => {
 .app-link-item { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-3); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); }
 .app-link-item__icon { font-size: 1.5rem; width: 40px; text-align: center; flex-shrink: 0; }
 .app-link-item__fields { display: flex; gap: var(--space-2); flex: 1; min-width: 0; flex-wrap: wrap; }
+
+/* Promo Codes */
+.promo-header { display: flex; justify-content: space-between; align-items: center; }
+.promo-form { margin-top: var(--space-3); padding: var(--space-4); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); }
+.promo-table-wrap { overflow-x: auto; margin-top: var(--space-3); }
+.promo-table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+.promo-table th, .promo-table td { padding: var(--space-2) var(--space-3); text-align: left; border-bottom: 1px solid var(--color-border); white-space: nowrap; }
+.promo-table th { font-weight: var(--font-semibold); color: var(--color-muted); font-size: var(--text-xs); text-transform: uppercase; }
+.promo-table code { padding: 2px 6px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-sm); font-size: var(--text-xs); }
+.promo-actions { display: flex; gap: var(--space-1); }
 
 </style>

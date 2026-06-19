@@ -227,6 +227,39 @@ function handleBackToList() {
   selectedTicketId.value = null
   ticketsStore.clearDetail()
 }
+
+// ---- Promo Code ----
+const promoCode = ref('')
+const promoApplying = ref(false)
+const promoMessage = ref('')
+const promoError = ref(false)
+const appliedPromo = ref<{ code: string; type: string; value: number } | null>(null)
+
+async function applyPromoCode() {
+  if (!promoCode.value.trim()) return
+  promoApplying.value = true
+  promoMessage.value = ''
+  promoError.value = false
+  try {
+    const { post: postApi } = useApi()
+    const res = await postApi<{ ok: boolean; code: string; type: string; value: number; discount_amount: number; final_amount: number }>('/api/portal/apply-promo', {
+      code: promoCode.value.trim(),
+    })
+    appliedPromo.value = { code: res.code, type: res.type, value: res.value }
+    if (res.type === 'percent') {
+      promoMessage.value = t('portal.promo.success_percent').replace('{value}', String(res.value))
+    } else {
+      promoMessage.value = t('portal.promo.success_fixed').replace('{value}', String(res.value))
+    }
+    promoError.value = false
+  } catch {
+    promoMessage.value = t('portal.promo.invalid')
+    promoError.value = true
+    appliedPromo.value = null
+  } finally {
+    promoApplying.value = false
+  }
+}
 </script>
 <template>
   <div class="sp">
@@ -326,6 +359,25 @@ function handleBackToList() {
               {{ node.name }}
             </option>
           </select>
+        </div>
+
+        <!-- Promo Code -->
+        <div class="sp__promo-section">
+          <label class="sp__promo-label">{{ t('portal.promo.title') }}</label>
+          <div class="sp__promo-row">
+            <KInput
+              v-model="promoCode"
+              :placeholder="t('portal.promo.placeholder')"
+              size="sm"
+              class="sp__promo-input"
+            />
+            <KButton variant="primary" size="sm" :loading="promoApplying" @click="applyPromoCode">
+              {{ t('portal.promo.apply') }}
+            </KButton>
+          </div>
+          <p v-if="promoMessage" class="sp__promo-message" :class="{ 'sp__promo-message--error': promoError, 'sp__promo-message--success': !promoError }">
+            {{ promoMessage }}
+          </p>
         </div>
 
         <!-- Profile list -->
@@ -626,6 +678,41 @@ function handleBackToList() {
   border-radius: var(--radius-md);
   color: var(--color-text);
   font-size: var(--text-sm);
+}
+/* Promo Code */
+.sp__promo-section {
+  margin-bottom: var(--space-4);
+  padding: var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+.sp__promo-label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text);
+  display: block;
+  margin-bottom: var(--space-2);
+}
+.sp__promo-row {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+.sp__promo-input {
+  flex: 1;
+  max-width: 200px;
+}
+.sp__promo-message {
+  margin-top: var(--space-2);
+  font-size: var(--text-xs);
+  margin-bottom: 0;
+}
+.sp__promo-message--success {
+  color: var(--color-success, #22c55e);
+}
+.sp__promo-message--error {
+  color: var(--color-danger, #ef4444);
 }
 .sp__profile-desc {
   font-size: var(--text-xs);
