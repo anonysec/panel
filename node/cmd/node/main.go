@@ -1028,16 +1028,13 @@ func executeWireGuardSetup(payload map[string]any) (string, map[string]any, stri
 		return "failed", map[string]any{}, fmt.Sprintf("write wg0.conf: %s", err.Error())
 	}
 
-	// Enable wg-quick@wg0 service
-	enableCmd := exec.Command("systemctl", "enable", "wg-quick@wg0")
-	if out, err := enableCmd.CombinedOutput(); err != nil {
-		return "failed", map[string]any{"output": string(out)}, fmt.Sprintf("systemctl enable wg-quick@wg0: %s", err.Error())
-	}
-
-	// Start WireGuard interface
-	upCmd := exec.Command("wg-quick", "up", "wg0")
-	if out, err := upCmd.CombinedOutput(); err != nil {
-		return "failed", map[string]any{"output": string(out)}, fmt.Sprintf("wg-quick up wg0: %s", err.Error())
+	// Enable and start wg-quick@wg0 via systemd (ensures it survives reboot)
+	exec.Command("systemctl", "enable", "wg-quick@wg0").Run()
+	// Ensure interface doesn't exist before starting via systemd
+	exec.Command("wg-quick", "down", "wg0").Run()
+	startCmd := exec.Command("systemctl", "start", "wg-quick@wg0")
+	if out, err := startCmd.CombinedOutput(); err != nil {
+		return "failed", map[string]any{"output": string(out)}, fmt.Sprintf("systemctl start wg-quick@wg0: %s", err.Error())
 	}
 
 	return "succeeded", map[string]any{"server_public_key": publicKey}, ""
