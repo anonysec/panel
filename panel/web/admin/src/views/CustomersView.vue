@@ -640,4 +640,34 @@ onMounted(() => {
   }
 }
 
+/* Mobile: table horizontal scroll */
+@media (max-width: 768px) {
+  .customers-view :deep(.k-table-wrapper),
+  .customers-view :deep(.k-data-table) {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .customers-view :deep(table) {
+    min-width: 700px;
+  }
+
+  .page-header {
+    justify-content: stretch;
+  }
+
+  .page-header :deep(.k-btn) {
+    width: 100%;
+  }
+
+  .main-tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .main-tab {
+    white-space: nowrap;
+  }
+}
+
 </style>

@@ -914,30 +914,97 @@ async function applyPromoCode() {
 }
 
 /* ===== Mobile responsive ===== */
-@media (max-width: 640px) {
+@media (max-width: 768px) {
+  .sp {
+    gap: var(--space-4);
+  }
+
+  .sp__section {
+    padding: var(--space-4);
+  }
+
+  .sp__hello {
+    font-size: var(--text-lg);
+  }
+
   .sp__usage-content {
     flex-direction: column;
-    align-items: stretch;
+    align-items: center;
     text-align: center;
   }
+
   .sp__account-grid {
     grid-template-columns: 1fr 1fr;
   }
+
   .sp__sub-url-row {
     flex-direction: column;
     align-items: stretch;
   }
+
   .sp__sub-url-input {
     width: 100%;
   }
+
+  .sp__node-selector {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-2);
+  }
+
+  .sp__node-select {
+    max-width: 100%;
+  }
+
+  .sp__promo-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .sp__promo-input {
+    max-width: 100%;
+  }
+
   .sp__profile-card {
     flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+
+  .sp__profile-info {
+    min-width: calc(100% - 60px);
+  }
+
+  .sp__profile-dl,
+  .sp__profile-card > :last-child {
+    width: 100%;
+  }
+
+  .sp__apps-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .sp__ticket-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-2);
+  }
+
+  .sp__form-actions {
+    flex-direction: column;
+  }
+
+  .sp__form-actions > * {
+    width: 100%;
   }
 }
 
 @media (max-width: 400px) {
   .sp__account-grid {
     grid-template-columns: 1fr;
+  }
+
+  .sp__apps-grid {
+    grid-template-columns: 1fr 1fr;
   }
 }
 

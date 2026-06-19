@@ -37,9 +37,18 @@ onMounted(async () => {
 
 // Sidebar state
 const sidebarCollapsed = ref(false)
+const mobileMenuOpen = ref(false)
 
 function handleCollapseToggle() {
   sidebarCollapsed.value = !sidebarCollapsed.value
+}
+
+function toggleMobileMenu() {
+  mobileMenuOpen.value = !mobileMenuOpen.value
+}
+
+function closeMobileMenu() {
+  mobileMenuOpen.value = false
 }
 
 function handleChangeLang(locale: string) {
@@ -83,6 +92,7 @@ const pageTitle = computed(() => {
 // Sidebar navigation
 function handleNavigate(routeName: string) {
   router.push({ name: routeName })
+  mobileMenuOpen.value = false
 }
 
 async function handleLogout() {
@@ -98,12 +108,24 @@ function handleNotifications() {
 </script>
 
 <template>
-  <div class="app-shell" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
+  <div class="app-shell" :class="{ 'sidebar-collapsed': sidebarCollapsed, 'mobile-open': mobileMenuOpen }">
+    <!-- Mobile hamburger button -->
+    <button class="mobile-menu-btn" aria-label="Toggle menu" @click="toggleMobileMenu">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path v-if="!mobileMenuOpen" d="M4 6h16M4 12h16M4 18h16" />
+        <path v-else d="M6 18L18 6M6 6l12 12" />
+      </svg>
+    </button>
+
+    <!-- Mobile overlay -->
+    <div v-if="mobileMenuOpen" class="mobile-overlay" @click="closeMobileMenu"></div>
+
     <TheSidebar
       :collapsed="sidebarCollapsed"
       :current-route="currentRoute"
       :version="panelVersion"
       :user="{ username: authStore.username, role: authStore.role }"
+      class="sidebar-wrapper"
       @navigate="handleNavigate"
       @collapse-toggle="handleCollapseToggle"
       @change-lang="handleChangeLang"
@@ -227,6 +249,77 @@ function handleNotifications() {
 
   .skeleton {
     animation: none;
+  }
+}
+
+/* Mobile hamburger button */
+.mobile-menu-btn {
+  display: none;
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 1100;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: var(--radius-md, 8px);
+  background: var(--color-surface, #0b1120);
+  border: 1px solid var(--color-border, #28333f);
+  color: var(--color-text, #e6edf3);
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+}
+
+.mobile-menu-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* Mobile overlay */
+.mobile-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 999;
+}
+
+/* Mobile responsive: sidebar collapses to hamburger */
+@media (max-width: 768px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .app-shell.sidebar-collapsed {
+    grid-template-columns: 1fr;
+  }
+
+  .mobile-menu-btn {
+    display: flex;
+  }
+
+  .mobile-overlay {
+    display: block;
+  }
+
+  .sidebar-wrapper {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    z-index: 1000;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+  }
+
+  .mobile-open .sidebar-wrapper {
+    transform: translateX(0);
+  }
+
+  .main {
+    padding: var(--space-4, 16px);
+    padding-top: 60px;
   }
 }
 </style>
