@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useCustomersStore } from '@/stores/customers'
 import { useToast } from '@koris/composables/useToast'
 import { useI18n } from '@koris/composables/useI18n'
+import { useApi } from '@koris/composables/useApi'
 import KTabs from '@koris/ui/KTabs.vue'
 import KFormField from '@koris/ui/KFormField.vue'
 import KInput from '@koris/ui/KInput.vue'
@@ -20,8 +21,19 @@ const { t } = useI18n()
 const router = useRouter()
 const store = useCustomersStore()
 const toast = useToast()
+const { get } = useApi()
 const activeTab = ref('profile')
 const saving = ref(false)
+
+// ─── WireGuard Peers ─────────────────────────────────────────────────────────
+const wgPeers = ref<any[]>([])
+async function loadWgPeers() {
+  if (!props.id || props.id === 'new') return
+  try {
+    const res = await get<{ ok: boolean; peers: any[] }>(`/api/wireguard/peers?customer_id=${props.id}`)
+    wgPeers.value = res.peers || []
+  } catch { /* ignore */ }
+}
 
 // ─── Traffic Reset State (Requirement 3.4) ───────────────────────────────────
 const resettingTraffic = ref(false)
@@ -100,6 +112,7 @@ async function saveConnectionLimit() {
 const tabs = computed(() => [
   { key: 'profile', label: t('customer.tab_profile') },
   { key: 'usage', label: t('customer.tab_usage') },
+  { key: 'wireguard', label: 'WireGuard' },
   { key: 'history', label: t('customer.tab_history') },
 ])
 
@@ -176,6 +189,7 @@ function formatBytes(bytes: number): string {
 onMounted(() => {
   if (props.id && props.id !== 'new') {
     store.loadDetail(Number(props.id))
+    loadWgPeers()
   }
 })
 </script>
@@ -455,6 +469,28 @@ onMounted(() => {
                 </tr>
               </tbody>
             </table>
+          </div>
+        </template>
+
+        <!-- WireGuard Tab -->
+        <template #wireguard>
+          <div class="wireguard-tab">
+            <div v-if="wgPeers.length === 0" class="text-muted text-sm">
+              No WireGuard peers assigned. Peers are created automatically when the customer has an active subscription and a WireGuard-enabled node is available.
+            </div>
+            <div v-else class="wg-peers-list">
+              <div v-for="peer in wgPeers" :key="peer.id" class="wg-peer-card">
+                <div class="wg-peer-card__header">
+                  <span class="wg-peer-card__node">{{ peer.node_name || 'Node #' + peer.node_id }}</span>
+                  <KStatusPill :status="peer.status" size="sm" />
+                </div>
+                <div class="wg-peer-card__details">
+                  <div class="wg-peer-detail"><span class="text-muted">IP:</span> {{ peer.allowed_ips }}</div>
+                  <div class="wg-peer-detail"><span class="text-muted">Public Key:</span> <code>{{ peer.public_key?.slice(0, 20) }}...</code></div>
+                  <div class="wg-peer-detail"><span class="text-muted">RX:</span> {{ formatBytes(peer.rx_bytes || 0) }} <span class="text-muted">TX:</span> {{ formatBytes(peer.tx_bytes || 0) }}</div>
+                </div>
+              </div>
+            </div>
           </div>
         </template>
       </KTabs>

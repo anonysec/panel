@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -19,6 +20,7 @@ type WgPeer struct {
 	ID                  int64  `json:"id"`
 	CustomerID          *int64 `json:"customer_id"`
 	NodeID              int64  `json:"node_id"`
+	NodeName            string `json:"node_name,omitempty"`
 	PublicKey           string `json:"public_key"`
 	PresharedKey        string `json:"preshared_key,omitempty"`
 	PrivateKeyEncrypted string `json:"private_key_encrypted,omitempty"`
@@ -45,14 +47,25 @@ func (s *Server) wireguardPeers(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) listWireguardPeers(w http.ResponseWriter, r *http.Request) {
-	rows, err := s.DB.Query(`
+	query := `
 		SELECT p.id, p.customer_id, p.node_id, p.public_key, p.allowed_ips,
 		       COALESCE(p.endpoint,''), p.status, p.rx_bytes, p.tx_bytes,
-		       p.created_at, p.updated_at, COALESCE(c.username,'')
+		       p.created_at, p.updated_at, COALESCE(c.username,''), COALESCE(n.name,'')
 		FROM wg_peers p
 		LEFT JOIN customers c ON c.id = p.customer_id
-		ORDER BY p.id DESC
-		LIMIT 500`)
+		LEFT JOIN nodes n ON n.id = p.node_id`
+	args := []any{}
+
+	// Filter by customer_id if provided
+	if cidStr := r.URL.Query().Get("customer_id"); cidStr != "" {
+		if cid, err := strconv.ParseInt(cidStr, 10, 64); err == nil && cid > 0 {
+			query += ` WHERE p.customer_id = ?`
+			args = append(args, cid)
+		}
+	}
+	query += ` ORDER BY p.id DESC LIMIT 500`
+
+	rows, err := s.DB.Query(query, args...)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
@@ -64,15 +77,17 @@ func (s *Server) listWireguardPeers(w http.ResponseWriter, r *http.Request) {
 		var p WgPeer
 		var customerID *int64
 		var created, updated time.Time
+		var nodeName string
 		if err := rows.Scan(&p.ID, &customerID, &p.NodeID, &p.PublicKey, &p.AllowedIPs,
 			&p.Endpoint, &p.Status, &p.RxBytes, &p.TxBytes,
-			&created, &updated, &p.Username); err != nil {
+			&created, &updated, &p.Username, &nodeName); err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 			return
 		}
 		p.CustomerID = customerID
 		p.CreatedAt = created.Format(time.RFC3339)
 		p.UpdatedAt = updated.Format(time.RFC3339)
+		p.NodeName = nodeName
 		peers = append(peers, p)
 	}
 	if err := rows.Err(); err != nil {

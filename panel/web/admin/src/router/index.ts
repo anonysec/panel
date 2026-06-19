@@ -21,7 +21,7 @@ const router = createRouter({
         { path: 'templates', name: 'templates', component: () => import('@/views/TemplatesView.vue') },
         { path: 'settings/:tab?', name: 'settings', component: () => import('@/views/SettingsView.vue'), props: true },
         { path: 'backups', redirect: '/dashboard/settings/backup' },
-        { path: 'wireguard', name: 'wireguard', component: () => import('@/views/WireGuardPeersView.vue') },
+        { path: 'wireguard', redirect: '/dashboard/nodes' },
         { path: 'notifications', name: 'notifications', component: () => import('@/views/NotificationsView.vue') },
       ]
     },
