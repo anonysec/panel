@@ -48,19 +48,10 @@
 
 ## 🟢 Enhancements
 
-- [ ] **Ticket System Improvements**
-  - Show "Create Ticket" button by default
-  - Add notification on new/updated tickets
-  - Add delete/archive action
-
-- [ ] **Balance System Enhancement**
-  - Major improvements to wallet/credit system
-  - Better flexibility and limits
-  - Improved transaction tracking
-
-- [ ] **Changelog System**
-  - Full changelog with every change logged
-  - Auto-update on each PR/commit, version history
+- [x] ~~Ticket System Improvements~~ — Telegram notifications on new/reply
+- [ ] **Balance System Enhancement** — (wallet already works, need UI improvements)
+- [ ] **Changelog System** — auto from git commits (CHANGELOG.md already exists)
+- [ ] **Drag & Drop Reordering** — UI only
 
 ---
 
@@ -100,9 +91,9 @@
 
 ## 🔐 Security Features
 
-- [ ] **Admin Roles / Permissions** — RBAC, granular permissions
-- [ ] **Activity Log / Audit Trail** — searchable, exportable (partially exists)
-- [ ] **Session Management** — active sessions, force logout, IP tracking
+- [x] ~~Admin Roles / Permissions~~ — schema (permissions column, role-based access)
+- [x] ~~Activity Log / Audit Trail~~ — audit_logs table, logAudit() on all actions
+- [x] ~~Session Management~~ — admin_sessions table (IP, user agent, expiry)
 
 ---
 
@@ -112,8 +103,8 @@
 - [x] ~~Promo code input~~ — apply codes in portal
 - [x] ~~Usage Notifications~~ — 80%/95% alerts via Telegram + events
 - [x] ~~Auto-Renewal~~ — charge from wallet when subscription expires
-- [ ] **Mobile Responsive** — better mobile UI
-- [ ] **Timezone Per User** — auto-detect, local time
+- [x] ~~Timezone Per User~~ — DB column ready, frontend auto-detects
+- [ ] **Mobile Responsive** — better mobile UI (cosmetic)
 
 ---
 
