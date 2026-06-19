@@ -763,8 +763,25 @@ func main() {
 			}
 		}()
 
-		// Start HTTPS server
-		log.Fatal(http.ListenAndServeTLS(cfg.TLSAddr, tlsCert, tlsKey, limiter.Middleware(handler)))
+		// Start HTTPS server — with fallback to HTTP if TLS fails
+		tlsErr := make(chan error, 1)
+		go func() {
+			err := http.ListenAndServeTLS(cfg.TLSAddr, tlsCert, tlsKey, limiter.Middleware(handler))
+			tlsErr <- err
+		}()
+
+		// Give TLS server a moment to start or fail
+		select {
+		case err := <-tlsErr:
+			// TLS failed to start — fall back to plain HTTP
+			log.Printf("[CRITICAL] TLS server failed: %v", err)
+			log.Printf("[FALLBACK] Starting plain HTTP on %s — fix your certificate and restart", cfg.Addr)
+			log.Fatal(http.ListenAndServe(cfg.Addr, limiter.Middleware(handler)))
+		case <-time.After(2 * time.Second):
+			// TLS started OK, block on redirect server (already running in goroutine)
+			log.Printf("HTTPS server running on %s", cfg.TLSAddr)
+			select {} // block forever
+		}
 	} else {
 		if fileExists(tlsCert) && fileExists(tlsKey) && behindProxy {
 			log.Printf("TLS available but panel is behind reverse proxy (%s) — nginx handles TLS", cfg.Addr)
