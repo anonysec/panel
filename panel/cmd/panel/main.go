@@ -394,19 +394,24 @@ server {
 }
 
 func main() {
-	// Optimize for single-core servers
+	// Auto-tune for available CPU cores (respect env override)
 	if os.Getenv("GOMAXPROCS") == "" {
-		runtime.GOMAXPROCS(1)
+		cores := runtime.NumCPU()
+		if cores > 4 {
+			cores = 4 // cap at 4 for a panel process
+		}
+		runtime.GOMAXPROCS(cores)
 	}
 
-	// Optimize GC for low-memory environments (1GB RAM)
-	// GOGC=50 means GC triggers at 50% heap growth (more frequent but lower peak memory)
+	// GC tuning: balance throughput vs memory
+	// GOGC=100 (default) is fine for 4GB — more throughput, less GC overhead
+	// Only reduce for <2GB RAM
 	if os.Getenv("GOGC") == "" {
-		debug.SetGCPercent(50)
+		debug.SetGCPercent(100)
 	}
-	// Set soft memory limit to 100MB for the Go process
+	// Memory limit: use 512MB on 4GB+ servers, 100MB on 1GB
 	if os.Getenv("GOMEMLIMIT") == "" {
-		debug.SetMemoryLimit(100 * 1024 * 1024) // 100MB
+		debug.SetMemoryLimit(512 * 1024 * 1024) // 512MB
 	}
 
 	cfg := config.Load()
@@ -722,8 +727,8 @@ func main() {
 
 	log.Printf("panel listening on %s", cfg.Addr)
 
-	// Rate limiter: 10 requests/sec per IP, burst 30
-	limiter := ratelimit.New(10, 30, cfg.TrustedProxies)
+	// Rate limiter: 30 requests/sec per IP, burst 60
+	limiter := ratelimit.New(30, 60, cfg.TrustedProxies)
 
 	// Apply no-cache middleware on API responses
 	handler := api.NoCacheMiddleware(mux)

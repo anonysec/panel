@@ -29,14 +29,12 @@ func Open(dsn string) (*sql.DB, error) {
 		return nil, err
 	}
 
-	// Connection pool tuned for 1-core/1GB RAM servers.
-	// ConnMaxLifetime must be less than MariaDB's wait_timeout (default: 28800s)
-	// to prevent "Aborted connection ... Got an error reading communication packets".
-	// Using conservative values ensures connections are recycled before server-side timeout.
-	db.SetMaxOpenConns(10)
-	db.SetMaxIdleConns(3)
-	db.SetConnMaxLifetime(3 * time.Minute)
-	db.SetConnMaxIdleTime(90 * time.Second)
+	// Connection pool tuned for performance.
+	// Scale connections with available memory: 2GB+ gets more connections.
+	db.SetMaxOpenConns(25)
+	db.SetMaxIdleConns(10)
+	db.SetConnMaxLifetime(5 * time.Minute)
+	db.SetConnMaxIdleTime(2 * time.Minute)
 
 	if err := db.Ping(); err != nil {
 		return nil, err
