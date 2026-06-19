@@ -119,10 +119,10 @@
 
 ## 📊 Reporting & Analytics
 
-- [ ] **Revenue Reports** — daily/weekly/monthly
-- [ ] **User Reports** — registrations, retention
-- [ ] **Bandwidth Reports** — per-node, per-user
-- [ ] **Export PDF / Excel** — downloadable reports
+- [x] ~~Revenue Reports~~ — GET /api/reports/revenue (daily/weekly/monthly, by plan)
+- [x] ~~User Reports~~ — GET /api/reports/users (registrations, status breakdown)
+- [x] ~~Bandwidth Reports~~ — GET /api/reports/bandwidth (per-node, top users)
+- [ ] **Export PDF / Excel** — downloadable reports (future)
 
 ---
 
@@ -130,9 +130,9 @@
 
 - [x] ~~Webhooks~~ — schema (webhooks + webhook_logs tables)
 - [x] ~~Trial Period~~ — schema (trial_enabled, trial_days, trial_used)
-- [ ] **Time-Based Plans** — hourly, daily, weekly
-- [ ] **Data Packs** — buy extra data
-- [ ] **Plan Upgrade / Downgrade** — pro-rated (schema done, UI needed)
+- [x] ~~Time-Based Plans~~ — duration_hours column, hourly/daily support
+- [x] ~~Data Packs~~ — data_packs + customer_data_packs tables
+- [ ] **Plan Upgrade / Downgrade UI** — frontend for pro-rated changes
 
 ---
 
@@ -140,8 +140,8 @@
 
 - [x] ~~Alert System~~ — schema (alert_rules table, default rules)
 - [x] ~~Ticket Notifications~~ — Telegram on new ticket + reply
-- [ ] **Uptime Monitoring** — node health checks (partially in worker)
-- [ ] **Server Maintenance** — scheduled mode
+- [x] ~~Maintenance Mode~~ — settings for maintenance_mode, message, ends_at
+- [ ] **Uptime Monitoring UI** — dashboard widget for node health
 
 ---
 
