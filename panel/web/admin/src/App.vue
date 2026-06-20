@@ -4,7 +4,7 @@ import { useApi } from '@koris/composables/useApi'
 import { useTheme, availableThemes } from '@koris/composables/useTheme'
 import type { ThemeMode, UITheme } from '@koris/composables/useTheme'
 
-const { get } = useApi()
+const { get } = useApi({ showErrorToast: false })
 const { setMode, setTheme } = useTheme()
 
 onMounted(async () => {

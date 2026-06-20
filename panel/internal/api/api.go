@@ -503,7 +503,7 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/api/wireguard/peers/", s.requireFullAdmin(s.wireguardPeerByID))
 	mux.HandleFunc("/api/certificates", s.requireFullAdmin(s.certificates))
 	mux.HandleFunc("/api/certificates/", s.requireFullAdmin(s.certificateByID))
-	mux.HandleFunc("/api/panel-settings", s.requireFullAdmin(s.panelSettings))
+	mux.HandleFunc("/api/panel-settings", s.requireAdmin(s.panelSettings))
 	mux.HandleFunc("/api/public-settings", s.publicSettings)
 	mux.HandleFunc("/api/export/customers.csv", s.requireFullAdmin(s.exportCustomersCSV))
 	mux.HandleFunc("/api/export/payments.csv", s.requireFullAdmin(s.exportPaymentsCSV))
@@ -7634,6 +7634,12 @@ func (s *Server) panelSettings(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"ok": true, "settings": settings})
 
 	case http.MethodPatch:
+		// Only owner/admin can change settings
+		_, role, _ := s.currentAdmin(r)
+		if role == "reseller" {
+			writeJSONCode(w, http.StatusForbidden, map[string]any{"ok": false, "error": "forbidden"})
+			return
+		}
 		var in map[string]string
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad_json"})

@@ -664,7 +664,7 @@ onMounted(() => {
           </template>
         </KFormField>
         <div class="slide-form__footer">
-          <KButton variant="ghost" @click="showUserSlideOver = false">{{ t('btn.cancel') }}</KButton>
+          <KButton type="button" variant="ghost" @click="showUserSlideOver = false">{{ t('btn.cancel') }}</KButton>
           <KButton type="submit" variant="primary" :loading="saving">{{ t('btn.create') }}</KButton>
         </div>
       </form>
@@ -737,7 +737,7 @@ onMounted(() => {
           </template>
         </KFormField>
         <div class="slide-form__footer">
-          <KButton variant="ghost" @click="showResellerSlideOver = false">{{ t('btn.cancel') }}</KButton>
+          <KButton type="button" variant="ghost" @click="showResellerSlideOver = false">{{ t('btn.cancel') }}</KButton>
           <KButton type="submit" variant="primary" :loading="saving">
             {{ editingResellerId ? t('btn.save') : t('resellers.create') }}
           </KButton>
@@ -754,7 +754,7 @@ onMounted(() => {
           </template>
         </KFormField>
         <div class="slide-form__footer">
-          <KButton variant="ghost" @click="showCreditSlideOver = false">{{ t('btn.cancel') }}</KButton>
+          <KButton type="button" variant="ghost" @click="showCreditSlideOver = false">{{ t('btn.cancel') }}</KButton>
           <KButton type="submit" variant="primary" :loading="saving">{{ t('resellers.adjust_credit') }}</KButton>
         </div>
       </form>

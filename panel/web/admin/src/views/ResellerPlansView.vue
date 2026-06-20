@@ -72,7 +72,7 @@ onMounted(loadPlans)
             <th>{{ t('plans.name') }}</th>
             <th>{{ t('plans.data_gb') }}</th>
             <th>{{ t('plans.duration_days') }}</th>
-            <th>{{ t('reseller_plans.wholesale') }}</th>
+            <th>{{ t('plans.price') }}</th>
             <th>{{ t('reseller_plans.sell_price') }}</th>
             <th>{{ t('reseller_plans.profit') }}</th>
             <th></th>
@@ -93,7 +93,7 @@ onMounted(loadPlans)
                 class="price-input"
               />
             </td>
-            <td :class="['profit-cell', { positive: profit(plan) > 0, negative: profit(plan) < 0 }]">
+            <td :class="['profit-cell', { positive: profit(plan) > 0 }]">
               {{ profit(plan).toLocaleString() }}
             </td>
             <td>
