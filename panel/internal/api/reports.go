@@ -263,6 +263,50 @@ func (s *Server) bandwidthStats(w http.ResponseWriter, r *http.Request) {
 		points = filled
 	}
 
+	// For 7d and 30d periods, fill in missing dates
+	if labelFormat == "date" {
+		days := 7
+		if period == "30d" {
+			days = 30
+		}
+		dateMap := map[string]DataPoint{}
+		for _, p := range points {
+			dateMap[p.Label] = p
+		}
+		filled := make([]DataPoint, 0, days)
+		now := time.Now().UTC()
+		for i := days - 1; i >= 0; i-- {
+			d := now.AddDate(0, 0, -i)
+			label := d.Format("2006-01-02")
+			if dp, ok := dateMap[label]; ok {
+				filled = append(filled, dp)
+			} else {
+				filled = append(filled, DataPoint{Label: label, Download: 0, Upload: 0})
+			}
+		}
+		points = filled
+	}
+
+	// For "all" period, fill in missing months (last 12 months)
+	if labelFormat == "month" {
+		monthMap := map[string]DataPoint{}
+		for _, p := range points {
+			monthMap[p.Label] = p
+		}
+		filled := make([]DataPoint, 0, 12)
+		now := time.Now().UTC()
+		for i := 11; i >= 0; i-- {
+			d := now.AddDate(0, -i, 0)
+			label := d.Format("2006-01")
+			if dp, ok := monthMap[label]; ok {
+				filled = append(filled, dp)
+			} else {
+				filled = append(filled, DataPoint{Label: label, Download: 0, Upload: 0})
+			}
+		}
+		points = filled
+	}
+
 	writeJSON(w, map[string]any{
 		"ok":             true,
 		"total_download": totalDownload,

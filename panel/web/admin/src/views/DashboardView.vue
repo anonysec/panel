@@ -32,7 +32,7 @@ function handleStatClick(routeName: string) {
   router.push({ name: routeName })
 }
 
-// ─── Bandwidth Stats (new period-based) ───
+// ─── Bandwidth Stats (Bar Chart) ───
 type BandwidthPeriod = '1d' | '7d' | '30d' | 'all'
 interface BandwidthPoint {
   label: string
@@ -46,18 +46,10 @@ interface BandwidthResponse {
   points: BandwidthPoint[]
 }
 
-const selectedPeriod = ref<BandwidthPeriod>('1d')
+const selectedPeriod = ref<BandwidthPeriod>('7d')
 const bandwidthData = ref<BandwidthResponse | null>(null)
 const bandwidthLoading = ref(false)
 const hoveredBar = ref<number | null>(null)
-const tooltipPos = ref({ x: 0, y: 0 })
-
-const periodLabels: Record<BandwidthPeriod, string> = {
-  '1d': '1D',
-  '7d': '1W',
-  '30d': '1M',
-  'all': 'All',
-}
 
 async function fetchBandwidthStats() {
   bandwidthLoading.value = true
@@ -73,133 +65,72 @@ async function fetchBandwidthStats() {
   }
 }
 
-const bandwidthChartData = computed(() => {
-  if (!bandwidthData.value?.points) return []
-  return bandwidthData.value.points.map((p) => ({
-    label: p.label,
-    value: p.download + p.upload,
-    color: 'var(--color-primary)',
-  }))
-})
-
-// ─── Custom Stacked Area Chart ───
-const svgW = 500
-const svgH = 220
-const pad = { top: 14, right: 14, bottom: 28, left: 14 }
+// ─── Bar Chart SVG ───
+const svgW = 600
+const svgH = 300
+const pad = { top: 16, right: 16, bottom: 30, left: 48 }
 
 const chartW = computed(() => svgW - pad.left - pad.right)
 const chartH = computed(() => svgH - pad.top - pad.bottom)
 
-const maxBandwidth = computed(() => {
-  if (!bandwidthData.value?.points?.length) return 1
-  return Math.max(...bandwidthData.value.points.map(p => p.download + p.upload), 1)
-})
-
-function scaleX(i: number, total: number): number {
-  if (total <= 1) return pad.left
-  return pad.left + (i / (total - 1)) * chartW.value
+function formatBytesShort(bytes: number): string {
+  if (bytes === 0) return '0 B'
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1048576) return `${(bytes / 1024).toFixed(0)} KB`
+  if (bytes < 1073741824) return `${(bytes / 1048576).toFixed(0)} MB`
+  return `${(bytes / 1073741824).toFixed(0)} GB`
 }
 
-function scaleY(val: number): number {
-  return pad.top + chartH.value - (val / maxBandwidth.value) * chartH.value
-}
-
-function buildSmoothPath(points: { x: number; y: number }[]): string {
-  if (points.length < 2) return ''
-  let d = `M ${points[0].x} ${points[0].y}`
-  for (let i = 1; i < points.length; i++) {
-    const prev = points[i - 1]
-    const curr = points[i]
-    const cpx1 = prev.x + (curr.x - prev.x) / 3
-    const cpy1 = prev.y
-    const cpx2 = curr.x - (curr.x - prev.x) / 3
-    const cpy2 = curr.y
-    d += ` C ${cpx1} ${cpy1}, ${cpx2} ${cpy2}, ${curr.x} ${curr.y}`
-  }
-  return d
-}
-
-const downloadAreaPath = computed(() => {
+const barChartData = computed(() => {
   const pts = bandwidthData.value?.points
-  if (!pts?.length) return ''
+  if (!pts?.length) return { bars: [], yTicks: [], xLabels: [] }
+
+  const values = pts.map(p => p.download + p.upload)
+  const max = Math.max(...values, 1)
   const n = pts.length
-  const line: { x: number; y: number }[] = pts.map((p, i) => ({
-    x: scaleX(i, n),
-    y: scaleY(p.download),
+  const gap = 4
+  const barW = (chartW.value - (n - 1) * gap) / n
+
+  const bars = pts.map((p, i) => {
+    const val = p.download + p.upload
+    const h = (val / max) * chartH.value
+    return {
+      x: pad.left + i * (barW + gap),
+      y: pad.top + chartH.value - h,
+      width: barW,
+      height: h,
+      label: p.label,
+      download: p.download,
+      upload: p.upload,
+      total: val,
+    }
+  })
+
+  // Y-axis ticks (5 levels: 0 to max)
+  const yTicks = Array.from({ length: 5 }, (_, i) => {
+    const val = (max / 4) * i
+    return {
+      y: pad.top + chartH.value - (val / max) * chartH.value,
+      label: formatBytesShort(val),
+    }
+  })
+
+  // X-axis labels (format as MM/DD for dates, HH:00 for hours)
+  const xLabels = pts.map((p, i) => ({
+    x: pad.left + i * (barW + gap) + barW / 2,
+    text: p.label.includes('-') ? p.label.slice(5).replace('-', '/') : p.label,
   }))
-  const baseline = pad.top + chartH.value
-  const linePath = buildSmoothPath(line)
-  return `${linePath} L ${line[n - 1].x} ${baseline} L ${line[0].x} ${baseline} Z`
+
+  return { bars, yTicks, xLabels }
 })
 
-const downloadLinePath = computed(() => {
-  const pts = bandwidthData.value?.points
-  if (!pts?.length) return ''
-  const n = pts.length
-  const line = pts.map((p, i) => ({ x: scaleX(i, n), y: scaleY(p.download) }))
-  return buildSmoothPath(line)
-})
-
-const uploadAreaPath = computed(() => {
-  const pts = bandwidthData.value?.points
-  if (!pts?.length) return ''
-  const n = pts.length
-  // Upload stacked on top of download
-  const topLine: { x: number; y: number }[] = pts.map((p, i) => ({
-    x: scaleX(i, n),
-    y: scaleY(p.download + p.upload),
-  }))
-  const bottomLine: { x: number; y: number }[] = pts.map((p, i) => ({
-    x: scaleX(i, n),
-    y: scaleY(p.download),
-  }))
-  const topPath = buildSmoothPath(topLine)
-  // Close area: go along bottom line in reverse
-  const reversedBottom = [...bottomLine].reverse()
-  let closePath = ` L ${reversedBottom[0].x} ${reversedBottom[0].y}`
-  for (let i = 1; i < reversedBottom.length; i++) {
-    const prev = reversedBottom[i - 1]
-    const curr = reversedBottom[i]
-    const cpx1 = prev.x + (curr.x - prev.x) / 3
-    const cpy1 = prev.y
-    const cpx2 = curr.x - (curr.x - prev.x) / 3
-    const cpy2 = curr.y
-    closePath += ` C ${cpx1} ${cpy1}, ${cpx2} ${cpy2}, ${curr.x} ${curr.y}`
-  }
-  return `${topPath}${closePath} Z`
-})
-
-const uploadLinePath = computed(() => {
-  const pts = bandwidthData.value?.points
-  if (!pts?.length) return ''
-  const n = pts.length
-  const line = pts.map((p, i) => ({ x: scaleX(i, n), y: scaleY(p.download + p.upload) }))
-  return buildSmoothPath(line)
-})
-
-const xLabels = computed(() => {
-  const pts = bandwidthData.value?.points
-  if (!pts?.length) return []
-  const n = pts.length
-  if (n <= 6) {
-    return pts.map((p, i) => ({ x: scaleX(i, n), text: p.label }))
-  }
-  // Show ~5 labels evenly spaced
-  const step = Math.max(Math.floor(n / 5), 1)
-  const labels: { x: number; text: string }[] = []
-  for (let i = 0; i < n; i += step) {
-    labels.push({ x: scaleX(i, n), text: pts[i].label })
-  }
-  // Always include last
-  if (labels[labels.length - 1]?.text !== pts[n - 1].label) {
-    labels.push({ x: scaleX(n - 1, n), text: pts[n - 1].label })
-  }
-  return labels
+const totalUsage = computed(() => {
+  return (bandwidthData.value?.total_download ?? 0) + (bandwidthData.value?.total_upload ?? 0)
 })
 
 const hoveredPoint = computed(() => {
-  if (hoveredBar.value === null || !bandwidthData.value?.points) return null
-  return bandwidthData.value.points[hoveredBar.value] ?? null
+  if (hoveredBar.value === null || !barChartData.value.bars.length) return null
+  return barChartData.value.bars[hoveredBar.value] ?? null
 })
 
 let refreshInterval: ReturnType<typeof setInterval> | null = null
@@ -272,141 +203,103 @@ function formatDuration(seconds: number): string {
     <section class="charts-row">
       <div class="chart-panel chart-panel--traffic">
         <div class="panel-header">
-          <h4 class="panel-title">{{ t('dashboard.data_usage') }}</h4>
-          <div class="period-pills">
-            <button
-              v-for="(label, key) in periodLabels"
-              :key="key"
-              class="period-pill"
-              :class="{ 'period-pill--active': selectedPeriod === key }"
-              @click="selectedPeriod = key as BandwidthPeriod"
-            >
-              {{ label }}
-            </button>
+          <div>
+            <div class="panel-title">Usage</div>
+            <div class="panel-subtitle">Monitor admin traffic usage over time</div>
           </div>
+          <select v-model="selectedPeriod" class="period-select" aria-label="Select time period">
+            <option value="1d">24 hours</option>
+            <option value="7d">7 days</option>
+            <option value="30d">30 days</option>
+            <option value="all">All time</option>
+          </select>
         </div>
         <div v-if="bandwidthLoading && !bandwidthData" class="traffic-fallback">
-          <KSkeleton variant="rect" :width="'100%'" :height="220" />
+          <KSkeleton variant="rect" :width="'100%'" :height="300" />
         </div>
-        <div v-else-if="bandwidthChartData.length > 0" class="bandwidth-chart-wrapper" @mouseleave="hoveredBar = null">
-          <svg class="stacked-chart" :viewBox="`0 0 ${svgW} ${svgH}`" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Stacked area chart showing download and upload bandwidth">
-            <defs>
-              <linearGradient id="dl-gradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.6" />
-                <stop offset="100%" stop-color="#3b82f6" stop-opacity="0.1" />
-              </linearGradient>
-              <linearGradient id="ul-gradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stop-color="#8b5cf6" stop-opacity="0.6" />
-                <stop offset="100%" stop-color="#8b5cf6" stop-opacity="0.1" />
-              </linearGradient>
-            </defs>
-            <!-- Grid lines -->
-            <g class="chart-grid">
-              <line
-                v-for="i in 4"
-                :key="'grid-' + i"
-                :x1="pad.left"
-                :y1="pad.top + (chartH * i / 4)"
-                :x2="svgW - pad.right"
-                :y2="pad.top + (chartH * i / 4)"
-                stroke="var(--color-border)"
-                stroke-width="0.5"
-                stroke-dasharray="4 2"
-                opacity="0.2"
-              />
-            </g>
-            <!-- Download area (blue, bottom) -->
-            <path :d="downloadAreaPath" fill="url(#dl-gradient)" />
-            <path :d="downloadLinePath" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
-            <!-- Upload area (purple, stacked on top) -->
-            <path :d="uploadAreaPath" fill="url(#ul-gradient)" />
-            <path :d="uploadLinePath" fill="none" stroke="#8b5cf6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
-            <!-- Hover columns (invisible rects for interaction) -->
-            <rect
-              v-for="(_, i) in bandwidthData?.points ?? []"
-              :key="i"
-              :x="scaleX(i, bandwidthData!.points.length) - (chartW / (bandwidthData!.points.length) / 2)"
-              :y="pad.top"
-              :width="chartW / bandwidthData!.points.length"
-              :height="chartH"
-              fill="transparent"
-              @mouseenter="hoveredBar = i"
-              @mouseleave="hoveredBar = null"
-            />
-            <!-- Hover indicator line -->
+        <div v-else-if="barChartData.bars.length > 0" class="bandwidth-chart-wrapper" @mouseleave="hoveredBar = null">
+          <svg class="bar-chart" :viewBox="`0 0 ${svgW} ${svgH}`" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Bar chart showing bandwidth usage">
+            <!-- Dashed horizontal grid lines -->
             <line
-              v-if="hoveredBar !== null && bandwidthData?.points"
-              :x1="scaleX(hoveredBar, bandwidthData.points.length)"
-              :y1="pad.top"
-              :x2="scaleX(hoveredBar, bandwidthData.points.length)"
-              :y2="pad.top + chartH"
-              stroke="rgba(255,255,255,0.4)"
+              v-for="tick in barChartData.yTicks"
+              :key="'grid-' + tick.label"
+              :x1="pad.left"
+              :y1="tick.y"
+              :x2="svgW - pad.right"
+              :y2="tick.y"
+              stroke="var(--color-border)"
               stroke-width="1"
-              stroke-dasharray="3 3"
+              stroke-dasharray="4 3"
+              opacity="0.5"
+            />
+            <!-- Y-axis labels -->
+            <text
+              v-for="tick in barChartData.yTicks"
+              :key="'y-' + tick.label"
+              :x="pad.left - 8"
+              :y="tick.y + 4"
+              text-anchor="end"
+              class="chart-axis-label"
+            >{{ tick.label }}</text>
+            <!-- Bars with rounded top -->
+            <rect
+              v-for="(bar, i) in barChartData.bars"
+              :key="'bar-' + i"
+              class="chart-bar"
+              :class="{ 'chart-bar--hovered': hoveredBar === i }"
+              :x="bar.x"
+              :y="bar.y"
+              :width="bar.width"
+              :height="bar.height"
+              :rx="6"
+              :ry="6"
+              fill="var(--color-primary)"
+              @mouseenter="hoveredBar = i"
+            />
+            <!-- Flat bottom rectangles to mask the bottom rounded corners -->
+            <rect
+              v-for="(bar, i) in barChartData.bars"
+              :key="'bar-base-' + i"
+              :x="bar.x"
+              :y="pad.top + chartH - 6"
+              :width="bar.width"
+              :height="6"
+              fill="var(--color-primary)"
+              :opacity="hoveredBar === i ? 0.8 : 1"
+              class="chart-bar-base"
+              @mouseenter="hoveredBar = i"
             />
             <!-- X-axis labels -->
             <text
-              v-for="lbl in xLabels"
-              :key="lbl.text"
+              v-for="(lbl, i) in barChartData.xLabels"
+              :key="'x-' + i"
               :x="lbl.x"
-              :y="svgH - 6"
+              :y="svgH - 8"
               text-anchor="middle"
-              class="chart-x-label"
+              class="chart-axis-label"
             >{{ lbl.text }}</text>
           </svg>
-          <!-- Tooltip (positioned above hovered point) -->
+          <!-- Hover tooltip -->
           <div
-            v-if="hoveredPoint && hoveredBar !== null && bandwidthData?.points"
-            class="bandwidth-tooltip"
-            :style="{ left: `${(scaleX(hoveredBar, bandwidthData.points.length) / svgW) * 100}%` }"
+            v-if="hoveredPoint !== null && hoveredBar !== null"
+            class="bar-tooltip"
+            :style="{ left: `${((hoveredPoint.x + hoveredPoint.width / 2) / svgW) * 100}%`, top: `${(hoveredPoint.y / svgH) * 100}%` }"
             role="tooltip"
           >
-            <span class="bandwidth-tooltip__label">{{ hoveredPoint.label }}</span>
-            <div class="bandwidth-tooltip__row">
-              <span class="bandwidth-tooltip__dot bandwidth-tooltip__dot--download"></span>
-              <span>{{ formatBytes(hoveredPoint.download) }}</span>
-            </div>
-            <div class="bandwidth-tooltip__row">
-              <span class="bandwidth-tooltip__dot bandwidth-tooltip__dot--upload"></span>
-              <span>{{ formatBytes(hoveredPoint.upload) }}</span>
-            </div>
-            <div class="bandwidth-tooltip__total">
-              {{ formatBytes(hoveredPoint.download + hoveredPoint.upload) }}
-            </div>
-            <span class="bandwidth-tooltip__caret"></span>
+            <span class="bar-tooltip__label">{{ hoveredPoint.label }}</span>
+            <span class="bar-tooltip__value">{{ formatBytes(hoveredPoint.total) }}</span>
+            <span class="bar-tooltip__caret"></span>
           </div>
         </div>
         <div v-else class="traffic-fallback">
           <p class="traffic-note">{{ t('dashboard.chart_loading') }}</p>
         </div>
-        <!-- Summary + Legend row -->
-        <div class="traffic-summary-row">
-          <div class="traffic-summary-stats">
-            <span class="traffic-summary-stats__item">
-              <span class="traffic-summary-stats__arrow traffic-summary-stats__arrow--dl">&#8595;</span>
-              <span class="traffic-summary-stats__value">{{ formatBytes(bandwidthData?.total_download ?? 0) }}</span>
-            </span>
-            <span class="traffic-summary-stats__sep">|</span>
-            <span class="traffic-summary-stats__item">
-              <span class="traffic-summary-stats__arrow traffic-summary-stats__arrow--ul">&#8593;</span>
-              <span class="traffic-summary-stats__value">{{ formatBytes(bandwidthData?.total_upload ?? 0) }}</span>
-            </span>
-            <span class="traffic-summary-stats__sep">|</span>
-            <span class="traffic-summary-stats__item">
-              <span class="traffic-summary-stats__total-label">Total:</span>
-              <span class="traffic-summary-stats__value">{{ formatBytes((bandwidthData?.total_download ?? 0) + (bandwidthData?.total_upload ?? 0)) }}</span>
-            </span>
+        <!-- Footer -->
+        <div class="chart-footer">
+          <div class="chart-footer__total">
+            Usage During Period: <span class="font-mono">{{ formatBytes(totalUsage) }}</span>
           </div>
-          <div class="stacked-chart-legend">
-            <span class="stacked-chart-legend__item">
-              <span class="stacked-chart-legend__line stacked-chart-legend__line--dl"></span>
-              Download
-            </span>
-            <span class="stacked-chart-legend__item">
-              <span class="stacked-chart-legend__line stacked-chart-legend__line--ul"></span>
-              Upload
-            </span>
-          </div>
+          <div class="chart-footer__desc">Total traffic usage across all servers</div>
         </div>
       </div>
       <div class="chart-panel chart-panel--donut">
@@ -528,42 +421,79 @@ function formatDuration(seconds: number): string {
 .charts-row { display: grid; grid-template-columns: 2fr 1fr; gap: var(--space-4); }
 .chart-panel { padding: var(--space-3); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); }
 
-/* ─── Panel Header with Period Pills ─── */
-.panel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-2); }
-.period-pills { display: flex; gap: var(--space-1); }
-.period-pill {
-  padding: 6px 12px;
-  font-size: 11px;
-  font-weight: var(--font-medium);
-  border: 1px solid var(--color-border);
+/* ─── Panel Header ─── */
+.panel-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: var(--space-3); }
+.panel-title { margin: 0; font-size: var(--text-sm); font-weight: var(--font-semibold); color: var(--color-text); }
+.panel-subtitle { font-size: var(--text-xs); color: var(--color-muted); margin-top: 4px; }
+
+/* ─── Period Select Dropdown ─── */
+.period-select {
+  height: 32px;
+  width: 128px;
+  padding: 0 12px;
+  font-size: 12px;
   border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
   background: transparent;
-  color: var(--color-muted);
+  color: var(--color-text);
+  appearance: none;
+  -webkit-appearance: none;
   cursor: pointer;
-  transition: all 0.15s ease;
-  line-height: 1;
-  min-width: 36px;
-  text-align: center;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 28px;
 }
-.period-pill:hover { color: var(--color-text); border-color: var(--color-primary); }
-.period-pill--active {
-  background: var(--color-primary);
-  color: #fff;
+.period-select:focus {
+  outline: none;
   border-color: var(--color-primary);
-  box-shadow: 0 0 8px rgba(59, 130, 246, 0.3);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+}
+.period-select option {
+  background: var(--color-surface);
+  color: var(--color-text);
 }
 
-/* ─── Bandwidth Chart ─── */
+/* ─── Bar Chart ─── */
 .bandwidth-chart-wrapper { position: relative; }
 
-.bandwidth-tooltip {
+.bar-chart {
+  width: 100%;
+  height: 300px;
+  display: block;
+}
+.bar-chart text {
+  fill: var(--color-muted);
+  font-size: 10px;
+  font-family: var(--font-family);
+}
+.chart-axis-label {
+  font-size: 10px;
+  font-weight: 500;
+  fill: var(--color-muted);
+}
+.chart-bar {
+  transition: opacity 0.15s ease;
+  cursor: pointer;
+}
+.chart-bar--hovered,
+.chart-bar:hover {
+  opacity: 0.8;
+}
+.chart-bar-base {
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+
+/* ─── Bar Tooltip ─── */
+.bar-tooltip {
   position: absolute;
-  top: 0;
   transform: translateX(-50%) translateY(-100%);
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 2px;
-  padding: 8px 12px;
+  padding: 8px 14px;
   background: rgba(15, 15, 20, 0.92);
   backdrop-filter: blur(8px);
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -572,10 +502,21 @@ function formatDuration(seconds: number): string {
   pointer-events: none;
   z-index: var(--z-tooltip, 50);
   font-size: 11px;
-  min-width: 120px;
-  margin-top: -4px;
+  min-width: 90px;
+  margin-top: -8px;
 }
-.bandwidth-tooltip__caret {
+.bar-tooltip__label {
+  font-weight: var(--font-medium);
+  color: var(--color-muted);
+  font-size: 10px;
+}
+.bar-tooltip__value {
+  font-weight: var(--font-bold);
+  color: var(--color-text);
+  font-size: 13px;
+  font-family: var(--font-mono, monospace);
+}
+.bar-tooltip__caret {
   position: absolute;
   bottom: -5px;
   left: 50%;
@@ -586,59 +527,32 @@ function formatDuration(seconds: number): string {
   border-right: 5px solid transparent;
   border-top: 5px solid rgba(15, 15, 20, 0.92);
 }
-.bandwidth-tooltip__label { font-weight: var(--font-semibold); color: var(--color-text); margin-bottom: 2px; }
-.bandwidth-tooltip__row { display: flex; align-items: center; gap: 6px; color: var(--color-muted); }
-.bandwidth-tooltip__dot { width: 8px; height: 8px; border-radius: var(--radius-full); flex-shrink: 0; }
-.bandwidth-tooltip__dot--download { background: #3b82f6; }
-.bandwidth-tooltip__dot--upload { background: #8b5cf6; }
-.bandwidth-tooltip__total { font-weight: var(--font-semibold); color: var(--color-text); border-top: 1px solid rgba(255,255,255,0.1); padding-top: 4px; margin-top: 2px; }
 
-/* ─── Traffic Summary Row ─── */
-.traffic-summary-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: var(--space-2);
+/* ─── Chart Footer ─── */
+.chart-footer {
   padding-top: var(--space-2);
   border-top: 1px solid var(--color-border);
+  margin-top: var(--space-3);
 }
-.traffic-summary-stats {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.traffic-summary-stats__item {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-.traffic-summary-stats__arrow {
+.chart-footer__total {
   font-size: var(--text-sm);
-  font-weight: 700;
-  line-height: 1;
+  color: var(--color-muted);
 }
-.traffic-summary-stats__arrow--dl { color: #3b82f6; }
-.traffic-summary-stats__arrow--ul { color: #8b5cf6; }
-.traffic-summary-stats__value {
-  font-size: var(--text-sm);
+.chart-footer__total .font-mono {
+  font-family: var(--font-mono, monospace);
   font-weight: 600;
   color: var(--color-text);
 }
-.traffic-summary-stats__total-label {
-  font-size: var(--text-sm);
-  font-weight: 500;
+.chart-footer__desc {
+  font-size: var(--text-xs);
   color: var(--color-muted);
+  margin-top: 2px;
 }
-.traffic-summary-stats__sep {
-  color: var(--color-border);
-  font-size: var(--text-sm);
-  user-select: none;
-}
-.traffic-fallback { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 220px; gap: var(--space-4); }
+
+.traffic-fallback { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 300px; gap: var(--space-4); }
 .traffic-note { font-size: var(--text-xs); color: var(--color-muted); margin: 0; }
 
 .panel { padding: var(--space-4); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); }
-.panel-title { margin: 0; font-size: var(--text-sm); font-weight: var(--font-semibold); color: var(--color-text); }
 
 /* ─── Donut Legend ─── */
 .donut-legend { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--color-border); }
@@ -675,42 +589,5 @@ function formatDuration(seconds: number): string {
 
 @media (max-width: 768px) {
   .charts-row, .bottom-row { grid-template-columns: 1fr; }
-  .traffic-summary { flex-direction: column; align-items: center; }
 }
-
-/* ─── Stacked Area Chart ─── */
-.stacked-chart {
-  width: 100%;
-  height: 220px;
-  display: block;
-}
-.stacked-chart text {
-  fill: var(--color-muted);
-  font-size: 9px;
-  font-family: var(--font-family);
-}
-.stacked-chart .chart-x-label {
-  font-size: 10px;
-  font-weight: 500;
-  fill: var(--color-muted);
-}
-
-.stacked-chart-legend {
-  display: flex;
-  gap: 12px;
-  font-size: 11px;
-  color: var(--color-muted);
-}
-.stacked-chart-legend__item {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.stacked-chart-legend__line {
-  width: 14px;
-  height: 2.5px;
-  border-radius: 2px;
-}
-.stacked-chart-legend__line--dl { background: #3b82f6; }
-.stacked-chart-legend__line--ul { background: #8b5cf6; }
 </style>
