@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useResellersStore } from '@/stores/resellers'
 import { usePlansStore } from '@/stores/plans'
 import { useConfirm } from '@koris/composables/useConfirm'
@@ -15,6 +16,7 @@ import KEmptyState from '@koris/ui/KEmptyState.vue'
 import KStatusPill from '@koris/ui/KStatusPill.vue'
 
 const { t } = useI18n()
+const router = useRouter()
 const store = useResellersStore()
 const plansStore = usePlansStore()
 const { confirm } = useConfirm()
@@ -147,6 +149,7 @@ onMounted(() => {
 <template>
   <div class="page resellers-view">
     <header class="page-header">
+      <KButton variant="ghost" @click="router.push({ name: 'customers' })">← {{ t('customers.tab_customers') }}</KButton>
       <KButton variant="primary" icon="+" @click="openCreate">{{ t('resellers.add') }}</KButton>
     </header>
 
@@ -273,7 +276,7 @@ onMounted(() => {
 
 <style scoped>
 .resellers-view { display: flex; flex-direction: column; gap: var(--space-5); }
-.page-header { display: flex; align-items: center; justify-content: flex-end; }
+.page-header { display: flex; align-items: center; justify-content: space-between; }
 
 .panel { padding: var(--space-5); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); }
 .panel-title { margin: 0 0 var(--space-4); font-size: var(--text-base); font-weight: var(--font-semibold); }
