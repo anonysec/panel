@@ -1021,6 +1021,8 @@ func (s *Server) customerByID(w http.ResponseWriter, r *http.Request) {
 		s.restoreCustomer(w, r, id)
 	case "connection-limit":
 		s.setConnectionLimit(w, r, id)
+	case "switch-plan":
+		s.switchCustomerPlan(w, r, id)
 	default:
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
 	}
@@ -1586,6 +1588,205 @@ func (s *Server) renewCustomer(w http.ResponseWriter, r *http.Request, id int64)
 	actor, _, _ = s.currentAdmin(r)
 	s.createEvent("plan", "info", fmt.Sprintf("Plan applied: %s", plan.Name), fmt.Sprintf("Admin %s applied plan %s to %s", actor, plan.Name, username), actor, username)
 	writeJSON(w, map[string]any{"ok": true, "plan": plan, "wallet_deducted": plan.Price})
+}
+
+// switchCustomerPlan cancels the current subscription with a pro-rated refund
+// and applies a new plan. POST /api/customers/{id}/switch-plan
+// Body: { "plan_id": N }
+// Response: { "ok": true, "refund_amount": X.XX, "new_plan": "..." }
+func (s *Server) switchCustomerPlan(w http.ResponseWriter, r *http.Request, id int64) {
+	var in struct {
+		PlanID int64 `json:"plan_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad_json"})
+		return
+	}
+	if in.PlanID <= 0 {
+		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "plan_required"})
+		return
+	}
+
+	// Get customer info
+	var username string
+	if err := s.DB.QueryRow(`SELECT username FROM customers WHERE id=? AND deleted_at IS NULL`, id).Scan(&username); err != nil {
+		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
+		return
+	}
+
+	// Get current active subscription
+	var subID int64
+	var currentPlanID int64
+	var paidAmount float64
+	var startDate time.Time
+	var expiresAt sql.NullTime
+	err := s.DB.QueryRow(`
+		SELECT s.id, s.plan_id, COALESCE(s.paid_amount, 0), s.created_at, s.expires_at
+		FROM subscriptions s
+		WHERE s.customer_id = ? AND s.status = 'active'
+		ORDER BY s.id DESC LIMIT 1`, id).Scan(&subID, &currentPlanID, &paidAmount, &startDate, &expiresAt)
+	if err != nil {
+		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "no_active_subscription"})
+		return
+	}
+
+	// Get current plan details for refund calculation
+	var currentDataGB float64
+	var currentDurationDays int
+	s.DB.QueryRow(`SELECT COALESCE(data_gb, 0), COALESCE(duration_days, 0) FROM plans WHERE id=?`, currentPlanID).Scan(&currentDataGB, &currentDurationDays)
+
+	// Get customer's current data usage since subscription started
+	var totalUsageBytes int64
+	s.DB.QueryRow(`SELECT COALESCE(SUM(acctinputoctets + acctoutputoctets), 0) FROM radacct WHERE username=? AND acctstarttime >= ?`, username, startDate).Scan(&totalUsageBytes)
+	usedGB := float64(totalUsageBytes) / (1024 * 1024 * 1024)
+
+	// Calculate pro-rated refund
+	refundAmount := calculateProRatedRefund(paidAmount, currentDataGB, currentDurationDays, usedGB, startDate, expiresAt)
+
+	// Get the new plan
+	var newPlan Plan
+	var active int
+	if err := s.DB.QueryRow(`SELECT id, name, data_gb, speed_mbps, duration_days, price, is_active FROM plans WHERE id=?`, in.PlanID).Scan(
+		&newPlan.ID, &newPlan.Name, &newPlan.DataGB, &newPlan.SpeedMbps, &newPlan.DurationDays, &newPlan.Price, &active); err != nil {
+		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "plan_not_found"})
+		return
+	}
+	if active != 1 {
+		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "plan_inactive"})
+		return
+	}
+
+	// Start transaction
+	tx, err := s.DB.Begin()
+	if err != nil {
+		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	defer tx.Rollback()
+
+	// 1. Cancel current subscription
+	if _, err := tx.Exec(`UPDATE subscriptions SET status='cancelled', cancelled_at=NOW() WHERE id=?`, subID); err != nil {
+		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+
+	// 2. Credit refund to wallet
+	if refundAmount > 0 {
+		if _, err := tx.Exec(`INSERT INTO wallets(customer_id, username, credit) VALUES(?,?,?) ON DUPLICATE KEY UPDATE credit = credit + VALUES(credit)`, id, username, refundAmount); err != nil {
+			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+			return
+		}
+		actor, _, _ := s.currentAdmin(r)
+		refundPct := 0.0
+		if paidAmount > 0 {
+			refundPct = (refundAmount / paidAmount) * 100
+		}
+		if _, err := tx.Exec(`INSERT INTO wallet_transactions(customer_id, username, amount, type, description, actor) VALUES(?,?,?,?,?,?)`,
+			id, username, refundAmount, "refund", fmt.Sprintf("Pro-rated refund for plan switch (%.1f%% unused)", refundPct), actor); err != nil {
+			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+			return
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+
+	// 3. Apply the new plan (outside tx since applyPlanDirectly has its own operations)
+	s.applyPlanDirectly(id, username, in.PlanID, r)
+
+	writeJSON(w, map[string]any{
+		"ok":            true,
+		"refund_amount": math.Round(refundAmount*100) / 100,
+		"new_plan":      newPlan.Name,
+	})
+}
+
+// calculateProRatedRefund computes the refund based on minimum of time% and data% remaining.
+// - Unlimited data (dataGB=0): use time only
+// - Unlimited time (durationDays=0): use data only
+// - Both unlimited: no refund
+// - Free plan (paidAmount=0): no refund
+func calculateProRatedRefund(paidAmount, dataGB float64, durationDays int, usedGB float64, startDate time.Time, expiresAt sql.NullTime) float64 {
+	if paidAmount <= 0 {
+		return 0
+	}
+
+	timeRemainingPct := -1.0 // -1 means "not applicable" (unlimited)
+	dataRemainingPct := -1.0
+
+	// Calculate time remaining %
+	if durationDays > 0 && expiresAt.Valid {
+		totalDuration := expiresAt.Time.Sub(startDate).Hours() / 24
+		elapsed := time.Since(startDate).Hours() / 24
+		if totalDuration > 0 {
+			timeRemainingPct = math.Max(0, (totalDuration-elapsed)/totalDuration)
+		}
+	}
+
+	// Calculate data remaining %
+	if dataGB > 0 {
+		dataRemainingPct = math.Max(0, (dataGB-usedGB)/dataGB)
+	}
+
+	// Determine which percentage to use
+	var refundPct float64
+	if timeRemainingPct < 0 && dataRemainingPct < 0 {
+		// Both unlimited — no refund
+		return 0
+	} else if timeRemainingPct < 0 {
+		// Unlimited time — use data only
+		refundPct = dataRemainingPct
+	} else if dataRemainingPct < 0 {
+		// Unlimited data — use time only
+		refundPct = timeRemainingPct
+	} else {
+		// Both limited — use minimum (protects against abuse)
+		refundPct = math.Min(timeRemainingPct, dataRemainingPct)
+	}
+
+	return paidAmount * refundPct
+}
+
+// applyPlanDirectly applies a plan to a customer without wallet deduction (used after switch-plan refund).
+func (s *Server) applyPlanDirectly(customerID int64, username string, planID int64, r *http.Request) {
+	var plan Plan
+	var active int
+	if err := s.DB.QueryRow(`SELECT id, name, data_gb, speed_mbps, duration_days, price, is_active FROM plans WHERE id=?`, planID).Scan(
+		&plan.ID, &plan.Name, &plan.DataGB, &plan.SpeedMbps, &plan.DurationDays, &plan.Price, &active); err != nil {
+		return
+	}
+
+	// Update customer's plan
+	_, _ = s.DB.Exec(`UPDATE customers SET plan_id=?, status='active' WHERE id=? AND deleted_at IS NULL`, planID, customerID)
+
+	// Update RADIUS attributes
+	_, _ = s.DB.Exec(`DELETE FROM radcheck WHERE username=? AND attribute='Max-Data'`, username)
+	if plan.DataGB > 0 {
+		bytes := int64(math.Round(plan.DataGB * 1024 * 1024 * 1024))
+		_, _ = s.DB.Exec(`INSERT INTO radcheck(username, attribute, op, value) VALUES(?,'Max-Data',':=',?)`, username, bytes)
+	}
+	_, _ = s.DB.Exec(`DELETE FROM radreply WHERE username=? AND attribute='Mikrotik-Rate-Limit'`, username)
+	if plan.SpeedMbps > 0 {
+		_, _ = s.DB.Exec(`INSERT INTO radreply(username, attribute, op, value) VALUES(?,'Mikrotik-Rate-Limit',':=',?)`, username, speedLimitValue(plan.SpeedMbps))
+	}
+
+	// Create new subscription (paid_amount=0 since refund was already credited)
+	var expires any
+	if plan.DurationDays > 0 {
+		expires = time.Now().AddDate(0, 0, plan.DurationDays)
+	}
+	_, _ = s.DB.Exec(`INSERT INTO subscriptions(customer_id, username, plan_id, expires_at, paid_amount) VALUES(?,?,?,?,0)`, customerID, username, planID, expires)
+
+	// Reset traffic counters for new plan
+	_, _ = s.DB.Exec(`UPDATE radacct SET acctinputoctets=0, acctoutputoctets=0 WHERE username=? AND acctstoptime IS NULL`, username)
+
+	// Auto-provision WireGuard
+	s.autoProvisionWireGuardPeer(customerID)
+
+	actor, _, _ := s.currentAdmin(r)
+	s.createEvent("plan", "info", fmt.Sprintf("Plan switched to: %s", plan.Name), fmt.Sprintf("Admin %s switched plan for %s (with refund)", actor, username), actor, username)
 }
 
 func (s *Server) plans(w http.ResponseWriter, r *http.Request) {

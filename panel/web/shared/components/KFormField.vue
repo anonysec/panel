@@ -2,7 +2,6 @@
   <div class="k-form-field">
     <label :for="fieldId" class="k-form-field__label">
       {{ label }}
-      <span v-if="required" class="k-form-field__required" aria-hidden="true">*</span>
     </label>
 
     <slot

@@ -189,6 +189,7 @@ interface Plan {
 const plans = ref<Plan[]>([])
 const selectedPlanId = ref<number>(0)
 const applyingPlan = ref(false)
+const switchingPlan = ref(false)
 
 async function loadPlans() {
   try {
@@ -215,6 +216,27 @@ async function handleApplyPlan() {
     toast.error(err?.message || 'Failed to apply plan')
   } finally {
     applyingPlan.value = false
+  }
+}
+
+async function handleSwitchPlan() {
+  if (!customer.value || !selectedPlanId.value) return
+  switchingPlan.value = true
+  try {
+    const { post: postApi } = useApi()
+    const res = await postApi<{ ok: boolean; refund_amount?: number; new_plan?: string; error?: string }>(`/api/customers/${customer.value.id}/switch-plan`, {
+      plan_id: selectedPlanId.value,
+    })
+    if (res.ok) {
+      toast.success(`Plan switched! Refunded $${res.refund_amount?.toFixed(2) || '0.00'} to wallet`)
+      await store.loadDetail(customer.value.id)
+    } else {
+      toast.error(res.error || 'Failed to switch plan')
+    }
+  } catch (err: any) {
+    toast.error(err?.message || 'Failed to switch plan')
+  } finally {
+    switchingPlan.value = false
   }
 }
 
@@ -383,8 +405,18 @@ onMounted(() => {
               >
                 Apply Plan
               </KButton>
+              <KButton
+                variant="ghost"
+                size="sm"
+                :loading="switchingPlan"
+                :disabled="!selectedPlanId"
+                @click="handleSwitchPlan"
+              >
+                Switch Plan (Refund)
+              </KButton>
             </div>
             <p class="plan-change-note">This will activate the selected plan, create a subscription, and deduct from wallet.</p>
+            <p class="plan-change-note">"Switch Plan" cancels the current subscription and credits a pro-rated refund to the wallet.</p>
           </div>
         </template>
 
