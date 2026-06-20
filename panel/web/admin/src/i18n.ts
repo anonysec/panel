@@ -65,6 +65,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'user.plan': 'Plan',
     'user.status': 'Status',
     'user.created': 'Joined',
+    'user.created_by': 'Created By',
     'user.display_name': 'Display Name',
     'user.notes': 'Notes',
     // Empty states
@@ -745,6 +746,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'user.plan': 'پلن',
     'user.status': 'وضعیت',
     'user.created': 'تاریخ عضویت',
+    'user.created_by': 'ایجاد شده توسط',
     'user.display_name': 'نام نمایشی',
     'user.notes': 'یادداشت‌ها',
     // Empty states
@@ -1379,6 +1381,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'user.plan': '套餐',
     'user.status': '状态',
     'user.created': '注册时间',
+    'user.created_by': '创建者',
     'user.display_name': '显示名称',
     'user.notes': '备注',
     // Empty states
@@ -2014,6 +2017,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'user.plan': 'Тариф',
     'user.status': 'Статус',
     'user.created': 'Дата регистрации',
+    'user.created_by': 'Создан',
     'user.display_name': 'Отображаемое имя',
     'user.notes': 'Заметки',
     // Empty states

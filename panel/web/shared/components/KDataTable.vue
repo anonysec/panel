@@ -324,7 +324,7 @@ watch(() => props.currentPage, (val) => { internalPage.value = val })
 .k-table__td { padding: var(--space-3) var(--space-4); color: var(--color-text); border-bottom: 1px solid var(--color-border); vertical-align: middle; }
 .k-table__td--center { text-align: center; }
 .k-table__td--right { text-align: right; }
-.k-table__td--check { width: 32px; padding: var(--space-3) var(--space-2); }
+.k-table__td--check { width: 32px; padding: var(--space-3) var(--space-2); vertical-align: middle; text-align: center; }
 
 /* Custom checkbox */
 .k-check {

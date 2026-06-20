@@ -116,6 +116,7 @@ const columns = computed(() => [
   { key: 'status', label: t('user.status'), sortable: true },
   { key: 'plan', label: t('user.plan'), sortable: true },
   { key: 'credit', label: t('user.balance'), sortable: true, align: 'right' as const },
+  { key: 'created_by', label: t('user.created_by'), sortable: true },
   { key: 'created_at', label: t('user.created'), sortable: true },
   { key: 'actions', label: '', sortable: false, align: 'center' as const, width: '80px' },
 ])
@@ -449,6 +450,9 @@ onMounted(() => {
           <span :class="{ 'text-success': value > 0, 'text-danger': value < 0 }">
             ${{ typeof value === 'number' ? value.toFixed(2) : '0.00' }}
           </span>
+        </template>
+        <template #cell-created_by="{ value }">
+          <span class="created-by-cell">{{ value || '—' }}</span>
         </template>
         <template #cell-created_at="{ value }">
           {{ formatDate(value) }}
@@ -803,6 +807,7 @@ onMounted(() => {
 
 .text-success { color: var(--color-success, #22c55e); }
 .text-danger { color: var(--color-danger, #ef4444); }
+.created-by-cell { font-size: var(--text-xs); color: var(--color-muted); }
 
 /* Slide-over form styles */
 .slide-form {

@@ -63,6 +63,7 @@ type Customer struct {
 	PlanID      *int64  `json:"plan_id,omitempty"`
 	Plan        string  `json:"plan"`
 	Credit      float64 `json:"credit"`
+	CreatedBy   string  `json:"created_by"`
 	CreatedAt   string  `json:"created_at"`
 }
 
@@ -684,7 +685,7 @@ func (s *Server) listCustomers(w http.ResponseWriter, r *http.Request) {
 		like := "%" + q + "%"
 		args = append(args, like, like, like, like, like)
 	}
-	query := fmt.Sprintf(`SELECT c.id,c.username,COALESCE(c.display_name,''),c.status,c.plan_id,COALESCE(p.name,''),COALESCE(w.credit,0),c.created_at
+	query := fmt.Sprintf(`SELECT c.id,c.username,COALESCE(c.display_name,''),c.status,c.plan_id,COALESCE(p.name,''),COALESCE(w.credit,0),COALESCE(c.created_by,''),c.created_at
 		FROM customers c
 		LEFT JOIN plans p ON p.id=c.plan_id
 		LEFT JOIN wallets w ON w.username=c.username
@@ -702,7 +703,7 @@ func (s *Server) listCustomers(w http.ResponseWriter, r *http.Request) {
 		var c Customer
 		var planID sql.NullInt64
 		var created sql.NullTime
-		if err := rows.Scan(&c.ID, &c.Username, &c.DisplayName, &c.Status, &planID, &c.Plan, &c.Credit, &created); err != nil {
+		if err := rows.Scan(&c.ID, &c.Username, &c.DisplayName, &c.Status, &planID, &c.Plan, &c.Credit, &c.CreatedBy, &created); err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 			return
 		}
