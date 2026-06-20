@@ -30,8 +30,20 @@
         <thead :class="{ 'k-table__head--sticky': stickyHeader }">
           <tr role="row">
             <th v-if="selectable" class="k-table__th k-table__th--check" role="columnheader">
-              <input type="checkbox" class="k-table__checkbox" :checked="allSelected"
-                :indeterminate="someSelected && !allSelected" aria-label="Select all rows" @change="toggleSelectAll" />
+              <span
+                role="checkbox"
+                tabindex="0"
+                class="k-check"
+                :class="{ 'k-check--checked': allSelected, 'k-check--indeterminate': someSelected && !allSelected }"
+                :aria-checked="allSelected ? 'true' : someSelected ? 'mixed' : 'false'"
+                aria-label="Select all rows"
+                @click="toggleSelectAll"
+                @keydown.space.prevent="toggleSelectAll"
+                @keydown.enter.prevent="toggleSelectAll"
+              >
+                <svg v-if="allSelected" class="k-check__icon" viewBox="0 0 12 12" fill="none"><path d="M2.5 6.5L5 9l4.5-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <svg v-else-if="someSelected && !allSelected" class="k-check__icon" viewBox="0 0 12 12" fill="none"><path d="M3 6h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              </span>
             </th>
             <th v-for="col in columns" :key="col.key" role="columnheader"
               :class="['k-table__th', col.sortable && 'k-table__th--sortable', sortKey === col.key && 'k-table__th--sorted', `k-table__th--${col.align ?? 'left'}`]"
@@ -74,8 +86,17 @@
               @click="emit('row-click', row)" @keydown.enter="emit('row-click', row)"
               @keydown="onRowKeydown($event, idx)">
               <td v-if="selectable" class="k-table__td k-table__td--check" role="cell">
-                <input type="checkbox" class="k-table__checkbox" :checked="isSelected(row)"
-                  :aria-label="`Select row ${idx + 1}`" @change="toggleSelect(row)" @click.stop />
+                <span
+                  role="checkbox"
+                  tabindex="-1"
+                  class="k-check"
+                  :class="{ 'k-check--checked': isSelected(row) }"
+                  :aria-checked="isSelected(row) ? 'true' : 'false'"
+                  :aria-label="`Select row ${idx + 1}`"
+                  @click.stop="toggleSelect(row)"
+                >
+                  <svg v-if="isSelected(row)" class="k-check__icon" viewBox="0 0 12 12" fill="none"><path d="M2.5 6.5L5 9l4.5-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </span>
               </td>
               <td v-for="col in columns" :key="`${col.key}-${idx}`" role="cell"
                 :class="['k-table__td', `k-table__td--${col.align ?? 'left'}`]">
@@ -304,76 +325,56 @@ watch(() => props.currentPage, (val) => { internalPage.value = val })
 .k-table__td--center { text-align: center; }
 .k-table__td--right { text-align: right; }
 .k-table__td--check { width: 32px; padding: var(--space-3) var(--space-2); }
-.k-table__checkbox {
-  appearance: none;
-  -webkit-appearance: none;
-  width: 16px;
-  height: 16px;
-  min-width: 16px;
-  min-height: 16px;
+
+/* Custom checkbox */
+.k-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
   border: 1.5px solid var(--color-border);
-  border-radius: var(--radius-sm, 4px);
+  border-radius: 4px;
   background: var(--color-surface);
   cursor: pointer;
   position: relative;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   flex-shrink: 0;
-  vertical-align: middle;
+  color: transparent;
 }
-.k-table__checkbox:hover {
+.k-check:hover {
   border-color: var(--color-primary);
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
 }
-.k-table__checkbox:checked {
-  background: var(--color-primary);
-  border-color: var(--color-primary);
-  animation: k-check-pop 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.k-table__checkbox:checked::after {
-  content: '';
-  position: absolute;
-  top: 1px;
-  left: 4.5px;
-  width: 4.5px;
-  height: 9px;
-  border: solid #fff;
-  border-width: 0 2px 2px 0;
-  transform: rotate(45deg) scale(1);
-  animation: k-checkmark 0.2s 0.05s cubic-bezier(0.4, 0, 0.2, 1) both;
-}
-.k-table__checkbox:indeterminate {
-  background: var(--color-primary);
-  border-color: var(--color-primary);
-  animation: k-check-pop 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.k-table__checkbox:indeterminate::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 8px;
-  height: 2px;
-  background: #fff;
-  border-radius: 1px;
-  transform: translate(-50%, -50%) scaleX(1);
-  animation: k-dash 0.2s cubic-bezier(0.4, 0, 0.2, 1) both;
-}
-.k-table__checkbox:focus-visible {
+.k-check:focus-visible {
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
 }
+.k-check--checked {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+  animation: k-check-pop 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.k-check--indeterminate {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+  animation: k-check-pop 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.k-check__icon {
+  width: 12px;
+  height: 12px;
+  animation: k-check-draw 0.2s 0.05s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
 @keyframes k-check-pop {
   0% { transform: scale(1); }
-  50% { transform: scale(0.85); }
+  40% { transform: scale(0.8); }
   100% { transform: scale(1); }
 }
-@keyframes k-checkmark {
-  0% { transform: rotate(45deg) scale(0); opacity: 0; }
-  100% { transform: rotate(45deg) scale(1); opacity: 1; }
-}
-@keyframes k-dash {
-  0% { transform: translate(-50%, -50%) scaleX(0); }
-  100% { transform: translate(-50%, -50%) scaleX(1); }
+@keyframes k-check-draw {
+  0% { opacity: 0; transform: scale(0.5); }
+  100% { opacity: 1; transform: scale(1); }
 }
 
 /* Empty */
