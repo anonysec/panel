@@ -9,6 +9,7 @@ export interface Reseller {
   id: number
   username: string
   credit: number
+  avatar: string
   created_at: string
 }
 
@@ -102,10 +103,10 @@ export const useResellersStore = defineStore('resellers', () => {
    * On success, reloads the resellers list.
    * On error, preserves existing data.
    */
-  async function createReseller(username: string, password: string): Promise<boolean> {
+  async function createReseller(username: string, password: string, avatar?: string): Promise<boolean> {
     loading.value = true
     try {
-      await post<ResellerMutationResponse>('/api/resellers', { username, password })
+      await post<ResellerMutationResponse>('/api/resellers', { username, password, avatar: avatar || '' })
       await loadResellers()
       return true
     } catch {
@@ -166,7 +167,7 @@ export const useResellersStore = defineStore('resellers', () => {
    * On success, reloads the resellers list.
    * On error, preserves existing data.
    */
-  async function updateReseller(id: number, payload: { password?: string; default_plan_id?: number }): Promise<boolean> {
+  async function updateReseller(id: number, payload: { password?: string; default_plan_id?: number; avatar?: string }): Promise<boolean> {
     loading.value = true
     try {
       await post<ResellerMutationResponse>(`/api/resellers/${id}/update`, payload)

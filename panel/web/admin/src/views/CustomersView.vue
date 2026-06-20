@@ -5,6 +5,7 @@ import { useCustomersStore } from '@/stores/customers'
 import { useResellersStore } from '@/stores/resellers'
 import { usePlansStore } from '@/stores/plans'
 import { useRealtimeStore } from '@/stores/realtime'
+import { useAuthStore } from '@/stores/auth'
 import type { BulkActionRequest } from '@/stores/customers'
 import KDataTable from '@koris/ui/KDataTable.vue'
 import KButton from '@koris/ui/KButton.vue'
@@ -27,8 +28,11 @@ const store = useCustomersStore()
 const resellersStore = useResellersStore()
 const plansStore = usePlansStore()
 const realtime = useRealtimeStore()
+const authStore = useAuthStore()
 const { confirm } = useConfirm()
 const toast = useToast()
+
+const isReseller = computed(() => authStore.user?.role === 'reseller')
 
 const searchQuery = ref('')
 const activeStatusTab = ref<string>('all')
@@ -69,9 +73,13 @@ const resellerForm = ref({
   username: '',
   password: '',
   plan_id: '' as string | number,
+  avatar: '',
 })
 
 const creditForm = ref({ amount: '' })
+
+// Default avatar emojis for reseller selection
+const defaultEmojis = ['🦊', '🐻', '🐼', '🐨', '🦁', '🐯', '🐸', '🐙', '🦋', '🌟', '🔥', '💎', '🎯', '🚀', '⚡', '🌈', '🎪', '🎭', '🏆', '👑']
 
 // ─── Plan Options ───────────────────────────────────────────────────────────
 const planOptions = computed(() =>
@@ -93,10 +101,13 @@ const quotaPlanOptions = computed(() =>
 // ─── Tabs ───────────────────────────────────────────────────────────────────
 
 /** Page-level navigation tabs: Users | Resellers */
-const mainTabs = computed(() => [
-  { key: 'users', label: t('customers.tab_users') },
-  { key: 'resellers', label: t('customers.tab_resellers') },
-])
+const mainTabs = computed(() => {
+  const tabs = [{ key: 'users', label: t('customers.tab_users') }]
+  if (!isReseller.value) {
+    tabs.push({ key: 'resellers', label: t('customers.tab_resellers') })
+  }
+  return tabs
+})
 
 /** Status filter tabs (only shown when main tab is "users") */
 const statusTabs = computed(() => [
@@ -110,16 +121,23 @@ const statusTabs = computed(() => [
 
 // ─── Users Table ────────────────────────────────────────────────────────────
 
-const columns = computed(() => [
-  { key: 'username', label: t('user.username'), sortable: true },
-  { key: 'display_name', label: t('user.display_name'), sortable: true },
-  { key: 'status', label: t('user.status'), sortable: true },
-  { key: 'plan', label: t('user.plan'), sortable: true },
-  { key: 'credit', label: t('user.balance'), sortable: true, align: 'right' as const },
-  { key: 'created_by', label: t('user.created_by'), sortable: true },
-  { key: 'created_at', label: t('user.created'), sortable: true },
-  { key: 'actions', label: '', sortable: false, align: 'center' as const, width: '80px' },
-])
+const columns = computed(() => {
+  const cols = [
+    { key: 'username', label: t('user.username'), sortable: true },
+    { key: 'display_name', label: t('user.display_name'), sortable: true },
+    { key: 'status', label: t('user.status'), sortable: true },
+    { key: 'plan', label: t('user.plan'), sortable: true },
+    { key: 'credit', label: t('user.balance'), sortable: true, align: 'right' as const },
+  ]
+  if (!isReseller.value) {
+    cols.push({ key: 'created_by', label: t('user.created_by'), sortable: true })
+  }
+  cols.push(
+    { key: 'created_at', label: t('user.created'), sortable: true },
+    { key: 'actions', label: '', sortable: false, align: 'center' as const, width: '80px' } as any,
+  )
+  return cols
+})
 
 /** Set of usernames currently online (from live sessions) */
 const onlineUsernames = computed(() => {
@@ -275,7 +293,7 @@ async function executeBulkAction(action: BulkActionRequest['action']) {
 // ─── Reseller Actions ───────────────────────────────────────────────────────
 
 function openNewReseller() {
-  resellerForm.value = { username: '', password: '', plan_id: '' }
+  resellerForm.value = { username: '', password: '', plan_id: '', avatar: '' }
   editingResellerId.value = null
   showResellerSlideOver.value = true
 }
@@ -285,6 +303,7 @@ function openEditReseller(reseller: any) {
     username: reseller.username,
     password: '',
     plan_id: reseller.default_plan_id ? String(reseller.default_plan_id) : '',
+    avatar: reseller.avatar || '',
   }
   editingResellerId.value = reseller.id
   showResellerSlideOver.value = true
@@ -296,6 +315,7 @@ async function handleResellerSubmit() {
     const success = await resellersStore.updateReseller(editingResellerId.value, {
       password: resellerForm.value.password || undefined,
       default_plan_id: resellerForm.value.plan_id ? Number(resellerForm.value.plan_id) : undefined,
+      avatar: resellerForm.value.avatar,
     })
     if (success) toast.success(t('resellers.updated'))
   } else {
@@ -303,7 +323,7 @@ async function handleResellerSubmit() {
       saving.value = false
       return
     }
-    const success = await resellersStore.createReseller(resellerForm.value.username, resellerForm.value.password)
+    const success = await resellersStore.createReseller(resellerForm.value.username, resellerForm.value.password, resellerForm.value.avatar)
     if (success) {
       toast.success(t('resellers.created_success'))
     } else {
@@ -438,7 +458,7 @@ onMounted(() => {
       >
         <template #cell-username="{ row, value }">
           <div class="username-cell">
-            <KAvatar :name="row.display_name || value" size="sm" />
+            <KAvatar :name="row.display_name || value" size="sm" :emoji="row.avatar || undefined" />
             <span class="username-cell__text">{{ value }}</span>
             <span v-if="onlineUsernames.has(value)" class="online-dot" title="Online" />
           </div>
@@ -586,6 +606,20 @@ onMounted(() => {
         <KFormField name="reseller-plan" :label="t('resellers.default_plan')" :hint="t('resellers.plan_hint')">
           <template #default="{ fieldId, describedBy }">
             <KSelect :id="fieldId" v-model="resellerForm.plan_id" :options="quotaPlanOptions" :placeholder="t('resellers.select_plan')" :aria-describedby="describedBy" />
+          </template>
+        </KFormField>
+        <KFormField name="reseller-avatar" :label="t('resellers.avatar')" :hint="t('resellers.avatar_hint')">
+          <template #default>
+            <div class="emoji-picker">
+              <button
+                v-for="em in defaultEmojis"
+                :key="em"
+                type="button"
+                class="emoji-btn"
+                :class="{ 'emoji-btn--active': resellerForm.avatar === em }"
+                @click="resellerForm.avatar = resellerForm.avatar === em ? '' : em"
+              >{{ em }}</button>
+            </div>
           </template>
         </KFormField>
         <div class="slide-form__footer">
@@ -902,5 +936,37 @@ onMounted(() => {
   .main-tab {
     white-space: nowrap;
   }
+}
+
+/* Emoji Picker for reseller avatar */
+.emoji-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.emoji-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md, 8px);
+  border: 1px solid var(--color-border, #28333f);
+  background: var(--color-surface, #0b1120);
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--duration-fast, 0.1s);
+}
+
+.emoji-btn:hover {
+  border-color: var(--color-primary, #2563eb);
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.emoji-btn--active {
+  border-color: var(--color-primary, #2563eb);
+  background: rgba(37, 99, 235, 0.15);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.3);
 }
 </style>

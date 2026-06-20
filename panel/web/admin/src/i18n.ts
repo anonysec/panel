@@ -353,6 +353,8 @@ const messages: Record<Locale, Record<string, string>> = {
     'resellers.tx_date': 'Date',
     'resellers.tx_amount': 'Amount',
     'resellers.tx_description': 'Description',
+    'resellers.avatar': 'Avatar Emoji',
+    'resellers.avatar_hint': 'Choose an emoji avatar for this reseller. All their customers will display it.',
     // Topbar
     'topbar.search': 'Search...',
     // Sidebar
@@ -1033,6 +1035,8 @@ const messages: Record<Locale, Record<string, string>> = {
     'resellers.tx_date': 'تاریخ',
     'resellers.tx_amount': 'مبلغ',
     'resellers.tx_description': 'توضیحات',
+    'resellers.avatar': 'آواتار ایموجی',
+    'resellers.avatar_hint': 'یک ایموجی آواتار برای این نماینده انتخاب کنید. همه مشتریان آن‌ها این آواتار را نمایش خواهند داد.',
     // Topbar
     'topbar.search': 'جستجو...',
     // Sidebar
@@ -1669,6 +1673,8 @@ const messages: Record<Locale, Record<string, string>> = {
     'resellers.tx_date': '日期',
     'resellers.tx_amount': '金额',
     'resellers.tx_description': '描述',
+    'resellers.avatar': '头像表情',
+    'resellers.avatar_hint': '为此经销商选择一个表情头像。他们的所有客户将显示此头像。',
     // Topbar
     'topbar.search': '搜索...',
     // Sidebar
@@ -2559,6 +2565,8 @@ const messages: Record<Locale, Record<string, string>> = {
     'resellers.tx_date': 'Дата',
     'resellers.tx_amount': 'Сумма',
     'resellers.tx_description': 'Описание',
+    'resellers.avatar': 'Аватар-эмодзи',
+    'resellers.avatar_hint': 'Выберите эмодзи-аватар для этого реселлера. Все их клиенты будут отображать его.',
     // Topbar
     'topbar.search': 'Поиск...',
     // Sidebar

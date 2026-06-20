@@ -6,12 +6,13 @@
     role="img"
   >
     <img
-      v-if="src"
+      v-if="src && !imgFailed"
       :src="src"
       :alt="name"
       class="k-avatar__image"
       @error="handleImageError"
     />
+    <span v-else-if="emoji" class="k-avatar__emoji">{{ emoji }}</span>
     <span v-else class="k-avatar__initials">{{ initials }}</span>
   </span>
 </template>
@@ -23,6 +24,7 @@ export interface KAvatarProps {
   name: string
   size?: number | 'sm' | 'md' | 'lg'
   src?: string
+  emoji?: string
 }
 
 const props = withDefaults(defineProps<KAvatarProps>(), {
@@ -65,7 +67,9 @@ const gradientBackground = computed(() => {
 const avatarStyles = computed(() => ({
   width: `${resolvedSize.value}px`,
   height: `${resolvedSize.value}px`,
-  fontSize: `${Math.round(resolvedSize.value * 0.38)}px`,
+  fontSize: props.emoji
+    ? `${Math.round(resolvedSize.value * 0.55)}px`
+    : `${Math.round(resolvedSize.value * 0.38)}px`,
   background: (!props.src || imgFailed.value) ? gradientBackground.value : 'transparent',
 }))
 
@@ -97,5 +101,10 @@ function handleImageError() {
   font-weight: var(--font-semibold);
   line-height: 1;
   letter-spacing: var(--tracking-wide);
+}
+
+.k-avatar__emoji {
+  line-height: 1;
+  text-align: center;
 }
 </style>

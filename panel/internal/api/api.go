@@ -64,6 +64,7 @@ type Customer struct {
 	Plan        string  `json:"plan"`
 	Credit      float64 `json:"credit"`
 	CreatedBy   string  `json:"created_by"`
+	Avatar      string  `json:"avatar"`
 	CreatedAt   string  `json:"created_at"`
 }
 
@@ -298,6 +299,8 @@ type UsageSummary struct {
 
 var usernamePattern = regexp.MustCompile(`^[A-Za-z0-9_.-]{3,64}$`)
 
+var resellerEmojis = []string{"🔵", "🟢", "🟡", "🔴", "🟣", "🟠", "⭐", "💎", "🌙", "🔥", "🌊", "🍀", "🎯", "🦋", "🐬", "🌸", "🎭", "🌈", "⚡", "🎪"}
+
 func New(db *sql.DB, cfg config.Config) *Server {
 	analyzer := health.NewAnalyzer()
 	notifier := notify.New()
@@ -362,22 +365,22 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/api/deleted/customers", s.requireAdmin(s.deletedCustomers))
 	mux.HandleFunc("/api/plans", s.requireAdmin(s.plans))
 	mux.HandleFunc("/api/plans/", s.requireAdmin(s.planByID))
-	mux.HandleFunc("/api/nodes", s.requireAdmin(s.nodes))
-	mux.HandleFunc("/api/nodes/", s.requireAdmin(s.nodeByID))
-	mux.HandleFunc("/api/node/tasks", s.requireAdmin(s.nodeTasks))
+	mux.HandleFunc("/api/nodes", s.requireFullAdmin(s.nodes))
+	mux.HandleFunc("/api/nodes/", s.requireFullAdmin(s.nodeByID))
+	mux.HandleFunc("/api/node/tasks", s.requireFullAdmin(s.nodeTasks))
 	mux.HandleFunc("/api/node/tasks/poll", s.nodeTaskPoll)
 	mux.HandleFunc("/api/node/tasks/", s.nodeTaskByID)
-	mux.HandleFunc("/api/vpn/settings", s.requireAdmin(s.vpnSettings))
-	mux.HandleFunc("/api/payment-methods", s.requireAdmin(s.paymentMethods))
-	mux.HandleFunc("/api/payment-methods/", s.requireAdmin(s.paymentMethodByID))
-	mux.HandleFunc("/api/promo-codes", s.requireAdmin(s.promoCodes))
-	mux.HandleFunc("/api/promo-codes/", s.requireAdmin(s.promoCodeByID))
+	mux.HandleFunc("/api/vpn/settings", s.requireFullAdmin(s.vpnSettings))
+	mux.HandleFunc("/api/payment-methods", s.requireFullAdmin(s.paymentMethods))
+	mux.HandleFunc("/api/payment-methods/", s.requireFullAdmin(s.paymentMethodByID))
+	mux.HandleFunc("/api/promo-codes", s.requireFullAdmin(s.promoCodes))
+	mux.HandleFunc("/api/promo-codes/", s.requireFullAdmin(s.promoCodeByID))
 	mux.HandleFunc("/api/portal/apply-promo", s.requireCustomer(s.portalApplyPromo))
-	mux.HandleFunc("/api/tickets", s.requireAdmin(s.tickets))
-	mux.HandleFunc("/api/tickets/", s.requireAdmin(s.ticketByID))
-	mux.HandleFunc("/api/payments", s.requireAdmin(s.payments))
-	mux.HandleFunc("/api/payments/", s.requireAdmin(s.paymentByID))
-	mux.HandleFunc("/api/wallets/", s.requireAdmin(s.walletByUsername))
+	mux.HandleFunc("/api/tickets", s.requireFullAdmin(s.tickets))
+	mux.HandleFunc("/api/tickets/", s.requireFullAdmin(s.ticketByID))
+	mux.HandleFunc("/api/payments", s.requireFullAdmin(s.payments))
+	mux.HandleFunc("/api/payments/", s.requireFullAdmin(s.paymentByID))
+	mux.HandleFunc("/api/wallets/", s.requireFullAdmin(s.walletByUsername))
 	mux.HandleFunc("/api/realtime", s.requireAdmin(s.realtimeWS))
 	mux.HandleFunc("/api/portal/me", s.requireCustomer(s.portalMe))
 	mux.HandleFunc("/api/portal/usage", s.requireCustomer(s.portalUsage))
@@ -397,63 +400,63 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/api/node/push", s.nodePush)
 	mux.HandleFunc("/api/node/agent/version", s.agentVersion)
 	mux.HandleFunc("/api/node/agent/download", s.agentDownload)
-	mux.HandleFunc("/api/audit-logs", s.requireAdmin(s.auditLogs))
-	mux.HandleFunc("/api/admin/bandwidth-stats", s.requireAdmin(s.bandwidthStats))
-	mux.HandleFunc("/api/reports/revenue", s.requireAdmin(s.revenueReport))
-	mux.HandleFunc("/api/reports/users", s.requireAdmin(s.userReport))
-	mux.HandleFunc("/api/reports/bandwidth", s.requireAdmin(s.bandwidthReport))
-	mux.HandleFunc("/api/reports/uptime", s.requireAdmin(s.uptimeReport))
-	mux.HandleFunc("/api/reports/wallets", s.requireAdmin(s.walletSummary))
-	mux.HandleFunc("/api/admin/haproxy/apply", s.requireAdmin(s.haproxyApply))
-	mux.HandleFunc("/api/admin/haproxy/status", s.requireAdmin(s.haproxyStatus))
-	mux.HandleFunc("/api/diagnostics", s.requireAdmin(s.diagnostics))
+	mux.HandleFunc("/api/audit-logs", s.requireFullAdmin(s.auditLogs))
+	mux.HandleFunc("/api/admin/bandwidth-stats", s.requireFullAdmin(s.bandwidthStats))
+	mux.HandleFunc("/api/reports/revenue", s.requireFullAdmin(s.revenueReport))
+	mux.HandleFunc("/api/reports/users", s.requireFullAdmin(s.userReport))
+	mux.HandleFunc("/api/reports/bandwidth", s.requireFullAdmin(s.bandwidthReport))
+	mux.HandleFunc("/api/reports/uptime", s.requireFullAdmin(s.uptimeReport))
+	mux.HandleFunc("/api/reports/wallets", s.requireFullAdmin(s.walletSummary))
+	mux.HandleFunc("/api/admin/haproxy/apply", s.requireFullAdmin(s.haproxyApply))
+	mux.HandleFunc("/api/admin/haproxy/status", s.requireFullAdmin(s.haproxyStatus))
+	mux.HandleFunc("/api/diagnostics", s.requireFullAdmin(s.diagnostics))
 	mux.HandleFunc("/api/resellers", s.requireAdmin(s.resellers))
 	mux.HandleFunc("/api/resellers/transactions", s.requireAdmin(s.resellerTransactions))
 	mux.HandleFunc("/api/resellers/", s.requireAdmin(s.resellerByID))
 	mux.HandleFunc("/api/resellers/checkout", s.requireAdmin(s.resellerCheckout))
 	mux.HandleFunc("/api/resellers/payments", s.requireAdmin(s.resellerPayments))
-	mux.HandleFunc("/api/sessions/kill", s.requireAdmin(s.killSession))
+	mux.HandleFunc("/api/sessions/kill", s.requireFullAdmin(s.killSession))
 	mux.HandleFunc("/portal/sub/", s.subscriptionLink)
 	mux.HandleFunc("/portal/sub", s.subscriptionLink)
-	mux.HandleFunc("/api/nodes/vpn-config/", s.requireAdmin(s.nodeVPNConfig))
-	mux.HandleFunc("/api/wireguard/peers", s.requireAdmin(s.wireguardPeers))
-	mux.HandleFunc("/api/wireguard/peers/", s.requireAdmin(s.wireguardPeerByID))
-	mux.HandleFunc("/api/certificates", s.requireAdmin(s.certificates))
-	mux.HandleFunc("/api/certificates/", s.requireAdmin(s.certificateByID))
-	mux.HandleFunc("/api/panel-settings", s.requireAdmin(s.panelSettings))
+	mux.HandleFunc("/api/nodes/vpn-config/", s.requireFullAdmin(s.nodeVPNConfig))
+	mux.HandleFunc("/api/wireguard/peers", s.requireFullAdmin(s.wireguardPeers))
+	mux.HandleFunc("/api/wireguard/peers/", s.requireFullAdmin(s.wireguardPeerByID))
+	mux.HandleFunc("/api/certificates", s.requireFullAdmin(s.certificates))
+	mux.HandleFunc("/api/certificates/", s.requireFullAdmin(s.certificateByID))
+	mux.HandleFunc("/api/panel-settings", s.requireFullAdmin(s.panelSettings))
 	mux.HandleFunc("/api/public-settings", s.publicSettings)
-	mux.HandleFunc("/api/export/customers.csv", s.requireAdmin(s.exportCustomersCSV))
-	mux.HandleFunc("/api/export/payments.csv", s.requireAdmin(s.exportPaymentsCSV))
-	mux.HandleFunc("/api/export/radacct.csv", s.requireAdmin(s.exportRadacctCSV))
-	mux.HandleFunc("/api/export/wallet-transactions.csv", s.requireAdmin(s.exportWalletTransactionsCSV))
-	mux.HandleFunc("/api/export/revenue.csv", s.requireAdmin(s.exportRevenueCSV))
-	mux.HandleFunc("/api/backup/export", s.requireAdmin(s.backupExport))
-	mux.HandleFunc("/api/backup/import", s.requireAdmin(s.backupImport))
-	mux.HandleFunc("/api/events", s.requireAdmin(s.events))
-	mux.HandleFunc("/api/events/", s.requireAdmin(s.eventByID))
+	mux.HandleFunc("/api/export/customers.csv", s.requireFullAdmin(s.exportCustomersCSV))
+	mux.HandleFunc("/api/export/payments.csv", s.requireFullAdmin(s.exportPaymentsCSV))
+	mux.HandleFunc("/api/export/radacct.csv", s.requireFullAdmin(s.exportRadacctCSV))
+	mux.HandleFunc("/api/export/wallet-transactions.csv", s.requireFullAdmin(s.exportWalletTransactionsCSV))
+	mux.HandleFunc("/api/export/revenue.csv", s.requireFullAdmin(s.exportRevenueCSV))
+	mux.HandleFunc("/api/backup/export", s.requireFullAdmin(s.backupExport))
+	mux.HandleFunc("/api/backup/import", s.requireFullAdmin(s.backupImport))
+	mux.HandleFunc("/api/events", s.requireFullAdmin(s.events))
+	mux.HandleFunc("/api/events/", s.requireFullAdmin(s.eventByID))
 	mux.HandleFunc("/api/portal/events", s.requireCustomer(s.portalEvents))
 	mux.HandleFunc("/api/portal/events/", s.requireCustomer(s.portalEventByID))
 	mux.HandleFunc("/api/portal/warnings", s.requireCustomer(s.portalWarnings))
-	mux.HandleFunc("/api/templates", s.requireAdmin(s.templates))
-	mux.HandleFunc("/api/templates/", s.requireAdmin(s.templateByID))
-	mux.HandleFunc("/api/settings/data-warning-thresholds", s.requireAdmin(s.dataWarningThresholds))
-	mux.HandleFunc("/api/settings/warning-config", s.requireAdmin(s.warningConfig))
+	mux.HandleFunc("/api/templates", s.requireFullAdmin(s.templates))
+	mux.HandleFunc("/api/templates/", s.requireFullAdmin(s.templateByID))
+	mux.HandleFunc("/api/settings/data-warning-thresholds", s.requireFullAdmin(s.dataWarningThresholds))
+	mux.HandleFunc("/api/settings/warning-config", s.requireFullAdmin(s.warningConfig))
 	mux.HandleFunc("/api/portal/app-links", s.portalAppLinks)
-	mux.HandleFunc("/api/failover/providers", s.requireAdmin(s.failoverProviders))
-	mux.HandleFunc("/api/failover/providers/", s.requireAdmin(s.failoverProviderByID))
-	mux.HandleFunc("/api/failover/domains", s.requireAdmin(s.failoverDomains))
-	mux.HandleFunc("/api/failover/domains/", s.requireAdmin(s.failoverDomainByID))
-	mux.HandleFunc("/api/diagnostics/ai", s.requireAdmin(s.aiDiagnostics))
-	mux.HandleFunc("/api/diagnostics/ai/history", s.requireAdmin(s.aiDiagnosticsHistory))
-	mux.HandleFunc("/api/diagnostics/ai/rules", s.requireAdmin(s.aiHealingRules))
-	mux.HandleFunc("/api/diagnostics/ai/rules/", s.requireAdmin(s.aiHealingRuleByID))
-	mux.HandleFunc("/api/diagnostics/ai/healing-log", s.requireAdmin(s.aiHealingLog))
-	mux.HandleFunc("/api/diagnostics/logs", s.requireAdmin(s.serverLogs))
-	mux.HandleFunc("/api/diagnostics/status", s.requireAdmin(s.serverStatus))
-	mux.HandleFunc("/api/admin/backups/restore", s.requireAdmin(s.backupRestore))
-	mux.HandleFunc("/api/admin/backups/settings", s.requireAdmin(s.backupSettings))
-	mux.HandleFunc("/api/admin/backups/", s.requireAdmin(s.backupByID))
-	mux.HandleFunc("/api/admin/backups", s.requireAdmin(s.backupRoot))
+	mux.HandleFunc("/api/failover/providers", s.requireFullAdmin(s.failoverProviders))
+	mux.HandleFunc("/api/failover/providers/", s.requireFullAdmin(s.failoverProviderByID))
+	mux.HandleFunc("/api/failover/domains", s.requireFullAdmin(s.failoverDomains))
+	mux.HandleFunc("/api/failover/domains/", s.requireFullAdmin(s.failoverDomainByID))
+	mux.HandleFunc("/api/diagnostics/ai", s.requireFullAdmin(s.aiDiagnostics))
+	mux.HandleFunc("/api/diagnostics/ai/history", s.requireFullAdmin(s.aiDiagnosticsHistory))
+	mux.HandleFunc("/api/diagnostics/ai/rules", s.requireFullAdmin(s.aiHealingRules))
+	mux.HandleFunc("/api/diagnostics/ai/rules/", s.requireFullAdmin(s.aiHealingRuleByID))
+	mux.HandleFunc("/api/diagnostics/ai/healing-log", s.requireFullAdmin(s.aiHealingLog))
+	mux.HandleFunc("/api/diagnostics/logs", s.requireFullAdmin(s.serverLogs))
+	mux.HandleFunc("/api/diagnostics/status", s.requireFullAdmin(s.serverStatus))
+	mux.HandleFunc("/api/admin/backups/restore", s.requireFullAdmin(s.backupRestore))
+	mux.HandleFunc("/api/admin/backups/settings", s.requireFullAdmin(s.backupSettings))
+	mux.HandleFunc("/api/admin/backups/", s.requireFullAdmin(s.backupByID))
+	mux.HandleFunc("/api/admin/backups", s.requireFullAdmin(s.backupRoot))
 
 	mux.HandleFunc("/dashboard", redirectTo("/dashboard/"))
 	mux.Handle("/dashboard/", spaHandler(s.Config.AdminWebDir, "/dashboard/"))
@@ -677,18 +680,24 @@ func (s *Server) customers(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) listCustomers(w http.ResponseWriter, r *http.Request) {
+	actor, role, _ := s.currentAdmin(r)
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
 	where := "c.deleted_at IS NULL"
 	args := []any{}
+	if role == "reseller" {
+		where += " AND c.created_by = ?"
+		args = append(args, actor)
+	}
 	if q != "" {
 		where += " AND (c.username LIKE ? OR COALESCE(c.display_name,'') LIKE ? OR COALESCE(p.name,'') LIKE ? OR c.status LIKE ? OR CAST(c.id AS CHAR) LIKE ?)"
 		like := "%" + q + "%"
 		args = append(args, like, like, like, like, like)
 	}
-	query := fmt.Sprintf(`SELECT c.id,c.username,COALESCE(c.display_name,''),c.status,c.plan_id,COALESCE(p.name,''),COALESCE(w.credit,0),COALESCE(c.created_by,''),c.created_at
+	query := fmt.Sprintf(`SELECT c.id,c.username,COALESCE(c.display_name,''),c.status,c.plan_id,COALESCE(p.name,''),COALESCE(w.credit,0),COALESCE(c.created_by,''),COALESCE(a.avatar,''),c.created_at
 		FROM customers c
 		LEFT JOIN plans p ON p.id=c.plan_id
 		LEFT JOIN wallets w ON w.username=c.username
+		LEFT JOIN admins a ON a.username=c.created_by AND a.role='reseller'
 		WHERE %s
 		ORDER BY c.id DESC LIMIT 5000`, where)
 	rows, err := s.DB.Query(query, args...)
@@ -703,7 +712,7 @@ func (s *Server) listCustomers(w http.ResponseWriter, r *http.Request) {
 		var c Customer
 		var planID sql.NullInt64
 		var created sql.NullTime
-		if err := rows.Scan(&c.ID, &c.Username, &c.DisplayName, &c.Status, &planID, &c.Plan, &c.Credit, &c.CreatedBy, &created); err != nil {
+		if err := rows.Scan(&c.ID, &c.Username, &c.DisplayName, &c.Status, &planID, &c.Plan, &c.Credit, &c.CreatedBy, &c.Avatar, &created); err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 			return
 		}
@@ -5090,6 +5099,22 @@ func (s *Server) requireAdmin(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// requireFullAdmin blocks resellers — only owner/admin roles may proceed.
+func (s *Server) requireFullAdmin(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		_, role, ok := s.currentAdmin(r)
+		if !ok {
+			writeJSONCode(w, http.StatusUnauthorized, map[string]any{"ok": false, "error": "unauthorized"})
+			return
+		}
+		if role == "reseller" {
+			writeJSONCode(w, http.StatusForbidden, map[string]any{"ok": false, "error": "forbidden"})
+			return
+		}
+		next(w, r)
+	}
+}
+
 // RequireAdmin is the exported version of requireAdmin for use by the main package.
 func (s *Server) RequireAdmin(next http.HandlerFunc) http.HandlerFunc {
 	return s.requireAdmin(next)
@@ -6191,7 +6216,7 @@ func (s *Server) resellers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method == http.MethodGet {
-		rows, err := s.DB.Query(`SELECT id, username, role, is_active, credit, created_at FROM admins WHERE role='reseller' ORDER BY id DESC`)
+		rows, err := s.DB.Query(`SELECT id, username, role, is_active, credit, COALESCE(avatar,''), created_at FROM admins WHERE role='reseller' ORDER BY id DESC`)
 		if err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 			return
@@ -6204,6 +6229,7 @@ func (s *Server) resellers(w http.ResponseWriter, r *http.Request) {
 			Role      string  `json:"role"`
 			IsActive  bool    `json:"is_active"`
 			Credit    float64 `json:"credit"`
+			Avatar    string  `json:"avatar"`
 			CreatedAt string  `json:"created_at"`
 		}
 
@@ -6212,7 +6238,7 @@ func (s *Server) resellers(w http.ResponseWriter, r *http.Request) {
 			var res Reseller
 			var active int
 			var created time.Time
-			if err := rows.Scan(&res.ID, &res.Username, &res.Role, &active, &res.Credit, &created); err == nil {
+			if err := rows.Scan(&res.ID, &res.Username, &res.Role, &active, &res.Credit, &res.Avatar, &created); err == nil {
 				res.IsActive = active == 1
 				res.CreatedAt = created.Format(time.RFC3339)
 				list = append(list, res)
@@ -6226,6 +6252,7 @@ func (s *Server) resellers(w http.ResponseWriter, r *http.Request) {
 		var in struct {
 			Username string `json:"username"`
 			Password string `json:"password"`
+			Avatar   string `json:"avatar"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad_json"})
@@ -6243,7 +6270,7 @@ func (s *Server) resellers(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		_, err = s.DB.Exec(`INSERT INTO admins(username, password_hash, role, is_active) VALUES(?,?, 'reseller', 1)`, in.Username, ph)
+		_, err = s.DB.Exec(`INSERT INTO admins(username, password_hash, role, is_active, avatar) VALUES(?,?, 'reseller', 1, ?)`, in.Username, ph, nullString(in.Avatar))
 		if err != nil {
 			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "username_taken"})
 			return
@@ -6293,6 +6320,7 @@ func (s *Server) resellerByID(w http.ResponseWriter, r *http.Request) {
 		var in struct {
 			Password      string `json:"password"`
 			DefaultPlanID *int64 `json:"default_plan_id"`
+			Avatar        string `json:"avatar"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad_json"})
@@ -6310,6 +6338,8 @@ func (s *Server) resellerByID(w http.ResponseWriter, r *http.Request) {
 			}
 			_, _ = s.DB.Exec(`UPDATE admins SET password_hash=? WHERE id=?`, ph, id)
 		}
+		// Always update avatar (allow clearing it)
+		_, _ = s.DB.Exec(`UPDATE admins SET avatar=? WHERE id=?`, nullString(in.Avatar), id)
 		s.logAudit(actor, "reseller.updated", "reseller", strconv.FormatInt(id, 10), nil, map[string]any{"username": resellerUsername}, clientIP(r))
 		writeJSON(w, map[string]any{"ok": true})
 		return

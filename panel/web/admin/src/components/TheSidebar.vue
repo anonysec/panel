@@ -47,59 +47,82 @@ interface NavGroup {
   items: NavItem[]
 }
 
-const navGroups = computed<NavGroup[]>(() => [
-  {
-    title: t('nav.group_overview'),
-    items: [
-      {
-        route: 'overview',
-        label: t('nav.dashboard'),
-        icon: 'dashboard',
-      },
-      {
-        route: 'payments',
-        label: t('nav.transactions'),
-        icon: 'transactions',
-      },
-    ],
-  },
-  {
-    title: t('nav.group_manage'),
-    items: [
-      {
-        route: 'users',
-        label: t('nav.users'),
-        icon: 'users',
-        badge: props.notificationCount > 0 ? props.notificationCount : undefined,
-      },
+const navGroups = computed<NavGroup[]>(() => {
+  const isReseller = props.user.role === 'reseller'
+
+  const groups: NavGroup[] = []
+
+  if (!isReseller) {
+    groups.push({
+      title: t('nav.group_overview'),
+      items: [
+        {
+          route: 'overview',
+          label: t('nav.dashboard'),
+          icon: 'dashboard',
+        },
+        {
+          route: 'payments',
+          label: t('nav.transactions'),
+          icon: 'transactions',
+        },
+      ],
+    })
+  }
+
+  const manageItems: NavItem[] = [
+    {
+      route: 'users',
+      label: t('nav.users'),
+      icon: 'users',
+      badge: props.notificationCount > 0 ? props.notificationCount : undefined,
+    },
+  ]
+
+  if (!isReseller) {
+    manageItems.push(
       {
         route: 'nodes',
         label: t('nav.services'),
         icon: 'services',
       },
-      {
-        route: 'plans',
-        label: t('nav.plans'),
-        icon: 'plans',
-      },
-      {
-        route: 'tickets',
-        label: t('nav.tickets'),
-        icon: 'tickets',
-      },
-    ],
-  },
-  {
-    title: t('nav.group_system'),
-    items: [
-      {
-        route: 'settings',
-        label: t('nav.settings'),
-        icon: 'settings',
-      },
-    ],
-  },
-])
+    )
+  }
+
+  manageItems.push({
+    route: 'plans',
+    label: t('nav.plans'),
+    icon: 'plans',
+  })
+
+  if (!isReseller) {
+    manageItems.push({
+      route: 'tickets',
+      label: t('nav.tickets'),
+      icon: 'tickets',
+    })
+  }
+
+  groups.push({
+    title: t('nav.group_manage'),
+    items: manageItems,
+  })
+
+  if (!isReseller) {
+    groups.push({
+      title: t('nav.group_system'),
+      items: [
+        {
+          route: 'settings',
+          label: t('nav.settings'),
+          icon: 'settings',
+        },
+      ],
+    })
+  }
+
+  return groups
+})
 
 /** Determine if a nav item is active based on current route */
 function isActive(route: string): boolean {

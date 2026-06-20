@@ -1,6 +1,18 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
+/** Routes that resellers are NOT allowed to access */
+const adminOnlyRoutes = new Set([
+  'overview',
+  'nodes',
+  'settings',
+  'tickets',
+  'ticket-detail',
+  'payments',
+  'templates',
+  'notifications',
+])
+
 const router = createRouter({
   history: createWebHistory('/dashboard/'),
   routes: [
@@ -53,7 +65,12 @@ router.beforeEach(async (to) => {
     return { name: 'overview' }
   }
 
-  // Role-based access
+  // Role-based access: resellers can only access allowed routes
+  if (auth.user?.role === 'reseller' && to.name && adminOnlyRoutes.has(to.name as string)) {
+    return { name: 'users' }
+  }
+
+  // Legacy meta-based role check
   if (to.meta.roles && auth.user) {
     const roles = to.meta.roles as string[]
     if (!roles.includes(auth.user.role)) {
