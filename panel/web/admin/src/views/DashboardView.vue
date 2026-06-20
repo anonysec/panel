@@ -82,9 +82,120 @@ const bandwidthChartData = computed(() => {
   }))
 })
 
-function handleBarHover(payload: { point: { label: string; value: number }; index: number }) {
-  hoveredBar.value = payload.index
+// ─── Custom Stacked Area Chart ───
+const svgW = 500
+const svgH = 180
+const pad = { top: 10, right: 10, bottom: 24, left: 10 }
+
+const chartW = computed(() => svgW - pad.left - pad.right)
+const chartH = computed(() => svgH - pad.top - pad.bottom)
+
+const maxBandwidth = computed(() => {
+  if (!bandwidthData.value?.points?.length) return 1
+  return Math.max(...bandwidthData.value.points.map(p => p.download + p.upload), 1)
+})
+
+function scaleX(i: number, total: number): number {
+  if (total <= 1) return pad.left
+  return pad.left + (i / (total - 1)) * chartW.value
 }
+
+function scaleY(val: number): number {
+  return pad.top + chartH.value - (val / maxBandwidth.value) * chartH.value
+}
+
+function buildSmoothPath(points: { x: number; y: number }[]): string {
+  if (points.length < 2) return ''
+  let d = `M ${points[0].x} ${points[0].y}`
+  for (let i = 1; i < points.length; i++) {
+    const prev = points[i - 1]
+    const curr = points[i]
+    const cpx1 = prev.x + (curr.x - prev.x) / 3
+    const cpy1 = prev.y
+    const cpx2 = curr.x - (curr.x - prev.x) / 3
+    const cpy2 = curr.y
+    d += ` C ${cpx1} ${cpy1}, ${cpx2} ${cpy2}, ${curr.x} ${curr.y}`
+  }
+  return d
+}
+
+const downloadAreaPath = computed(() => {
+  const pts = bandwidthData.value?.points
+  if (!pts?.length) return ''
+  const n = pts.length
+  const line: { x: number; y: number }[] = pts.map((p, i) => ({
+    x: scaleX(i, n),
+    y: scaleY(p.download),
+  }))
+  const baseline = pad.top + chartH.value
+  const linePath = buildSmoothPath(line)
+  return `${linePath} L ${line[n - 1].x} ${baseline} L ${line[0].x} ${baseline} Z`
+})
+
+const downloadLinePath = computed(() => {
+  const pts = bandwidthData.value?.points
+  if (!pts?.length) return ''
+  const n = pts.length
+  const line = pts.map((p, i) => ({ x: scaleX(i, n), y: scaleY(p.download) }))
+  return buildSmoothPath(line)
+})
+
+const uploadAreaPath = computed(() => {
+  const pts = bandwidthData.value?.points
+  if (!pts?.length) return ''
+  const n = pts.length
+  // Upload stacked on top of download
+  const topLine: { x: number; y: number }[] = pts.map((p, i) => ({
+    x: scaleX(i, n),
+    y: scaleY(p.download + p.upload),
+  }))
+  const bottomLine: { x: number; y: number }[] = pts.map((p, i) => ({
+    x: scaleX(i, n),
+    y: scaleY(p.download),
+  }))
+  const topPath = buildSmoothPath(topLine)
+  // Close area: go along bottom line in reverse
+  const reversedBottom = [...bottomLine].reverse()
+  let closePath = ` L ${reversedBottom[0].x} ${reversedBottom[0].y}`
+  for (let i = 1; i < reversedBottom.length; i++) {
+    const prev = reversedBottom[i - 1]
+    const curr = reversedBottom[i]
+    const cpx1 = prev.x + (curr.x - prev.x) / 3
+    const cpy1 = prev.y
+    const cpx2 = curr.x - (curr.x - prev.x) / 3
+    const cpy2 = curr.y
+    closePath += ` C ${cpx1} ${cpy1}, ${cpx2} ${cpy2}, ${curr.x} ${curr.y}`
+  }
+  return `${topPath}${closePath} Z`
+})
+
+const uploadLinePath = computed(() => {
+  const pts = bandwidthData.value?.points
+  if (!pts?.length) return ''
+  const n = pts.length
+  const line = pts.map((p, i) => ({ x: scaleX(i, n), y: scaleY(p.download + p.upload) }))
+  return buildSmoothPath(line)
+})
+
+const xLabels = computed(() => {
+  const pts = bandwidthData.value?.points
+  if (!pts?.length) return []
+  const n = pts.length
+  if (n <= 6) {
+    return pts.map((p, i) => ({ x: scaleX(i, n), text: p.label }))
+  }
+  // Show ~5 labels evenly spaced
+  const step = Math.max(Math.floor(n / 5), 1)
+  const labels: { x: number; text: string }[] = []
+  for (let i = 0; i < n; i += step) {
+    labels.push({ x: scaleX(i, n), text: pts[i].label })
+  }
+  // Always include last
+  if (labels[labels.length - 1]?.text !== pts[n - 1].label) {
+    labels.push({ x: scaleX(n - 1, n), text: pts[n - 1].label })
+  }
+  return labels
+})
 
 const hoveredPoint = computed(() => {
   if (hoveredBar.value === null || !bandwidthData.value?.points) return null
@@ -114,10 +225,10 @@ const userStatusData = computed(() => {
   const disabled = customers.list.filter(c => c.status === 'disabled').length
   const expired = customers.list.filter(c => c.status === 'expired').length
   return [
-    { label: t('status.active'), value: active },
-    { label: t('status.limited'), value: limited },
-    { label: t('status.disabled'), value: disabled },
-    { label: t('status.expired'), value: expired },
+    { label: `${t('status.active')} (${active})`, value: active },
+    { label: `${t('status.limited')} (${limited})`, value: limited },
+    { label: `${t('status.disabled')} (${disabled})`, value: disabled },
+    { label: `${t('status.expired')} (${expired})`, value: expired },
   ]
 })
 
@@ -178,19 +289,66 @@ function formatDuration(seconds: number): string {
           <KSkeleton variant="rect" :width="'100%'" :height="200" />
         </div>
         <div v-else-if="bandwidthChartData.length > 0" class="bandwidth-chart-wrapper" @mouseleave="hoveredBar = null">
-          <KChart
-            type="area"
-            :data="bandwidthChartData"
-            :height="200"
-            :options="{ gradientFill: true, showGrid: true, showLabels: true }"
-            :animate="true"
-            :interactive="true"
-            @point-hover="handleBarHover"
-          />
-          <div class="bandwidth-timeline">
-            <span v-if="bandwidthChartData.length > 0">{{ bandwidthChartData[0].label }}</span>
-            <span v-if="bandwidthChartData.length > 2">{{ bandwidthChartData[Math.floor(bandwidthChartData.length / 2)].label }}</span>
-            <span v-if="bandwidthChartData.length > 0">{{ bandwidthChartData[bandwidthChartData.length - 1].label }}</span>
+          <svg class="stacked-chart" :viewBox="`0 0 ${svgW} ${svgH}`" preserveAspectRatio="none" role="img" aria-label="Stacked area chart showing download and upload bandwidth">
+            <defs>
+              <linearGradient id="dl-gradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.5" />
+                <stop offset="100%" stop-color="#3b82f6" stop-opacity="0.05" />
+              </linearGradient>
+              <linearGradient id="ul-gradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#8b5cf6" stop-opacity="0.5" />
+                <stop offset="100%" stop-color="#8b5cf6" stop-opacity="0.05" />
+              </linearGradient>
+            </defs>
+            <!-- Download area (blue, bottom) -->
+            <path :d="downloadAreaPath" fill="url(#dl-gradient)" />
+            <path :d="downloadLinePath" fill="none" stroke="#3b82f6" stroke-width="2" />
+            <!-- Upload area (purple, stacked on top) -->
+            <path :d="uploadAreaPath" fill="url(#ul-gradient)" />
+            <path :d="uploadLinePath" fill="none" stroke="#8b5cf6" stroke-width="2" />
+            <!-- Hover columns (invisible rects for interaction) -->
+            <rect
+              v-for="(_, i) in bandwidthData?.points ?? []"
+              :key="i"
+              :x="scaleX(i, bandwidthData!.points.length) - (chartW / (bandwidthData!.points.length) / 2)"
+              :y="pad.top"
+              :width="chartW / bandwidthData!.points.length"
+              :height="chartH"
+              fill="transparent"
+              @mouseenter="hoveredBar = i"
+              @mouseleave="hoveredBar = null"
+            />
+            <!-- Hover indicator line -->
+            <line
+              v-if="hoveredBar !== null && bandwidthData?.points"
+              :x1="scaleX(hoveredBar, bandwidthData.points.length)"
+              :y1="pad.top"
+              :x2="scaleX(hoveredBar, bandwidthData.points.length)"
+              :y2="pad.top + chartH"
+              stroke="var(--color-muted)"
+              stroke-width="1"
+              stroke-dasharray="3 3"
+              opacity="0.5"
+            />
+            <!-- X-axis labels -->
+            <text
+              v-for="lbl in xLabels"
+              :key="lbl.text"
+              :x="lbl.x"
+              :y="svgH - 4"
+              text-anchor="middle"
+            >{{ lbl.text }}</text>
+          </svg>
+          <!-- Legend -->
+          <div class="stacked-chart-legend">
+            <span class="stacked-chart-legend__item">
+              <span class="stacked-chart-legend__dot stacked-chart-legend__dot--dl"></span>
+              Download
+            </span>
+            <span class="stacked-chart-legend__item">
+              <span class="stacked-chart-legend__dot stacked-chart-legend__dot--ul"></span>
+              Upload
+            </span>
           </div>
           <!-- Custom Tooltip -->
           <div
@@ -398,8 +556,8 @@ function formatDuration(seconds: number): string {
 .bandwidth-tooltip__label { font-weight: var(--font-semibold); color: var(--color-text); margin-bottom: 2px; }
 .bandwidth-tooltip__row { display: flex; align-items: center; gap: var(--space-1); color: var(--color-muted); }
 .bandwidth-tooltip__dot { width: 8px; height: 8px; border-radius: var(--radius-full); flex-shrink: 0; }
-.bandwidth-tooltip__dot--download { background: var(--color-primary); }
-.bandwidth-tooltip__dot--upload { background: var(--color-accent); }
+.bandwidth-tooltip__dot--download { background: #3b82f6; }
+.bandwidth-tooltip__dot--upload { background: #8b5cf6; }
 .bandwidth-tooltip__total { font-weight: var(--font-semibold); color: var(--color-text); border-top: 1px solid var(--color-border); padding-top: var(--space-1); margin-top: var(--space-1); }
 
 /* ─── Traffic Summary ─── */
@@ -450,4 +608,37 @@ function formatDuration(seconds: number): string {
   .charts-row, .bottom-row { grid-template-columns: 1fr; }
   .traffic-summary { flex-direction: column; align-items: center; }
 }
+
+/* ─── Stacked Area Chart ─── */
+.stacked-chart {
+  width: 100%;
+  height: 180px;
+  display: block;
+}
+.stacked-chart text {
+  fill: var(--color-muted);
+  font-size: 9px;
+  font-family: var(--font-family);
+}
+
+.stacked-chart-legend {
+  display: flex;
+  gap: var(--space-4);
+  justify-content: center;
+  margin-top: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+}
+.stacked-chart-legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.stacked-chart-legend__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+}
+.stacked-chart-legend__dot--dl { background: #3b82f6; }
+.stacked-chart-legend__dot--ul { background: #8b5cf6; }
 </style>
