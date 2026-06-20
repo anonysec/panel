@@ -26,16 +26,6 @@ const { get } = useApi()
 const activeTab = ref('profile')
 const saving = ref(false)
 
-// ─── WireGuard Peers ─────────────────────────────────────────────────────────
-const wgPeers = ref<any[]>([])
-async function loadWgPeers() {
-  if (!props.id || props.id === 'new') return
-  try {
-    const res = await get<{ ok: boolean; peers: any[] }>(`/api/wireguard/peers?customer_id=${props.id}`)
-    wgPeers.value = res.peers || []
-  } catch { /* ignore */ }
-}
-
 // ─── Traffic Reset State (Requirement 3.4) ───────────────────────────────────
 const resettingTraffic = ref(false)
 
@@ -113,7 +103,6 @@ async function saveConnectionLimit() {
 const tabs = computed(() => [
   { key: 'profile', label: t('customer.tab_profile') },
   { key: 'usage', label: t('customer.tab_usage') },
-  { key: 'wireguard', label: 'WireGuard' },
   { key: 'history', label: t('customer.tab_history') },
 ])
 
@@ -187,10 +176,52 @@ function formatBytes(bytes: number): string {
   return `${(bytes / 1073741824).toFixed(2)} GB`
 }
 
+// ---- Plan Change ----
+interface Plan {
+  id: number
+  name: string
+  data_gb: number
+  speed_mbps: number
+  duration_days: number
+  price: number
+  is_active: boolean
+}
+const plans = ref<Plan[]>([])
+const selectedPlanId = ref<number>(0)
+const applyingPlan = ref(false)
+
+async function loadPlans() {
+  try {
+    const res = await get<{ ok: boolean; plans: Plan[] }>('/api/plans')
+    plans.value = (res.plans || []).filter(p => p.is_active)
+  } catch { /* ignore */ }
+}
+
+async function handleApplyPlan() {
+  if (!customer.value || !selectedPlanId.value) return
+  applyingPlan.value = true
+  try {
+    const { post: postApi } = useApi()
+    const res = await postApi<{ ok: boolean; error?: string }>(`/api/customers/${customer.value.id}/renew`, {
+      plan_id: selectedPlanId.value,
+    })
+    if (res.ok) {
+      toast.success('Plan applied successfully')
+      await store.loadDetail(customer.value.id)
+    } else {
+      toast.error(res.error || 'Failed to apply plan')
+    }
+  } catch (err: any) {
+    toast.error(err?.message || 'Failed to apply plan')
+  } finally {
+    applyingPlan.value = false
+  }
+}
+
 onMounted(() => {
   if (props.id && props.id !== 'new') {
     store.loadDetail(Number(props.id))
-    loadWgPeers()
+    loadPlans()
   }
 })
 </script>
@@ -332,6 +363,29 @@ onMounted(() => {
               <KButton type="submit" variant="primary" :loading="saving">{{ t('customer.save_changes') }}</KButton>
             </div>
           </form>
+
+          <!-- Change Plan Section -->
+          <div v-if="!isNew && customer" class="plan-change-section">
+            <h4 class="section-title">Change Plan</h4>
+            <div class="plan-change-row">
+              <select v-model="selectedPlanId" class="plan-change-select">
+                <option value="0" disabled>Select a plan...</option>
+                <option v-for="plan in plans" :key="plan.id" :value="plan.id">
+                  {{ plan.name }} — {{ plan.data_gb }}GB · {{ plan.duration_days }}d · ${{ plan.price }}
+                </option>
+              </select>
+              <KButton
+                variant="primary"
+                size="sm"
+                :loading="applyingPlan"
+                :disabled="!selectedPlanId"
+                @click="handleApplyPlan"
+              >
+                Apply Plan
+              </KButton>
+            </div>
+            <p class="plan-change-note">This will activate the selected plan, create a subscription, and deduct from wallet.</p>
+          </div>
         </template>
 
         <!-- Usage Tab -->
@@ -473,27 +527,6 @@ onMounted(() => {
           </div>
         </template>
 
-        <!-- WireGuard Tab -->
-        <template #wireguard>
-          <div class="wireguard-tab">
-            <div v-if="wgPeers.length === 0" class="text-muted text-sm">
-              No WireGuard peers assigned. Peers are created automatically when the customer has an active subscription and a WireGuard-enabled node is available.
-            </div>
-            <div v-else class="wg-peers-list">
-              <div v-for="peer in wgPeers" :key="peer.id" class="wg-peer-card">
-                <div class="wg-peer-card__header">
-                  <span class="wg-peer-card__node">{{ peer.node_name || 'Node #' + peer.node_id }}</span>
-                  <KStatusPill :status="peer.status" size="sm" />
-                </div>
-                <div class="wg-peer-card__details">
-                  <div class="wg-peer-detail"><span class="text-muted">IP:</span> {{ peer.allowed_ips }}</div>
-                  <div class="wg-peer-detail"><span class="text-muted">Public Key:</span> <code>{{ peer.public_key?.slice(0, 20) }}...</code></div>
-                  <div class="wg-peer-detail"><span class="text-muted">RX:</span> {{ formatBytes(peer.rx_bytes || 0) }} <span class="text-muted">TX:</span> {{ formatBytes(peer.tx_bytes || 0) }}</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </template>
       </KTabs>
     </template>
 
@@ -551,5 +584,32 @@ onMounted(() => {
 @media (max-width: 768px) {
   .form-grid { grid-template-columns: 1fr; }
   .traffic-management__row { flex-direction: column; align-items: flex-start; }
+}
+
+.plan-change-section {
+  margin-top: var(--space-6);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+.plan-change-row {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  margin-top: var(--space-3);
+}
+.plan-change-select {
+  flex: 1;
+  max-width: 400px;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  font-size: var(--text-sm);
+}
+.plan-change-note {
+  margin-top: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--color-muted);
 }
 </style>
