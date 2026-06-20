@@ -421,6 +421,11 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/api/resellers/", s.requireAdmin(s.resellerByID))
 	mux.HandleFunc("/api/resellers/checkout", s.requireAdmin(s.resellerCheckout))
 	mux.HandleFunc("/api/resellers/payments", s.requireAdmin(s.resellerPayments))
+	mux.HandleFunc("/api/reseller/dashboard", s.requireAdmin(s.resellerDashboard))
+	mux.HandleFunc("/api/reseller/plan-prices", s.requireAdmin(s.resellerPlanPrices))
+	mux.HandleFunc("/api/reseller/tickets", s.requireAdmin(s.resellerTickets))
+	mux.HandleFunc("/api/reseller/tickets/", s.requireAdmin(s.resellerTickets))
+	mux.HandleFunc("/api/reseller/transactions", s.requireAdmin(s.resellerTransactions))
 	mux.HandleFunc("/api/sessions/kill", s.requireFullAdmin(s.killSession))
 	mux.HandleFunc("/portal/sub/", s.subscriptionLink)
 	mux.HandleFunc("/portal/sub", s.subscriptionLink)
@@ -1290,6 +1295,15 @@ func (s *Server) updateCustomer(w http.ResponseWriter, r *http.Request, id int64
 		return
 	}
 
+	// Reseller restrictions: only allow status, display_name, avatar, notes edits
+	_, editRole, _ := s.currentAdmin(r)
+	if editRole == "reseller" {
+		if in.DataGB != nil || in.SpeedMbps != nil || in.Days != nil || in.PlanID != nil || in.IPLimit != nil {
+			writeJSONCode(w, http.StatusForbidden, map[string]any{"ok": false, "error": "reseller_edit_restricted"})
+			return
+		}
+	}
+
 	sets := []string{}
 	args := []any{}
 	if in.DisplayName != nil {
@@ -1493,12 +1507,19 @@ func (s *Server) renewCustomer(w http.ResponseWriter, r *http.Request, id int64)
 		return
 	}
 
-	var username string
-	if err := s.DB.QueryRow(`SELECT username FROM customers WHERE id=? AND deleted_at IS NULL LIMIT 1`, id).Scan(&username); err == sql.ErrNoRows {
+	var username, createdBy string
+	if err := s.DB.QueryRow(`SELECT username, COALESCE(created_by,'') FROM customers WHERE id=? AND deleted_at IS NULL LIMIT 1`, id).Scan(&username, &createdBy); err == sql.ErrNoRows {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
 		return
 	} else if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+
+	// Resellers can only renew their own customers
+	actor2, role2, _ := s.currentAdmin(r)
+	if role2 == "reseller" && createdBy != actor2 {
+		writeJSONCode(w, http.StatusForbidden, map[string]any{"ok": false, "error": "not_your_customer"})
 		return
 	}
 

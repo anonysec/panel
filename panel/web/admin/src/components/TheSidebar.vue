@@ -52,23 +52,48 @@ const navGroups = computed<NavGroup[]>(() => {
 
   const groups: NavGroup[] = []
 
-  if (!isReseller) {
+  if (isReseller) {
+    // Reseller navigation
     groups.push({
       title: t('nav.group_overview'),
       items: [
-        {
-          route: 'overview',
-          label: t('nav.dashboard'),
-          icon: 'dashboard',
-        },
-        {
-          route: 'payments',
-          label: t('nav.transactions'),
-          icon: 'transactions',
-        },
+        { route: 'reseller-dashboard', label: t('nav.dashboard'), icon: 'dashboard' },
       ],
     })
+    groups.push({
+      title: t('nav.group_manage'),
+      items: [
+        { route: 'users', label: t('nav.users'), icon: 'users' },
+        { route: 'reseller-plans', label: t('nav.plans'), icon: 'plans' },
+        { route: 'reseller-transactions', label: t('nav.transactions'), icon: 'transactions' },
+        { route: 'reseller-tickets', label: t('nav.tickets'), icon: 'tickets' },
+      ],
+    })
+    groups.push({
+      title: t('nav.group_system'),
+      items: [
+        { route: 'reseller-settings', label: t('nav.settings'), icon: 'settings' },
+      ],
+    })
+    return groups
   }
+
+  // Admin navigation (unchanged)
+  groups.push({
+    title: t('nav.group_overview'),
+    items: [
+      {
+        route: 'overview',
+        label: t('nav.dashboard'),
+        icon: 'dashboard',
+      },
+      {
+        route: 'payments',
+        label: t('nav.transactions'),
+        icon: 'transactions',
+      },
+    ],
+  })
 
   const manageItems: NavItem[] = [
     {
@@ -131,6 +156,9 @@ function isActive(route: string): boolean {
   }
   if (route === 'tickets') {
     return ['tickets', 'ticket-detail'].includes(props.currentRoute)
+  }
+  if (route === 'reseller-tickets') {
+    return ['reseller-tickets', 'reseller-ticket-detail'].includes(props.currentRoute)
   }
   return props.currentRoute === route
 }

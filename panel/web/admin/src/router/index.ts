@@ -11,6 +11,7 @@ const adminOnlyRoutes = new Set([
   'payments',
   'templates',
   'notifications',
+  'plans',
 ])
 
 const router = createRouter({
@@ -38,6 +39,13 @@ const router = createRouter({
         { path: 'customers', redirect: '/dashboard/users' },
         { path: 'customers/:id', redirect: (to: any) => `/dashboard/users/${to.params.id}` },
         { path: 'resellers', redirect: '/dashboard/users' },
+        // Reseller-specific routes
+        { path: 'reseller-dashboard', name: 'reseller-dashboard', component: () => import('@/views/ResellerDashboardView.vue') },
+        { path: 'reseller-plans', name: 'reseller-plans', component: () => import('@/views/ResellerPlansView.vue') },
+        { path: 'reseller-transactions', name: 'reseller-transactions', component: () => import('@/views/ResellerTransactionsView.vue') },
+        { path: 'reseller-tickets', name: 'reseller-tickets', component: () => import('@/views/ResellerTicketsView.vue') },
+        { path: 'reseller-tickets/:id', name: 'reseller-ticket-detail', component: () => import('@/views/ResellerTicketDetailView.vue'), props: true },
+        { path: 'reseller-settings', name: 'reseller-settings', component: () => import('@/views/ResellerSettingsView.vue') },
       ]
     },
     { path: '/login', name: 'login', component: () => import('@/views/LoginView.vue') },
@@ -67,7 +75,12 @@ router.beforeEach(async (to) => {
 
   // Role-based access: resellers can only access allowed routes
   if (auth.user?.role === 'reseller' && to.name && adminOnlyRoutes.has(to.name as string)) {
-    return { name: 'users' }
+    return { name: 'reseller-dashboard' }
+  }
+
+  // Reseller landing page: redirect root to reseller-dashboard
+  if (auth.user?.role === 'reseller' && (to.name === 'overview' || to.path === '/' || to.path === '')) {
+    return { name: 'reseller-dashboard' }
   }
 
   // Legacy meta-based role check
