@@ -12,7 +12,6 @@ interface PlanPrice {
   id: number
   name: string
   data_gb: number
-  speed_mbps: number
   duration_days: number
   wholesale_price: number
   sell_price: number
@@ -72,7 +71,6 @@ onMounted(loadPlans)
           <tr>
             <th>{{ t('plans.name') }}</th>
             <th>{{ t('plans.data_gb') }}</th>
-            <th>{{ t('plans.speed') }}</th>
             <th>{{ t('plans.duration_days') }}</th>
             <th>{{ t('reseller_plans.wholesale') }}</th>
             <th>{{ t('reseller_plans.sell_price') }}</th>
@@ -84,7 +82,6 @@ onMounted(loadPlans)
           <tr v-for="plan in plans" :key="plan.id">
             <td class="plan-name">{{ plan.name }}</td>
             <td>{{ plan.data_gb > 0 ? `${plan.data_gb} GB` : '∞' }}</td>
-            <td>{{ plan.speed_mbps > 0 ? `${plan.speed_mbps} Mbps` : '∞' }}</td>
             <td>{{ plan.duration_days > 0 ? `${plan.duration_days}d` : '∞' }}</td>
             <td class="price-cell">{{ plan.wholesale_price.toLocaleString() }}</td>
             <td>

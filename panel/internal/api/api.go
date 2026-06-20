@@ -303,8 +303,76 @@ var resellerEmojis = []string{"🔵", "🟢", "🟡", "🔴", "🟣", "🟠", "�
 
 var defaultEmojis = []string{"🦊", "🐻", "🐼", "🐨", "🦁", "🐯", "🐸", "🐙", "🦋", "🌟", "🔥", "💎", "🎯", "🚀", "⚡", "🌈", "🎪", "🎭", "🏆", "👑"}
 
-func randomEmoji() string {
-	return defaultEmojis[time.Now().UnixNano()%int64(len(defaultEmojis))]
+func randomEmoji(reserved []string) string {
+	pool := make([]string, 0, len(defaultEmojis))
+	for _, e := range defaultEmojis {
+		excluded := false
+		for _, r := range reserved {
+			if e == r {
+				excluded = true
+				break
+			}
+		}
+		if !excluded {
+			pool = append(pool, e)
+		}
+	}
+	if len(pool) == 0 {
+		pool = defaultEmojis // fallback if all taken
+	}
+	return pool[time.Now().UnixNano()%int64(len(pool))]
+}
+
+// reservedEmojis returns emojis currently assigned to resellers (reserved from general pool).
+func (s *Server) reservedEmojis() []string {
+	rows, err := s.DB.Query(`SELECT DISTINCT avatar FROM admins WHERE role='reseller' AND avatar IS NOT NULL AND avatar != ''`)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var result []string
+	for rows.Next() {
+		var emoji string
+		if err := rows.Scan(&emoji); err == nil && emoji != "" {
+			result = append(result, emoji)
+		}
+	}
+	return result
+}
+
+// reservedEmojisEndpoint returns the list of emojis reserved by resellers.
+func (s *Server) reservedEmojisEndpoint(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method", http.StatusMethodNotAllowed)
+		return
+	}
+	// Only owner/admin can see reserved emojis (used by emoji picker filtering)
+	_, role, _ := s.currentAdmin(r)
+	if role != "owner" && role != "admin" {
+		writeJSONCode(w, http.StatusForbidden, map[string]any{"ok": false, "error": "forbidden"})
+		return
+	}
+
+	type ReservedEmoji struct {
+		Emoji    string `json:"emoji"`
+		Reseller string `json:"reseller"`
+	}
+
+	rows, err := s.DB.Query(`SELECT COALESCE(avatar,''), username FROM admins WHERE role='reseller' AND avatar IS NOT NULL AND avatar != ''`)
+	if err != nil {
+		writeJSON(w, map[string]any{"ok": true, "reserved": []any{}})
+		return
+	}
+	defer rows.Close()
+
+	reserved := []ReservedEmoji{}
+	for rows.Next() {
+		var re ReservedEmoji
+		if err := rows.Scan(&re.Emoji, &re.Reseller); err == nil && re.Emoji != "" {
+			reserved = append(reserved, re)
+		}
+	}
+	writeJSON(w, map[string]any{"ok": true, "reserved": reserved})
 }
 
 func New(db *sql.DB, cfg config.Config) *Server {
@@ -423,6 +491,7 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/api/resellers/payments", s.requireAdmin(s.resellerPayments))
 	mux.HandleFunc("/api/reseller/dashboard", s.requireAdmin(s.resellerDashboard))
 	mux.HandleFunc("/api/reseller/plan-prices", s.requireAdmin(s.resellerPlanPrices))
+	mux.HandleFunc("/api/reserved-emojis", s.requireAdmin(s.reservedEmojisEndpoint))
 	mux.HandleFunc("/api/reseller/tickets", s.requireAdmin(s.resellerTickets))
 	mux.HandleFunc("/api/reseller/tickets/", s.requireAdmin(s.resellerTickets))
 	mux.HandleFunc("/api/reseller/transactions", s.requireAdmin(s.resellerTransactions))
@@ -883,6 +952,17 @@ func (s *Server) createCustomer(w http.ResponseWriter, r *http.Request) {
 				writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "reseller_quota_only"})
 				return
 			}
+			// Resellers can only use plans from their allowed list
+			if role == "reseller" {
+				var resellerID int64
+				_ = s.DB.QueryRow(`SELECT id FROM admins WHERE username=?`, actor).Scan(&resellerID)
+				var allowed int
+				_ = s.DB.QueryRow(`SELECT COUNT(*) FROM reseller_allowed_plans WHERE reseller_id=? AND plan_id=?`, resellerID, *in.PlanID).Scan(&allowed)
+				if allowed == 0 {
+					writeJSONCode(w, http.StatusForbidden, map[string]any{"ok": false, "error": "plan_not_allowed"})
+					return
+				}
+			}
 			if in.DataGB == nil {
 				dataGB = planDataGB
 			}
@@ -921,7 +1001,7 @@ func (s *Server) createCustomer(w http.ResponseWriter, r *http.Request) {
 	if in.Avatar != nil && *in.Avatar != "" {
 		avatarVal = *in.Avatar
 	} else if role != "reseller" {
-		avatarVal = randomEmoji()
+		avatarVal = randomEmoji(s.reservedEmojis())
 	}
 
 	res, err := tx.Exec(`INSERT INTO customers(username,display_name,plan_id,sub_token,created_by,avatar) VALUES(?,?,?,?,?,?)`, in.Username, in.DisplayName, in.PlanID, auth.RandomToken(24), actor, avatarVal)
@@ -1295,10 +1375,10 @@ func (s *Server) updateCustomer(w http.ResponseWriter, r *http.Request, id int64
 		return
 	}
 
-	// Reseller restrictions: only allow status, display_name, avatar, notes edits
+	// Reseller restrictions: only allow status, display_name, notes edits
 	_, editRole, _ := s.currentAdmin(r)
 	if editRole == "reseller" {
-		if in.DataGB != nil || in.SpeedMbps != nil || in.Days != nil || in.PlanID != nil || in.IPLimit != nil {
+		if in.DataGB != nil || in.SpeedMbps != nil || in.Days != nil || in.PlanID != nil || in.IPLimit != nil || in.Avatar != nil {
 			writeJSONCode(w, http.StatusForbidden, map[string]any{"ok": false, "error": "reseller_edit_restricted"})
 			return
 		}
@@ -6414,6 +6494,56 @@ func (s *Server) resellerByID(w http.ResponseWriter, r *http.Request) {
 
 		s.logAudit(actor, "reseller.credit_adjusted", "reseller", strconv.FormatInt(id, 10), nil, map[string]any{"username": resellerUsername, "amount": in.Amount}, clientIP(r))
 		writeJSON(w, map[string]any{"ok": true})
+		return
+	}
+
+	// GET/POST /api/resellers/:id/plans — manage allowed plans for this reseller
+	if len(parts) > 1 && parts[1] == "plans" {
+		if r.Method == http.MethodGet {
+			rows, err := s.DB.Query(`SELECT plan_id FROM reseller_allowed_plans WHERE reseller_id=?`, id)
+			if err != nil {
+				writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+				return
+			}
+			defer rows.Close()
+			planIDs := []int64{}
+			for rows.Next() {
+				var pid int64
+				if err := rows.Scan(&pid); err == nil {
+					planIDs = append(planIDs, pid)
+				}
+			}
+			writeJSON(w, map[string]any{"ok": true, "plan_ids": planIDs})
+			return
+		}
+		if r.Method == http.MethodPost {
+			limitBody(w, r, maxJSONBody)
+			var in struct {
+				PlanIDs []int64 `json:"plan_ids"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+				writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad_json"})
+				return
+			}
+			tx, err := s.DB.Begin()
+			if err != nil {
+				writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+				return
+			}
+			defer tx.Rollback()
+			_, _ = tx.Exec(`DELETE FROM reseller_allowed_plans WHERE reseller_id=?`, id)
+			for _, pid := range in.PlanIDs {
+				_, _ = tx.Exec(`INSERT INTO reseller_allowed_plans(reseller_id, plan_id) VALUES(?,?)`, id, pid)
+			}
+			if err := tx.Commit(); err != nil {
+				writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+				return
+			}
+			s.logAudit(actor, "reseller.plans_updated", "reseller", strconv.FormatInt(id, 10), nil, map[string]any{"username": resellerUsername, "plan_ids": in.PlanIDs}, clientIP(r))
+			writeJSON(w, map[string]any{"ok": true})
+			return
+		}
+		http.Error(w, "method", http.StatusMethodNotAllowed)
 		return
 	}
 

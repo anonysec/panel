@@ -27,14 +27,16 @@ func (s *Server) resellerDashboard(w http.ResponseWriter, r *http.Request) {
 
 	totalUsers := s.count(`SELECT COUNT(*) FROM customers WHERE created_by=? AND deleted_at IS NULL`, actor)
 	activeUsers := s.count(`SELECT COUNT(*) FROM customers WHERE created_by=? AND deleted_at IS NULL AND status='active'`, actor)
-	todayCreated := s.count(`SELECT COUNT(*) FROM customers WHERE created_by=? AND deleted_at IS NULL AND created_at >= CURDATE()`, actor)
+
+	var totalUsageBytes int64
+	_ = s.DB.QueryRow(`SELECT COALESCE(SUM(ra.acctinputoctets + ra.acctoutputoctets), 0) FROM radacct ra INNER JOIN customers c ON c.username = ra.username WHERE c.created_by = ? AND c.deleted_at IS NULL`, actor).Scan(&totalUsageBytes)
 
 	writeJSON(w, map[string]any{
-		"ok":            true,
-		"credit":        credit,
-		"total_users":   totalUsers,
-		"active_users":  activeUsers,
-		"today_created": todayCreated,
+		"ok":                true,
+		"credit":            credit,
+		"total_users":       totalUsers,
+		"active_users":      activeUsers,
+		"total_usage_bytes": totalUsageBytes,
 	})
 }
 
@@ -68,9 +70,10 @@ func (s *Server) listResellerPlanPrices(w http.ResponseWriter, actor string) {
 		SELECT p.id, p.name, p.data_gb, p.speed_mbps, p.duration_days, p.price,
 			COALESCE(rp.sell_price, 0)
 		FROM plans p
+		INNER JOIN reseller_allowed_plans rap ON rap.plan_id = p.id AND rap.reseller_id = ?
 		LEFT JOIN reseller_plan_prices rp ON rp.plan_id = p.id AND rp.reseller_id = ?
-		WHERE p.is_active = 1
-		ORDER BY p.sort_order ASC, p.id DESC`, resellerID)
+		WHERE p.is_active = 1 AND COALESCE(p.billing_type, 'quota') != 'payg'
+		ORDER BY p.sort_order ASC, p.id DESC`, resellerID, resellerID)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return

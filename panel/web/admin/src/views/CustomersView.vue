@@ -20,6 +20,7 @@ import { useDebounceFn } from '@vueuse/core'
 import { useConfirm } from '@koris/composables/useConfirm'
 import { useToast } from '@koris/composables/useToast'
 import { useI18n } from '@koris/composables/useI18n'
+import { useApi } from '@koris/composables/useApi'
 import { formatDate } from '@koris/composables/useFormatDate'
 
 const { t } = useI18n()
@@ -31,6 +32,7 @@ const realtime = useRealtimeStore()
 const authStore = useAuthStore()
 const { confirm } = useConfirm()
 const toast = useToast()
+const api = useApi()
 
 const isReseller = computed(() => authStore.user?.role === 'reseller')
 
@@ -79,8 +81,46 @@ const resellerForm = ref({
 
 const creditForm = ref({ amount: '' })
 
+// Allowed plans for the reseller being edited
+const resellerAllowedPlanIds = ref<number[]>([])
+
 // Default avatar emojis for user and reseller selection
 const defaultEmojis = ['🦊', '🐻', '🐼', '🐨', '🦁', '🐯', '🐸', '🐙', '🦋', '🌟', '🔥', '💎', '🎯', '🚀', '⚡', '🌈', '🎪', '🎭', '🏆', '👑']
+
+// Reserved emojis (used by resellers, filtered from user creation picker)
+interface ReservedEmojiInfo { emoji: string; reseller: string }
+const reservedEmojiList = ref<ReservedEmojiInfo[]>([])
+
+const availableUserEmojis = computed(() => {
+  const reservedSet = new Set(reservedEmojiList.value.map(r => r.emoji))
+  return defaultEmojis.filter(e => !reservedSet.has(e))
+})
+
+function getResellerForEmoji(emoji: string): string {
+  const info = reservedEmojiList.value.find(r => r.emoji === emoji)
+  return info?.reseller ?? ''
+}
+
+function isReservedByOther(emoji: string): boolean {
+  const info = reservedEmojiList.value.find(r => r.emoji === emoji)
+  if (!info) return false
+  // If we're editing a reseller, their own emoji is not "reserved by other"
+  if (editingResellerId.value) {
+    const currentReseller = resellersStore.list.find(r => r.id === editingResellerId.value)
+    if (currentReseller && currentReseller.username === info.reseller) return false
+  }
+  return true
+}
+
+async function loadReservedEmojis() {
+  if (isReseller.value) return // resellers don't need this
+  try {
+    const data = await api.get<{ ok: boolean; reserved: ReservedEmojiInfo[] }>('/api/reserved-emojis')
+    if (data?.ok) {
+      reservedEmojiList.value = data.reserved
+    }
+  } catch { /* ignore */ }
+}
 
 // ─── Plan Options ───────────────────────────────────────────────────────────
 const planOptions = computed(() =>
@@ -308,7 +348,27 @@ function openEditReseller(reseller: any) {
     avatar: reseller.avatar || '',
   }
   editingResellerId.value = reseller.id
+  resellerAllowedPlanIds.value = []
+  loadResellerAllowedPlans(reseller.id)
   showResellerSlideOver.value = true
+}
+
+async function loadResellerAllowedPlans(resellerId: number) {
+  try {
+    const data = await api.get<{ ok: boolean; plan_ids: number[] }>(`/api/resellers/${resellerId}/plans`)
+    if (data?.ok) {
+      resellerAllowedPlanIds.value = data.plan_ids || []
+    }
+  } catch { /* ignore */ }
+}
+
+function toggleAllowedPlan(planId: number) {
+  const idx = resellerAllowedPlanIds.value.indexOf(planId)
+  if (idx >= 0) {
+    resellerAllowedPlanIds.value.splice(idx, 1)
+  } else {
+    resellerAllowedPlanIds.value.push(planId)
+  }
 }
 
 async function handleResellerSubmit() {
@@ -319,6 +379,10 @@ async function handleResellerSubmit() {
       default_plan_id: resellerForm.value.plan_id ? Number(resellerForm.value.plan_id) : undefined,
       avatar: resellerForm.value.avatar,
     })
+    // Save allowed plans
+    try {
+      await api.post(`/api/resellers/${editingResellerId.value}/plans`, { plan_ids: resellerAllowedPlanIds.value })
+    } catch { /* ignore */ }
     if (success) toast.success(t('resellers.updated'))
   } else {
     if (!resellerForm.value.username || !resellerForm.value.password) {
@@ -376,6 +440,7 @@ onMounted(() => {
   store.loadCustomers()
   resellersStore.loadResellers()
   plansStore.loadPlans()
+  loadReservedEmojis()
 })
 </script>
 
@@ -576,17 +641,25 @@ onMounted(() => {
             </template>
           </KFormField>
         </div>
-        <KFormField name="user-avatar" :label="t('user.avatar')">
+        <KFormField v-if="!isReseller" name="user-avatar" :label="t('user.avatar')">
           <template #default>
             <div class="emoji-picker">
               <button
-                v-for="em in defaultEmojis"
+                v-for="em in availableUserEmojis"
                 :key="em"
                 type="button"
                 class="emoji-btn"
                 :class="{ 'emoji-btn--active': userForm.avatar === em }"
                 @click="userForm.avatar = userForm.avatar === em ? '' : em"
               >{{ em }}</button>
+              <button
+                v-for="em in reservedEmojiList"
+                :key="'reserved-' + em.emoji"
+                type="button"
+                class="emoji-btn emoji-btn--reserved"
+                disabled
+                :title="`Used by reseller: ${em.reseller}`"
+              >{{ em.emoji }}</button>
             </div>
           </template>
         </KFormField>
@@ -632,9 +705,34 @@ onMounted(() => {
                 :key="em"
                 type="button"
                 class="emoji-btn"
-                :class="{ 'emoji-btn--active': resellerForm.avatar === em }"
+                :class="{
+                  'emoji-btn--active': resellerForm.avatar === em,
+                  'emoji-btn--reserved': isReservedByOther(em),
+                }"
+                :disabled="isReservedByOther(em)"
+                :title="isReservedByOther(em) ? `Used by: ${getResellerForEmoji(em)}` : ''"
                 @click="resellerForm.avatar = resellerForm.avatar === em ? '' : em"
               >{{ em }}</button>
+            </div>
+          </template>
+        </KFormField>
+        <KFormField v-if="editingResellerId" name="reseller-allowed-plans" :label="t('resellers.allowed_plans')" :hint="t('resellers.allowed_plans_hint')">
+          <template #default>
+            <div class="allowed-plans-checklist">
+              <label
+                v-for="plan in quotaPlanOptions"
+                :key="plan.value"
+                class="plan-check"
+              >
+                <input
+                  type="checkbox"
+                  :value="Number(plan.value)"
+                  :checked="resellerAllowedPlanIds.includes(Number(plan.value))"
+                  @change="toggleAllowedPlan(Number(plan.value))"
+                />
+                <span>{{ plan.label }}</span>
+              </label>
+              <p v-if="quotaPlanOptions.length === 0" class="empty-hint">{{ t('resellers.plan_hint') }}</p>
             </div>
           </template>
         </KFormField>
@@ -984,5 +1082,16 @@ onMounted(() => {
   border-color: var(--color-primary, #2563eb);
   background: rgba(37, 99, 235, 0.15);
   box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.3);
+}
+
+.emoji-btn--reserved {
+  opacity: 0.35;
+  cursor: not-allowed;
+  filter: grayscale(0.7);
+}
+
+.emoji-btn--reserved:hover {
+  border-color: var(--color-border, #28333f);
+  background: var(--color-surface, #0b1120);
 }
 </style>

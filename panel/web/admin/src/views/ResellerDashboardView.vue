@@ -13,11 +13,21 @@ interface DashboardStats {
   credit: number
   total_users: number
   active_users: number
-  today_created: number
+  total_usage_bytes: number
 }
 
 const stats = ref<DashboardStats | null>(null)
 const loading = ref(true)
+
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B'
+  const tb = bytes / (1024 ** 4)
+  if (tb >= 1) return `${tb.toFixed(2)} TB`
+  const gb = bytes / (1024 ** 3)
+  if (gb >= 1) return `${gb.toFixed(2)} GB`
+  const mb = bytes / (1024 ** 2)
+  return `${mb.toFixed(1)} MB`
+}
 
 async function loadStats() {
   loading.value = true
@@ -72,10 +82,10 @@ onMounted(loadStats)
       </div>
 
       <div class="stat-card">
-        <div class="stat-icon">📅</div>
+        <div class="stat-icon">📊</div>
         <div class="stat-content">
-          <span class="stat-value">{{ stats.today_created }}</span>
-          <span class="stat-label">{{ t('reseller_dashboard.today_created') }}</span>
+          <span class="stat-value">{{ formatBytes(stats.total_usage_bytes) }}</span>
+          <span class="stat-label">{{ t('reseller_dashboard.total_usage') }}</span>
         </div>
       </div>
     </div>

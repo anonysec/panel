@@ -5,6 +5,7 @@ import { useCustomersStore } from '@/stores/customers'
 import { useToast } from '@koris/composables/useToast'
 import { useI18n } from '@koris/composables/useI18n'
 import { useApi } from '@koris/composables/useApi'
+import { useAuthStore } from '@/stores/auth'
 import { formatDate, formatDateTime } from '@koris/composables/useFormatDate'
 import KTabs from '@koris/ui/KTabs.vue'
 import KFormField from '@koris/ui/KFormField.vue'
@@ -125,6 +126,28 @@ const usage = computed(() => store.usage)
 const isNew = computed(() => props.id === 'new')
 
 const defaultEmojis = ['🦊', '🐻', '🐼', '🐨', '🦁', '🐯', '🐸', '🐙', '🦋', '🌟', '🔥', '💎', '🎯', '🚀', '⚡', '🌈', '🎪', '🎭', '🏆', '👑']
+
+// Reserved emojis (used by resellers, filtered from user picker)
+const authStore = useAuthStore()
+const isReseller = computed(() => authStore.user?.role === 'reseller')
+
+interface ReservedEmojiInfo { emoji: string; reseller: string }
+const reservedEmojiList = ref<ReservedEmojiInfo[]>([])
+
+const availableUserEmojis = computed(() => {
+  const reservedSet = new Set(reservedEmojiList.value.map(r => r.emoji))
+  return defaultEmojis.filter(e => !reservedSet.has(e))
+})
+
+async function loadReservedEmojis() {
+  if (isReseller.value) return
+  try {
+    const data = await get<{ ok: boolean; reserved: ReservedEmojiInfo[] }>('/api/reserved-emojis')
+    if (data?.ok) {
+      reservedEmojiList.value = data.reserved
+    }
+  } catch { /* ignore */ }
+}
 
 function populateForm() {
   if (customer.value) {
@@ -254,6 +277,7 @@ onMounted(() => {
     store.loadDetail(Number(props.id))
     loadPlans()
   }
+  loadReservedEmojis()
 })
 </script>
 
@@ -391,17 +415,25 @@ onMounted(() => {
               </template>
             </KFormField>
 
-            <KFormField name="user-avatar" :label="t('user.avatar')">
+            <KFormField v-if="!isReseller" name="user-avatar" :label="t('user.avatar')">
               <template #default>
                 <div class="emoji-picker">
                   <button
-                    v-for="em in defaultEmojis"
+                    v-for="em in availableUserEmojis"
                     :key="em"
                     type="button"
                     class="emoji-btn"
                     :class="{ 'emoji-btn--active': form.avatar === em }"
                     @click="form.avatar = form.avatar === em ? '' : em"
                   >{{ em }}</button>
+                  <button
+                    v-for="em in reservedEmojiList"
+                    :key="'reserved-' + em.emoji"
+                    type="button"
+                    class="emoji-btn emoji-btn--reserved"
+                    disabled
+                    :title="`Used by reseller: ${em.reseller}`"
+                  >{{ em.emoji }}</button>
                 </div>
               </template>
             </KFormField>
@@ -770,5 +802,16 @@ onMounted(() => {
   border-color: var(--color-primary, #2563eb);
   background: rgba(37, 99, 235, 0.15);
   transform: scale(1.1);
+}
+
+.emoji-btn--reserved {
+  opacity: 0.35;
+  cursor: not-allowed;
+  filter: grayscale(0.7);
+}
+
+.emoji-btn--reserved:hover {
+  border-color: var(--color-border, #28333f);
+  background: var(--color-surface, #0b1120);
 }
 </style>
