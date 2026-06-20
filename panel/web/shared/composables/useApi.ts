@@ -120,9 +120,6 @@ export function useApi(options: UseApiOptions = {}): UseApiReturn {
           url: `${baseUrl}${url}`,
         }
         error.value = 'Unauthorized'
-        if (showErrorToast) {
-          toast.error('Session expired. Please log in again.')
-        }
         if (onUnauthorized) {
           onUnauthorized()
         }

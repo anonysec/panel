@@ -123,12 +123,20 @@ async function loadReservedEmojis() {
 }
 
 // ─── Plan Options ───────────────────────────────────────────────────────────
-const planOptions = computed(() =>
-  plansStore.activePlans.map((p) => ({
+const resellerPlans = ref<{ id: number; name: string; data_gb: number; duration_days: number; wholesale_price: number }[]>([])
+
+const planOptions = computed(() => {
+  if (isReseller.value) {
+    return resellerPlans.value.map((p) => ({
+      value: String(p.id),
+      label: `${p.name} (${p.data_gb}GB / ${p.duration_days}d)`,
+    }))
+  }
+  return plansStore.activePlans.map((p) => ({
     value: String(p.id),
     label: `${p.name} (${p.data_gb}GB / ${p.duration_days}d — $${p.price})`,
   }))
-)
+})
 
 const quotaPlanOptions = computed(() =>
   plansStore.list
@@ -436,11 +444,21 @@ async function handleDeleteReseller(id: number, username: string) {
 
 // ─── Lifecycle ──────────────────────────────────────────────────────────────
 
-onMounted(() => {
+onMounted(async () => {
   store.loadCustomers()
   resellersStore.loadResellers()
   plansStore.loadPlans()
   loadReservedEmojis()
+
+  // Load reseller-specific allowed plans
+  if (isReseller.value) {
+    try {
+      const data = await api.get<{ ok: boolean; plans: any[] }>('/api/reseller/plan-prices')
+      if (data?.ok) {
+        resellerPlans.value = data.plans
+      }
+    } catch { /* ignore */ }
+  }
 })
 </script>
 

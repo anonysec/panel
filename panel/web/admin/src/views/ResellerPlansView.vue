@@ -93,7 +93,7 @@ onMounted(loadPlans)
                 class="price-input"
               />
             </td>
-            <td :class="['profit-cell', { positive: profit(plan) > 0 }]">
+            <td :class="['profit-cell', { positive: profit(plan) > 0, negative: profit(plan) < 0 }]">
               {{ profit(plan).toLocaleString() }}
             </td>
             <td>
