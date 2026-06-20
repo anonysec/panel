@@ -1621,7 +1621,7 @@ func (s *Server) switchCustomerPlan(w http.ResponseWriter, r *http.Request, id i
 	var startDate time.Time
 	var expiresAt sql.NullTime
 	err := s.DB.QueryRow(`
-		SELECT s.id, s.plan_id, COALESCE(s.paid_amount, 0), s.created_at, s.expires_at
+		SELECT s.id, s.plan_id, COALESCE(s.paid_amount, 0), s.started_at, s.expires_at
 		FROM subscriptions s
 		WHERE s.customer_id = ? AND s.status = 'active'
 		ORDER BY s.id DESC LIMIT 1`, id).Scan(&subID, &currentPlanID, &paidAmount, &startDate, &expiresAt)
@@ -1665,7 +1665,7 @@ func (s *Server) switchCustomerPlan(w http.ResponseWriter, r *http.Request, id i
 	defer tx.Rollback()
 
 	// 1. Cancel current subscription
-	if _, err := tx.Exec(`UPDATE subscriptions SET status='cancelled', cancelled_at=NOW() WHERE id=?`, subID); err != nil {
+	if _, err := tx.Exec(`UPDATE subscriptions SET status='cancelled' WHERE id=?`, subID); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
