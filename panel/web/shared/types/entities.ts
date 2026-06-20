@@ -11,6 +11,8 @@ export interface Customer {
   plan_id?: number | null
   plan: string
   credit: number
+  avatar: string
+  created_by: string
   created_at: string
 }
 

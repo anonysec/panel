@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCustomersStore } from '@/stores/customers'
+import { useResellersStore } from '@/stores/resellers'
 import { useToast } from '@koris/composables/useToast'
 import { useI18n } from '@koris/composables/useI18n'
 import { useApi } from '@koris/composables/useApi'
@@ -129,7 +130,15 @@ const defaultEmojis = ['🦊', '🐻', '🐼', '🐨', '🦁', '🐯', '🐸', '
 
 // Reserved emojis (used by resellers, filtered from user picker)
 const authStore = useAuthStore()
+const resellersStore = useResellersStore()
 const isReseller = computed(() => authStore.user?.role === 'reseller')
+
+// Hide avatar edit for reseller-created users (they inherit reseller's emoji)
+const isResellerCreated = computed(() => {
+  if (!customer.value?.created_by) return false
+  const resellerUsernames = new Set(resellersStore.list.map(r => r.username))
+  return resellerUsernames.has(customer.value.created_by)
+})
 
 interface ReservedEmojiInfo { emoji: string; reseller: string }
 const reservedEmojiList = ref<ReservedEmojiInfo[]>([])
@@ -278,6 +287,9 @@ onMounted(() => {
     loadPlans()
   }
   loadReservedEmojis()
+  if (!isReseller.value) {
+    resellersStore.loadResellers()
+  }
 })
 </script>
 
@@ -415,7 +427,7 @@ onMounted(() => {
               </template>
             </KFormField>
 
-            <KFormField v-if="!isReseller" name="user-avatar" :label="t('user.avatar')">
+            <KFormField v-if="!isReseller && !isResellerCreated" name="user-avatar" :label="t('user.avatar')">
               <template #default>
                 <div class="emoji-picker">
                   <button

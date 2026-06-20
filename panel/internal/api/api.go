@@ -1245,11 +1245,11 @@ func (s *Server) getCustomerDetail(w http.ResponseWriter, r *http.Request, id in
 	var c CustomerDetail
 	var planID sql.NullInt64
 	var created sql.NullTime
-	err := s.DB.QueryRow(`SELECT c.id,c.username,COALESCE(c.display_name,''),c.status,c.plan_id,COALESCE(p.name,''),COALESCE(w.credit,0),c.created_at,COALESCE(c.notes,''),COALESCE(c.sub_token,''),COALESCE(c.avatar, (SELECT a.avatar FROM admins a WHERE a.username=c.created_by AND a.role='reseller' LIMIT 1), '')
+	err := s.DB.QueryRow(`SELECT c.id,c.username,COALESCE(c.display_name,''),c.status,c.plan_id,COALESCE(p.name,''),COALESCE(w.credit,0),c.created_at,COALESCE(c.notes,''),COALESCE(c.sub_token,''),COALESCE(c.avatar, (SELECT a.avatar FROM admins a WHERE a.username=c.created_by AND a.role='reseller' LIMIT 1), ''),COALESCE(c.created_by,'')
 		FROM customers c
 		LEFT JOIN plans p ON p.id=c.plan_id
 		LEFT JOIN wallets w ON w.username=c.username
-		WHERE c.id=? AND c.deleted_at IS NULL LIMIT 1`, id).Scan(&c.ID, &c.Username, &c.DisplayName, &c.Status, &planID, &c.Plan, &c.Credit, &created, &c.Notes, &c.SubToken, &c.Avatar)
+		WHERE c.id=? AND c.deleted_at IS NULL LIMIT 1`, id).Scan(&c.ID, &c.Username, &c.DisplayName, &c.Status, &planID, &c.Plan, &c.Credit, &created, &c.Notes, &c.SubToken, &c.Avatar, &c.CreatedBy)
 	if err == sql.ErrNoRows {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
 		return

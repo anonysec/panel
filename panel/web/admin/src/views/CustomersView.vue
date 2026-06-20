@@ -1094,4 +1094,42 @@ onMounted(() => {
   border-color: var(--color-border, #28333f);
   background: var(--color-surface, #0b1120);
 }
+
+/* Allowed Plans Checklist */
+.allowed-plans-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 8px;
+  border: 1px solid var(--color-border, #28333f);
+  border-radius: 8px;
+  background: var(--color-surface, #0b1120);
+}
+
+.plan-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.875rem;
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.plan-check input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--color-primary, #3b82f6);
+}
+
+.plan-check span {
+  color: var(--color-text, #e2e8f0);
+}
+
+.empty-hint {
+  color: var(--color-text-secondary, #64748b);
+  font-size: 0.8rem;
+  margin: 0;
+}
 </style>

@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useI18n } from '@koris/composables/useI18n'
 import { useApi } from '@koris/composables/useApi'
 import { useAuthStore } from '@/stores/auth'
 
 const { t } = useI18n()
+const router = useRouter()
 const api = useApi()
 const auth = useAuthStore()
 
@@ -57,7 +59,7 @@ onMounted(loadStats)
     </div>
 
     <div v-else-if="stats" class="stats-grid">
-      <div class="stat-card credit-card">
+      <div class="stat-card credit-card stat-card--clickable" @click="router.push({ name: 'reseller-transactions' })">
         <div class="stat-icon">💰</div>
         <div class="stat-content">
           <span class="stat-value credit-value">{{ stats.credit.toLocaleString() }}</span>
@@ -65,7 +67,7 @@ onMounted(loadStats)
         </div>
       </div>
 
-      <div class="stat-card">
+      <div class="stat-card stat-card--clickable" @click="router.push({ name: 'users' })">
         <div class="stat-icon">👥</div>
         <div class="stat-content">
           <span class="stat-value">{{ stats.total_users }}</span>
@@ -73,7 +75,7 @@ onMounted(loadStats)
         </div>
       </div>
 
-      <div class="stat-card">
+      <div class="stat-card stat-card--clickable" @click="router.push({ name: 'users' })">
         <div class="stat-icon">✅</div>
         <div class="stat-content">
           <span class="stat-value">{{ stats.active_users }}</span>
@@ -81,7 +83,7 @@ onMounted(loadStats)
         </div>
       </div>
 
-      <div class="stat-card">
+      <div class="stat-card stat-card--clickable" @click="router.push({ name: 'users' })">
         <div class="stat-icon">📊</div>
         <div class="stat-content">
           <span class="stat-value">{{ formatBytes(stats.total_usage_bytes) }}</span>
@@ -122,6 +124,16 @@ onMounted(loadStats)
 
 .stat-card:hover {
   border-color: var(--color-primary, #2563eb);
+}
+
+.stat-card--clickable {
+  cursor: pointer;
+  transition: transform 0.15s, border-color 0.15s;
+}
+
+.stat-card--clickable:hover {
+  transform: translateY(-2px);
+  border-color: rgba(37, 99, 235, 0.4);
 }
 
 .stat-card.credit-card {

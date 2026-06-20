@@ -23,7 +23,7 @@ nodes.loadNodes()
 
 const statCards = computed(() => [
   { label: t('stat.revenue'), value: `$${realtime.stats.approved_payments}`, icon: '💰', route: 'payments' },
-  { label: t('stat.active_users'), value: realtime.stats.active_customers, icon: '👥', route: 'customers' },
+  { label: t('stat.active_users'), value: realtime.stats.active_customers, icon: '👥', route: 'users' },
   { label: t('stat.nodes_online'), value: realtime.stats.nodes, icon: '🖥️', route: 'nodes' },
   { label: t('stat.open_tickets'), value: realtime.stats.open_tickets, icon: '🎫', route: 'tickets' },
 ])

@@ -356,6 +356,9 @@ const messages: Record<Locale, Record<string, string>> = {
     'resellers.tx_description': 'Description',
     'resellers.avatar': 'Avatar Emoji',
     'resellers.avatar_hint': 'Choose an emoji avatar for this reseller. All their customers will display it.',
+    'resellers.allowed_plans': 'Allowed Plans',
+    'resellers.allowed_plans_hint': 'Select which plans this reseller can use',
+    'resellers.plan_not_allowed': 'This plan is not allowed',
     // Topbar
     'topbar.search': 'Search...',
     // Sidebar
@@ -1065,6 +1068,9 @@ const messages: Record<Locale, Record<string, string>> = {
     'resellers.tx_description': 'توضیحات',
     'resellers.avatar': 'آواتار ایموجی',
     'resellers.avatar_hint': 'یک ایموجی آواتار برای این نماینده انتخاب کنید. همه مشتریان آن‌ها این آواتار را نمایش خواهند داد.',
+    'resellers.allowed_plans': 'پلن‌های مجاز',
+    'resellers.allowed_plans_hint': 'انتخاب پلن‌هایی که این نماینده مجاز به استفاده است',
+    'resellers.plan_not_allowed': 'این پلن مجاز نیست',
     // Topbar
     'topbar.search': 'جستجو...',
     // Sidebar
@@ -1727,6 +1733,9 @@ const messages: Record<Locale, Record<string, string>> = {
     'resellers.tx_description': '描述',
     'resellers.avatar': '头像表情',
     'resellers.avatar_hint': '为此经销商选择一个表情头像。他们的所有客户将显示此头像。',
+    'resellers.allowed_plans': '允许的套餐',
+    'resellers.allowed_plans_hint': '选择此经销商可使用的套餐',
+    'resellers.plan_not_allowed': '此套餐不被允许',
     // Topbar
     'topbar.search': '搜索...',
     // Sidebar
@@ -2643,6 +2652,9 @@ const messages: Record<Locale, Record<string, string>> = {
     'resellers.tx_description': 'Описание',
     'resellers.avatar': 'Аватар-эмодзи',
     'resellers.avatar_hint': 'Выберите эмодзи-аватар для этого реселлера. Все их клиенты будут отображать его.',
+    'resellers.allowed_plans': 'Доступные тарифы',
+    'resellers.allowed_plans_hint': 'Выберите тарифы, доступные этому реселлеру',
+    'resellers.plan_not_allowed': 'Этот тариф недоступен',
     // Topbar
     'topbar.search': 'Поиск...',
     // Sidebar
