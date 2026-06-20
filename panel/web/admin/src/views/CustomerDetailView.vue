@@ -165,7 +165,7 @@ async function createCustomer() {
   })
   saving.value = false
   if (created) {
-    router.push({ name: 'customers' })
+    router.push({ name: 'users' })
   }
 }
 

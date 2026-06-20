@@ -4,13 +4,6 @@ import { useApi } from '@koris/composables/useApi'
 import type { Customer, CustomerDetail } from '@koris/types'
 
 /**
- * Deleted customer — extends Customer with a deleted_at timestamp
- */
-export interface DeletedCustomer extends Customer {
-  deleted_at: string
-}
-
-/**
  * Usage session representing an active or historical VPN connection
  */
 export interface UsageSession {
@@ -97,7 +90,7 @@ export interface BulkActionResponse {
  */
 export interface CustomerFilters {
   search: string
-  status: 'all' | 'active' | 'archived' | 'online' | 'limited' | 'disabled' | 'expired'
+  status: 'all' | 'active' | 'online' | 'limited' | 'disabled' | 'expired'
   sortBy: string
   sortDir: 'asc' | 'desc'
 }
@@ -117,11 +110,6 @@ export interface CustomerPagination {
 interface CustomersListResponse {
   ok: boolean
   customers: Customer[]
-}
-
-interface DeletedCustomersListResponse {
-  ok: boolean
-  customers: DeletedCustomer[]
 }
 
 interface CustomerDetailResponse {
@@ -160,7 +148,6 @@ interface ConnectionLimitResponse {
 export const useCustomersStore = defineStore('customers', () => {
   // ─── State ────────────────────────────────────────────────────────────────
   const list = ref<Customer[]>([])
-  const deleted = ref<DeletedCustomer[]>([])
   const detail = ref<CustomerDetail | null>(null)
   const usage = ref<UsageSummary | null>(null)
   const loading = ref(false)
@@ -197,9 +184,7 @@ export const useCustomersStore = defineStore('customers', () => {
     let result: Customer[]
 
     // Status filter: select the appropriate source list
-    if (filters.value.status === 'archived') {
-      result = [...deleted.value]
-    } else if (filters.value.status === 'all') {
+    if (filters.value.status === 'all') {
       result = [...list.value]
     } else {
       result = list.value.filter((c) => c.status === filters.value.status)
@@ -259,9 +244,8 @@ export const useCustomersStore = defineStore('customers', () => {
   // ─── Actions ──────────────────────────────────────────────────────────────
 
   /**
-   * Load all customers (active and deleted) from the API.
+   * Load all customers from the API.
    * GET /api/customers → { ok: boolean, customers: Customer[] }
-   * GET /api/deleted/customers → { ok: boolean, customers: DeletedCustomer[] }
    *
    * Sets loading = true before request, false after (success or failure).
    * On error, preserves existing data (Requirement 3.4).
@@ -269,12 +253,8 @@ export const useCustomersStore = defineStore('customers', () => {
   async function loadCustomers(): Promise<void> {
     loading.value = true
     try {
-      const [customersRes, deletedRes] = await Promise.all([
-        get<CustomersListResponse>('/api/customers'),
-        get<DeletedCustomersListResponse>('/api/deleted/customers'),
-      ])
+      const customersRes = await get<CustomersListResponse>('/api/customers')
       list.value = customersRes.customers || []
-      deleted.value = deletedRes.customers || []
     } catch {
       // Preserve existing data on error (Requirement 3.4)
     } finally {
@@ -480,7 +460,6 @@ export const useCustomersStore = defineStore('customers', () => {
   return {
     // State
     list,
-    deleted,
     detail,
     usage,
     loading,

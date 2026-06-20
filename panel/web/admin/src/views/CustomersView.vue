@@ -2,6 +2,8 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCustomersStore } from '@/stores/customers'
+import { useResellersStore } from '@/stores/resellers'
+import { usePlansStore } from '@/stores/plans'
 import { useRealtimeStore } from '@/stores/realtime'
 import type { BulkActionRequest } from '@/stores/customers'
 import KDataTable from '@koris/ui/KDataTable.vue'
@@ -9,6 +11,10 @@ import KButton from '@koris/ui/KButton.vue'
 import KStatusPill from '@koris/ui/KStatusPill.vue'
 import KAvatar from '@koris/ui/KAvatar.vue'
 import KInput from '@koris/ui/KInput.vue'
+import KFormField from '@koris/ui/KFormField.vue'
+import KSelect from '@koris/ui/KSelect.vue'
+import KSlideOver from '@koris/ui/KSlideOver.vue'
+import KEmptyState from '@koris/ui/KEmptyState.vue'
 import { useDebounceFn } from '@vueuse/core'
 import { useConfirm } from '@koris/composables/useConfirm'
 import { useToast } from '@koris/composables/useToast'
@@ -18,13 +24,15 @@ import { formatDate } from '@koris/composables/useFormatDate'
 const { t } = useI18n()
 const router = useRouter()
 const store = useCustomersStore()
+const resellersStore = useResellersStore()
+const plansStore = usePlansStore()
 const realtime = useRealtimeStore()
 const { confirm } = useConfirm()
 const toast = useToast()
 
 const searchQuery = ref('')
 const activeStatusTab = ref<string>('all')
-const currentMainTab = ref<string>('customers')
+const currentMainTab = ref<string>('users')
 
 /** Tracks selected customer IDs for bulk actions */
 const selectedIds = ref<number[]>([])
@@ -38,14 +46,59 @@ const isAllSelected = computed(() => {
 /** Whether at least one customer is selected (controls toolbar visibility) */
 const hasSelection = computed(() => selectedIds.value.length > 0)
 
-/** Page-level navigation tabs: Customers | Archived | Resellers */
+// ─── Slide-Over State ───────────────────────────────────────────────────────
+const showUserSlideOver = ref(false)
+const showResellerSlideOver = ref(false)
+const showCreditSlideOver = ref(false)
+const editingResellerId = ref<number | null>(null)
+const creditTarget = ref<{ id: number; username: string } | null>(null)
+const saving = ref(false)
+
+const userForm = ref({
+  username: '',
+  password: '',
+  display_name: '',
+  plan_id: '' as string | number,
+  data_gb: '',
+  speed_mbps: '',
+  days: '',
+  template_id: '' as string | number,
+})
+
+const resellerForm = ref({
+  username: '',
+  password: '',
+  plan_id: '' as string | number,
+})
+
+const creditForm = ref({ amount: '' })
+
+// ─── Plan Options ───────────────────────────────────────────────────────────
+const planOptions = computed(() =>
+  plansStore.activePlans.map((p) => ({
+    value: String(p.id),
+    label: `${p.name} (${p.data_gb}GB / ${p.duration_days}d — $${p.price})`,
+  }))
+)
+
+const quotaPlanOptions = computed(() =>
+  plansStore.list
+    .filter((p) => p.is_active && (p.billing_type || 'quota') === 'quota')
+    .map((p) => ({
+      value: String(p.id),
+      label: `${p.name} (${p.data_gb}GB / ${p.duration_days}d — $${p.price})`,
+    }))
+)
+
+// ─── Tabs ───────────────────────────────────────────────────────────────────
+
+/** Page-level navigation tabs: Users | Resellers */
 const mainTabs = computed(() => [
-  { key: 'customers', label: t('customers.tab_customers') },
-  { key: 'archived', label: t('customers.tab_archived') },
+  { key: 'users', label: t('customers.tab_users') },
   { key: 'resellers', label: t('customers.tab_resellers') },
 ])
 
-/** Status filter tabs (only shown when main tab is "customers") */
+/** Status filter tabs (only shown when main tab is "users") */
 const statusTabs = computed(() => [
   { key: 'all', label: t('customers.all') },
   { key: 'active', label: t('customers.active') },
@@ -54,6 +107,8 @@ const statusTabs = computed(() => [
   { key: 'disabled', label: t('customers.disabled') },
   { key: 'expired', label: t('customers.expired') },
 ])
+
+// ─── Users Table ────────────────────────────────────────────────────────────
 
 const columns = computed(() => [
   { key: 'username', label: t('user.username'), sortable: true },
@@ -70,27 +125,26 @@ const onlineUsernames = computed(() => {
   return new Set(realtime.liveSessions.map((s) => s.username))
 })
 
-/** The data shown in the table depends on which main tab + status filter is active */
+/** The data shown in the table depends on which status filter is active */
 const tableData = computed(() => {
-  if (currentMainTab.value === 'archived') {
-    // Show deleted/archived customers
-    const query = searchQuery.value.trim().toLowerCase()
-    if (!query) return store.deleted
-    return store.deleted.filter(
-      (c: any) =>
-        c.username.toLowerCase().includes(query) ||
-        c.display_name.toLowerCase().includes(query)
-    )
-  }
-
-  // For "customers" main tab, apply status filter
   if (activeStatusTab.value === 'online') {
-    // Filter by live session presence (real online state)
     return store.paginatedList.filter((c: any) => onlineUsernames.value.has(c.username))
   }
-
   return store.paginatedList
 })
+
+// ─── Resellers Table ────────────────────────────────────────────────────────
+
+const resellerColumns = computed(() => [
+  { key: 'username', label: t('resellers.username'), sortable: true },
+  { key: 'status', label: t('resellers.status'), sortable: true },
+  { key: 'credit', label: t('resellers.credit'), sortable: true, align: 'right' as const },
+  { key: 'customer_count', label: t('resellers.customers'), sortable: true, align: 'right' as const },
+  { key: 'created_at', label: t('resellers.created'), sortable: true },
+  { key: 'actions', label: '', align: 'center' as const, width: '160px' },
+])
+
+// ─── Search ─────────────────────────────────────────────────────────────────
 
 const debouncedSearch = useDebounceFn((val: string) => {
   store.filters.search = val
@@ -102,23 +156,15 @@ function onSearchInput(val: string | number) {
   debouncedSearch(strVal)
 }
 
+// ─── Tab Navigation ─────────────────────────────────────────────────────────
+
 function setMainTab(tabKey: string) {
-  if (tabKey === 'resellers') {
-    router.push({ name: 'resellers' })
-    return
-  }
   currentMainTab.value = tabKey
-  // Reset status filter when switching main tabs
-  if (tabKey === 'archived') {
-    store.filters.status = 'all'
-    activeStatusTab.value = 'all'
-  }
 }
 
 function setStatusFilter(status: string) {
   activeStatusTab.value = status
   if (status === 'online') {
-    // "Online" uses live session data, so set store filter to 'all' and filter client-side
     store.filters.status = 'all'
   } else {
     store.filters.status = status as any
@@ -126,17 +172,39 @@ function setStatusFilter(status: string) {
   store.pagination.page = 1
 }
 
+// ─── User Actions ───────────────────────────────────────────────────────────
+
 function handleRowClick(row: any) {
-  router.push({ name: 'customer-detail', params: { id: String(row.id) } })
+  router.push({ name: 'user-detail', params: { id: String(row.id) } })
 }
 
-function handleNewUser() {
-  router.push({ name: 'customer-detail', params: { id: 'new' } })
+function openNewUserSlideOver() {
+  userForm.value = { username: '', password: '', display_name: '', plan_id: '', data_gb: '', speed_mbps: '', days: '', template_id: '' }
+  showUserSlideOver.value = true
 }
 
-/**
- * Delete a single customer with confirmation dialog.
- */
+async function handleCreateUser() {
+  if (!userForm.value.username || !userForm.value.password) return
+  saving.value = true
+  const success = await store.createCustomer({
+    username: userForm.value.username,
+    password: userForm.value.password,
+    display_name: userForm.value.display_name,
+    plan_id: userForm.value.plan_id ? Number(userForm.value.plan_id) : 0,
+    data_gb: userForm.value.data_gb ? Number(userForm.value.data_gb) : 0,
+    speed_mbps: userForm.value.speed_mbps ? Number(userForm.value.speed_mbps) : 0,
+    days: userForm.value.days ? Number(userForm.value.days) : 0,
+    template_id: userForm.value.template_id ? Number(userForm.value.template_id) : undefined,
+  })
+  saving.value = false
+  if (success) {
+    toast.success(t('customers.created_success'))
+    showUserSlideOver.value = false
+  } else {
+    toast.error(t('customers.created_error'))
+  }
+}
+
 async function deleteCustomer(id: number, username: string) {
   const confirmed = await confirm({
     title: t('customers.confirm_delete_title'),
@@ -147,7 +215,7 @@ async function deleteCustomer(id: number, username: string) {
     cancelText: t('btn.cancel'),
   })
   if (!confirmed) return
-  const success = await store.archiveCustomer(id)
+  const success = await store.deleteCustomer(id)
   if (success) {
     toast.success(t('customers.deleted_success').replace('{name}', username))
   } else {
@@ -155,25 +223,16 @@ async function deleteCustomer(id: number, username: string) {
   }
 }
 
-/**
- * Handle selection change from KDataTable.
- * Extracts IDs from selected row objects.
- */
+// ─── Bulk Actions ───────────────────────────────────────────────────────────
+
 function onSelectionChange(rows: any[]) {
   selectedIds.value = rows.map((r) => r.id)
 }
 
-/**
- * Clear the current selection (e.g., after a bulk action completes).
- */
 function clearSelection() {
   selectedIds.value = []
 }
 
-/**
- * Execute a bulk action. For delete, shows a confirmation dialog first.
- * Displays toast with success/failure summary from BulkActionResponse.
- */
 async function executeBulkAction(action: BulkActionRequest['action']) {
   if (selectedIds.value.length === 0) return
 
@@ -199,7 +258,6 @@ async function executeBulkAction(action: BulkActionRequest['action']) {
   if (response) {
     const succeededCount = response.succeeded.length
     const failedCount = response.failed.length
-
     if (failedCount === 0) {
       toast.success(t('customers.bulk_success').replace('{count}', String(succeededCount)))
     } else if (succeededCount === 0) {
@@ -213,8 +271,88 @@ async function executeBulkAction(action: BulkActionRequest['action']) {
   }
 }
 
+// ─── Reseller Actions ───────────────────────────────────────────────────────
+
+function openNewReseller() {
+  resellerForm.value = { username: '', password: '', plan_id: '' }
+  editingResellerId.value = null
+  showResellerSlideOver.value = true
+}
+
+function openEditReseller(reseller: any) {
+  resellerForm.value = {
+    username: reseller.username,
+    password: '',
+    plan_id: reseller.default_plan_id ? String(reseller.default_plan_id) : '',
+  }
+  editingResellerId.value = reseller.id
+  showResellerSlideOver.value = true
+}
+
+async function handleResellerSubmit() {
+  saving.value = true
+  if (editingResellerId.value) {
+    const success = await resellersStore.updateReseller(editingResellerId.value, {
+      password: resellerForm.value.password || undefined,
+      default_plan_id: resellerForm.value.plan_id ? Number(resellerForm.value.plan_id) : undefined,
+    })
+    if (success) toast.success(t('resellers.updated'))
+  } else {
+    if (!resellerForm.value.username || !resellerForm.value.password) {
+      saving.value = false
+      return
+    }
+    const success = await resellersStore.createReseller(resellerForm.value.username, resellerForm.value.password)
+    if (success) {
+      toast.success(t('resellers.created_success'))
+    } else {
+      toast.error(t('resellers.create_error'))
+    }
+  }
+  saving.value = false
+  showResellerSlideOver.value = false
+}
+
+function openCreditAdjust(reseller: any) {
+  creditTarget.value = { id: reseller.id, username: reseller.username }
+  creditForm.value = { amount: '' }
+  showCreditSlideOver.value = true
+}
+
+async function handleCreditAdjust() {
+  if (!creditTarget.value) return
+  saving.value = true
+  const success = await resellersStore.adjustCredit(creditTarget.value.id, Number(creditForm.value.amount))
+  saving.value = false
+  showCreditSlideOver.value = false
+  if (success) toast.success(t('resellers.credit_adjusted'))
+  creditTarget.value = null
+}
+
+async function handleDeleteReseller(id: number, username: string) {
+  const confirmed = await confirm({
+    title: t('resellers.confirm_delete_title'),
+    message: t('resellers.confirm_delete_msg').replace('{name}', username),
+    variant: 'danger',
+    icon: '\u26A0',
+    confirmText: t('btn.delete'),
+    cancelText: t('btn.cancel'),
+  })
+  if (!confirmed) return
+  const success = await resellersStore.deleteReseller(id)
+  if (success) {
+    toast.success(t('resellers.deleted_success').replace('{name}', username))
+  } else {
+    toast.error(t('resellers.deleted_error').replace('{name}', username))
+  }
+}
+
+// ─── Lifecycle ──────────────────────────────────────────────────────────────
+
 onMounted(() => {
   store.loadCustomers()
+  resellersStore.loadResellers()
+  plansStore.loadPlans()
 })
 </script>
 
@@ -222,10 +360,21 @@ onMounted(() => {
   <div class="page customers-view">
     <!-- Header -->
     <header class="page-header">
-      <KButton variant="primary" icon="+" @click="handleNewUser">{{ t('customers.new_user') }}</KButton>
+      <KButton
+        v-if="currentMainTab === 'users'"
+        variant="primary"
+        icon="+"
+        @click="openNewUserSlideOver"
+      >{{ t('customers.new_user') }}</KButton>
+      <KButton
+        v-if="currentMainTab === 'resellers'"
+        variant="primary"
+        icon="+"
+        @click="openNewReseller"
+      >{{ t('resellers.add') }}</KButton>
     </header>
 
-    <!-- Page-level sub-tab navigation: Customers | Archived | Resellers -->
+    <!-- Page-level sub-tab navigation: Users | Resellers -->
     <nav class="main-tabs" aria-label="Customer section navigation">
       <button
         v-for="tab in mainTabs"
@@ -237,100 +386,227 @@ onMounted(() => {
       </button>
     </nav>
 
-    <!-- Bulk Action Toolbar (visible when selection > 0) -->
-    <Transition name="bulk-toolbar">
-      <div v-if="hasSelection" class="bulk-toolbar" role="toolbar" aria-label="Bulk actions">
-        <span class="bulk-toolbar__count">{{ selectedIds.length }} {{ t('customers.selected') }}</span>
-        <div class="bulk-toolbar__actions">
-          <KButton variant="ghost" size="sm" @click="executeBulkAction('enable')">{{ t('customers.enable') }}</KButton>
-          <KButton variant="ghost" size="sm" @click="executeBulkAction('disable')">{{ t('customers.disable') }}</KButton>
-          <KButton variant="ghost" size="sm" @click="executeBulkAction('traffic_reset')">{{ t('customers.traffic_reset') }}</KButton>
-          <KButton variant="danger" size="sm" @click="executeBulkAction('delete')">{{ t('customers.delete') }}</KButton>
+    <!-- ═══════════════ USERS TAB ═══════════════ -->
+    <template v-if="currentMainTab === 'users'">
+      <!-- Bulk Action Toolbar -->
+      <Transition name="bulk-toolbar">
+        <div v-if="hasSelection" class="bulk-toolbar" role="toolbar" aria-label="Bulk actions">
+          <span class="bulk-toolbar__count">{{ selectedIds.length }} {{ t('customers.selected') }}</span>
+          <div class="bulk-toolbar__actions">
+            <KButton variant="ghost" size="sm" @click="executeBulkAction('enable')">{{ t('customers.enable') }}</KButton>
+            <KButton variant="ghost" size="sm" @click="executeBulkAction('disable')">{{ t('customers.disable') }}</KButton>
+            <KButton variant="ghost" size="sm" @click="executeBulkAction('traffic_reset')">{{ t('customers.traffic_reset') }}</KButton>
+            <KButton variant="danger" size="sm" @click="executeBulkAction('delete')">{{ t('customers.delete') }}</KButton>
+          </div>
+          <button class="bulk-toolbar__clear" @click="clearSelection" :aria-label="t('customers.clear')">{{ t('customers.clear') }}</button>
         </div>
-        <button class="bulk-toolbar__clear" @click="clearSelection" :aria-label="t('customers.clear')">{{ t('customers.clear') }}</button>
-      </div>
-    </Transition>
+      </Transition>
 
-    <!-- Filter Row: Status tabs + Search on same line -->
-    <div v-if="currentMainTab === 'customers'" class="filter-row">
-      <nav class="status-tabs" aria-label="Customer status filter">
-        <button
-          v-for="tab in statusTabs"
-          :key="tab.key"
-          :class="['status-tab', { 'status-tab--active': activeStatusTab === tab.key }]"
-          @click="setStatusFilter(tab.key)"
-        >
-          {{ tab.label }}
-        </button>
-      </nav>
-      <div class="filter-row__search">
-        <KInput
-          :model-value="searchQuery"
-          :placeholder="t('customers.search')"
-          aria-label="Search customers"
-          @update:model-value="onSearchInput"
-        />
+      <!-- Filter Row: Status tabs + Search -->
+      <div class="filter-row">
+        <nav class="status-tabs" aria-label="Customer status filter">
+          <button
+            v-for="tab in statusTabs"
+            :key="tab.key"
+            :class="['status-tab', { 'status-tab--active': activeStatusTab === tab.key }]"
+            @click="setStatusFilter(tab.key)"
+          >
+            {{ tab.label }}
+          </button>
+        </nav>
+        <div class="filter-row__search">
+          <KInput
+            :model-value="searchQuery"
+            :placeholder="t('customers.search')"
+            aria-label="Search customers"
+            @update:model-value="onSearchInput"
+          />
+        </div>
       </div>
-    </div>
 
-    <!-- Archived header + search (when viewing archived tab) -->
-    <div v-if="currentMainTab === 'archived'" class="archived-section">
-      <p class="archived-description">{{ t('customers.archived_desc') }}</p>
-      <div class="filter-row__search">
-        <KInput
-          :model-value="searchQuery"
-          :placeholder="t('customers.search_archived')"
-          aria-label="Search archived customers"
-          @update:model-value="onSearchInput"
-        />
-      </div>
-    </div>
+      <!-- Users Data Table -->
+      <KDataTable
+        :columns="columns"
+        :data="tableData"
+        :loading="store.loading"
+        :page-size="store.pagination.pageSize"
+        row-key="id"
+        selectable
+        @row-click="handleRowClick"
+        @selection-change="onSelectionChange"
+      >
+        <template #cell-username="{ row, value }">
+          <div class="username-cell">
+            <KAvatar :name="row.display_name || value" size="sm" />
+            <span class="username-cell__text">{{ value }}</span>
+            <span v-if="onlineUsernames.has(value)" class="online-dot" title="Online" />
+          </div>
+        </template>
+        <template #cell-status="{ value }">
+          <KStatusPill :status="value" size="sm" />
+        </template>
+        <template #cell-credit="{ value }">
+          <span :class="{ 'text-success': value > 0, 'text-danger': value < 0 }">
+            ${{ typeof value === 'number' ? value.toFixed(2) : '0.00' }}
+          </span>
+        </template>
+        <template #cell-created_at="{ value }">
+          {{ formatDate(value) }}
+        </template>
+        <template #cell-actions="{ row }">
+          <button
+            class="action-btn action-btn--delete"
+            :title="t('btn.delete')"
+            :aria-label="t('btn.delete')"
+            @click.stop="deleteCustomer(row.id, row.username)"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M2 4h12M5.333 4V2.667a1.333 1.333 0 011.334-1.334h2.666a1.333 1.333 0 011.334 1.334V4m2 0v9.333a1.333 1.333 0 01-1.334 1.334H4.667a1.333 1.333 0 01-1.334-1.334V4h9.334z" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M6.667 7.333v4M9.333 7.333v4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+        </template>
+      </KDataTable>
+    </template>
 
-    <!-- Data Table -->
-    <KDataTable
-      :columns="columns"
-      :data="tableData"
-      :loading="store.loading"
-      :page-size="store.pagination.pageSize"
-      row-key="id"
-      selectable
-      @row-click="handleRowClick"
-      @selection-change="onSelectionChange"
+    <!-- ═══════════════ RESELLERS TAB ═══════════════ -->
+    <template v-if="currentMainTab === 'resellers'">
+      <KEmptyState
+        v-if="!resellersStore.loading && resellersStore.list.length === 0"
+        icon="🤝"
+        :title="t('resellers.empty_title')"
+        :description="t('resellers.empty_desc')"
+      />
+
+      <KDataTable
+        v-else
+        :columns="resellerColumns"
+        :data="resellersStore.list"
+        :loading="resellersStore.loading"
+        :page-size="20"
+        row-key="id"
+      >
+        <template #cell-status="{ row }">
+          <KStatusPill :status="row.is_active ? 'active' : 'disabled'" size="sm" />
+        </template>
+        <template #cell-credit="{ value }">
+          <span class="credit-cell">${{ typeof value === 'number' ? value.toFixed(2) : '0.00' }}</span>
+        </template>
+        <template #cell-customer_count="{ row }">
+          <span class="customer-count">{{ row.customer_count ?? 0 }}</span>
+        </template>
+        <template #cell-created_at="{ value }">
+          {{ formatDate(value) }}
+        </template>
+        <template #cell-actions="{ row }">
+          <div class="action-btns">
+            <KButton variant="ghost" size="sm" @click.stop="openEditReseller(row)">{{ t('btn.edit') }}</KButton>
+            <KButton variant="ghost" size="sm" @click.stop="openCreditAdjust(row)">{{ t('resellers.credit') }}</KButton>
+            <KButton variant="danger" size="sm" @click.stop="handleDeleteReseller(row.id, row.username)">{{ t('btn.delete') }}</KButton>
+          </div>
+        </template>
+      </KDataTable>
+    </template>
+
+    <!-- ═══════════════ SLIDE-OVERS ═══════════════ -->
+
+    <!-- New User Slide-Over -->
+    <KSlideOver :open="showUserSlideOver" :title="t('customers.new_user')" @close="showUserSlideOver = false">
+      <form class="slide-form" @submit.prevent="handleCreateUser">
+        <KFormField name="user-username" :label="t('user.username')" required>
+          <template #default="{ fieldId }">
+            <KInput :id="fieldId" v-model="userForm.username" placeholder="username" />
+          </template>
+        </KFormField>
+        <KFormField name="user-password" :label="t('user.password')" required>
+          <template #default="{ fieldId }">
+            <KInput :id="fieldId" v-model="userForm.password" type="password" placeholder="••••••" />
+          </template>
+        </KFormField>
+        <KFormField name="user-display-name" :label="t('user.display_name')">
+          <template #default="{ fieldId }">
+            <KInput :id="fieldId" v-model="userForm.display_name" :placeholder="t('customer.placeholder_display_name')" />
+          </template>
+        </KFormField>
+        <KFormField name="user-plan" :label="t('user.plan')">
+          <template #default="{ fieldId }">
+            <KSelect :id="fieldId" v-model="userForm.plan_id" :options="planOptions" :placeholder="t('resellers.select_plan')" />
+          </template>
+        </KFormField>
+        <div class="form-row-3">
+          <KFormField name="user-data" :label="t('plans.data_gb')">
+            <template #default="{ fieldId }">
+              <KInput :id="fieldId" v-model="userForm.data_gb" type="number" :placeholder="t('customer.placeholder_plan_default')" />
+            </template>
+          </KFormField>
+          <KFormField name="user-speed" :label="t('plans.speed')">
+            <template #default="{ fieldId }">
+              <KInput :id="fieldId" v-model="userForm.speed_mbps" type="number" :placeholder="t('customer.placeholder_plan_default')" />
+            </template>
+          </KFormField>
+          <KFormField name="user-days" :label="t('plans.duration_days')">
+            <template #default="{ fieldId }">
+              <KInput :id="fieldId" v-model="userForm.days" type="number" :placeholder="t('customer.placeholder_plan_default')" />
+            </template>
+          </KFormField>
+        </div>
+        <div class="slide-form__footer">
+          <KButton variant="ghost" @click="showUserSlideOver = false">{{ t('btn.cancel') }}</KButton>
+          <KButton type="submit" variant="primary" :loading="saving">{{ t('btn.create') }}</KButton>
+        </div>
+      </form>
+    </KSlideOver>
+
+    <!-- Reseller Create/Edit Slide-Over -->
+    <KSlideOver
+      :open="showResellerSlideOver"
+      :title="editingResellerId ? t('resellers.edit') : t('resellers.new')"
+      @close="showResellerSlideOver = false"
     >
-      <!-- Username cell with avatar -->
-      <template #cell-username="{ row, value }">
-        <div class="username-cell">
-          <KAvatar :name="row.display_name || value" size="sm" />
-          <span class="username-cell__text">{{ value }}</span>
-          <span v-if="onlineUsernames.has(value)" class="online-dot" title="Online" />
+      <form class="slide-form" @submit.prevent="handleResellerSubmit">
+        <KFormField name="reseller-username" :label="t('resellers.username')" required>
+          <template #default="{ fieldId }">
+            <KInput :id="fieldId" v-model="resellerForm.username" placeholder="reseller_name" :disabled="!!editingResellerId" />
+          </template>
+        </KFormField>
+        <KFormField name="reseller-password" :label="t('resellers.password')" :required="!editingResellerId">
+          <template #default="{ fieldId }">
+            <KInput
+              :id="fieldId"
+              v-model="resellerForm.password"
+              type="password"
+              :placeholder="editingResellerId ? t('resellers.password_unchanged') : t('resellers.password_placeholder')"
+            />
+          </template>
+        </KFormField>
+        <KFormField name="reseller-plan" :label="t('resellers.default_plan')" :hint="t('resellers.plan_hint')">
+          <template #default="{ fieldId, describedBy }">
+            <KSelect :id="fieldId" v-model="resellerForm.plan_id" :options="quotaPlanOptions" :placeholder="t('resellers.select_plan')" :aria-describedby="describedBy" />
+          </template>
+        </KFormField>
+        <div class="slide-form__footer">
+          <KButton variant="ghost" @click="showResellerSlideOver = false">{{ t('btn.cancel') }}</KButton>
+          <KButton type="submit" variant="primary" :loading="saving">
+            {{ editingResellerId ? t('btn.save') : t('resellers.create') }}
+          </KButton>
         </div>
-      </template>
-      <template #cell-status="{ value }">
-        <KStatusPill :status="value" size="sm" />
-      </template>
-      <template #cell-credit="{ value }">
-        <span :class="{ 'text-success': value > 0, 'text-danger': value < 0 }">
-          ${{ typeof value === 'number' ? value.toFixed(2) : '0.00' }}
-        </span>
-      </template>
-      <template #cell-created_at="{ value }">
-        {{ formatDate(value) }}
-      </template>
-      <!-- Actions column with per-row delete button -->
-      <template #cell-actions="{ row }">
-        <button
-          class="action-btn action-btn--delete"
-          :title="t('btn.delete')"
-          :aria-label="t('btn.delete')"
-          @click.stop="deleteCustomer(row.id, row.username)"
-        >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M2 4h12M5.333 4V2.667a1.333 1.333 0 011.334-1.334h2.666a1.333 1.333 0 011.334 1.334V4m2 0v9.333a1.333 1.333 0 01-1.334 1.334H4.667a1.333 1.333 0 01-1.334-1.334V4h9.334z" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M6.667 7.333v4M9.333 7.333v4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        </button>
-      </template>
-    </KDataTable>
+      </form>
+    </KSlideOver>
+
+    <!-- Credit Adjustment Slide-Over -->
+    <KSlideOver :open="showCreditSlideOver" :title="`${t('resellers.adjust_credit')}: ${creditTarget?.username ?? ''}`" width="360px" @close="showCreditSlideOver = false">
+      <form class="slide-form" @submit.prevent="handleCreditAdjust">
+        <KFormField name="credit-amount" :label="t('resellers.credit')" :hint="t('resellers.credit_hint')" required>
+          <template #default="{ fieldId, describedBy }">
+            <KInput :id="fieldId" v-model="creditForm.amount" type="number" placeholder="10.00" :aria-describedby="describedBy" />
+          </template>
+        </KFormField>
+        <div class="slide-form__footer">
+          <KButton variant="ghost" @click="showCreditSlideOver = false">{{ t('btn.cancel') }}</KButton>
+          <KButton type="submit" variant="primary" :loading="saving">{{ t('resellers.adjust_credit') }}</KButton>
+        </div>
+      </form>
+    </KSlideOver>
   </div>
 </template>
 
@@ -339,7 +615,7 @@ onMounted(() => {
 
 .page-header { display: flex; align-items: center; justify-content: flex-end; }
 
-/* Main page-level tabs (Customers | Archived | Resellers) */
+/* Main page-level tabs (Users | Resellers) */
 .main-tabs {
   display: flex;
   gap: 0;
@@ -409,7 +685,6 @@ onMounted(() => {
   background: var(--color-surface-2);
 }
 
-/* Toolbar enter/leave transition */
 .bulk-toolbar-enter-active,
 .bulk-toolbar-leave-active {
   transition: opacity var(--duration-normal) var(--ease-out),
@@ -467,19 +742,6 @@ onMounted(() => {
   font-weight: var(--font-semibold);
 }
 
-/* Archived section */
-.archived-section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.archived-description {
-  margin: 0;
-  font-size: var(--text-sm);
-  color: var(--color-muted);
-}
-
 /* Compact table rows */
 :deep(tbody td) {
   padding: 8px 12px;
@@ -534,10 +796,37 @@ onMounted(() => {
   background: rgba(239, 68, 68, 0.1);
 }
 
+/* Resellers tab */
+.credit-cell { font-weight: var(--font-semibold); color: var(--color-accent); }
+.customer-count { font-weight: var(--font-medium); color: var(--color-muted); }
+.action-btns { display: flex; gap: var(--space-1); }
+
 .text-success { color: var(--color-success, #22c55e); }
 .text-danger { color: var(--color-danger, #ef4444); }
 
-/* Responsive: stack filter row on mobile */
+/* Slide-over form styles */
+.slide-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.slide-form__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+  margin-top: var(--space-2);
+}
+
+.form-row-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-3);
+}
+
+/* Responsive */
 @media (max-width: 640px) {
   .filter-row {
     flex-direction: column;
@@ -561,6 +850,10 @@ onMounted(() => {
     flex: 1 1 100%;
     order: 3;
   }
+
+  .form-row-3 {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -577,7 +870,6 @@ onMounted(() => {
   }
 }
 
-/* Mobile: table horizontal scroll */
 @media (max-width: 768px) {
   .customers-view :deep(.k-table-wrapper),
   .customers-view :deep(.k-data-table) {
@@ -606,5 +898,4 @@ onMounted(() => {
     white-space: nowrap;
   }
 }
-
 </style>

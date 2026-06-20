@@ -8,13 +8,13 @@ const router = useRouter()
 // Define available actions
 const actions = computed<CommandAction[]>(() => [
   { id: 'nav-dashboard', label: 'Go to Dashboard', description: 'Overview and stats', icon: '📊', section: 'Navigation', keywords: ['home', 'overview'], action: () => router.push({ name: 'overview' }) },
-  { id: 'nav-customers', label: 'Go to Customers', description: 'Manage user accounts', icon: '👥', section: 'Navigation', keywords: ['users', 'accounts'], action: () => router.push({ name: 'customers' }) },
+  { id: 'nav-customers', label: 'Go to Customers', description: 'Manage user accounts', icon: '👥', section: 'Navigation', keywords: ['users', 'accounts'], action: () => router.push({ name: 'users' }) },
   { id: 'nav-plans', label: 'Go to Plans', description: 'Subscription plans', icon: '💳', section: 'Navigation', keywords: ['pricing', 'subscription'], action: () => router.push({ name: 'plans' }) },
   { id: 'nav-payments', label: 'Go to Payments', description: 'Transaction history', icon: '💰', section: 'Navigation', keywords: ['transactions', 'billing'], action: () => router.push({ name: 'payments' }) },
   { id: 'nav-tickets', label: 'Go to Tickets', description: 'Support tickets', icon: '🎫', section: 'Navigation', keywords: ['support', 'help'], action: () => router.push({ name: 'tickets' }) },
   { id: 'nav-nodes', label: 'Go to Nodes', description: 'Server management', icon: '🖥️', section: 'Navigation', keywords: ['servers', 'vpn', 'services'], action: () => router.push({ name: 'nodes' }) },
   { id: 'nav-settings', label: 'Go to Settings', description: 'Panel configuration', icon: '⚙️', section: 'Navigation', keywords: ['config', 'system'], action: () => router.push({ name: 'settings' }) },
-  { id: 'nav-resellers', label: 'Go to Resellers', description: 'Reseller accounts', icon: '🤝', section: 'Navigation', keywords: ['partners'], action: () => router.push({ name: 'resellers' }) },
+  { id: 'nav-resellers', label: 'Go to Resellers', description: 'Reseller accounts', icon: '🤝', section: 'Navigation', keywords: ['partners'], action: () => router.push({ name: 'users' }) },
 ])
 
 const { isOpen, query, filteredActions, selectedIndex, close, execute } = useCommandPalette({ actions })

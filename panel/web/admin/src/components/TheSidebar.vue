@@ -67,7 +67,7 @@ const navGroups = computed<NavGroup[]>(() => [
     title: t('nav.group_manage'),
     items: [
       {
-        route: 'customers',
+        route: 'users',
         label: t('nav.users'),
         icon: 'users',
         badge: props.notificationCount > 0 ? props.notificationCount : undefined,
@@ -103,8 +103,8 @@ const navGroups = computed<NavGroup[]>(() => [
 
 /** Determine if a nav item is active based on current route */
 function isActive(route: string): boolean {
-  if (route === 'customers') {
-    return ['customers', 'customer-detail', 'resellers'].includes(props.currentRoute)
+  if (route === 'users') {
+    return ['users', 'user-detail', 'customers', 'customer-detail', 'resellers'].includes(props.currentRoute)
   }
   if (route === 'tickets') {
     return ['tickets', 'ticket-detail'].includes(props.currentRoute)
