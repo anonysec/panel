@@ -361,24 +361,7 @@ async function applyPromoCode() {
           </select>
         </div>
 
-        <!-- Promo Code -->
-        <div class="sp__promo-section">
-          <label class="sp__promo-label">{{ t('portal.promo.title') }}</label>
-          <div class="sp__promo-row">
-            <KInput
-              v-model="promoCode"
-              :placeholder="t('portal.promo.placeholder')"
-              size="sm"
-              class="sp__promo-input"
-            />
-            <KButton variant="primary" size="sm" :loading="promoApplying" @click="applyPromoCode">
-              {{ t('portal.promo.apply') }}
-            </KButton>
-          </div>
-          <p v-if="promoMessage" class="sp__promo-message" :class="{ 'sp__promo-message--error': promoError, 'sp__promo-message--success': !promoError }">
-            {{ promoMessage }}
-          </p>
-        </div>
+        <!-- Promo Code - only shown in billing context (BillingView.vue) -->
 
         <!-- Profile list -->
         <KEmptyState

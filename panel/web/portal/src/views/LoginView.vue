@@ -33,7 +33,7 @@ async function handleLogin() {
   })
 
   if (success) {
-    router.push({ name: 'portal-dashboard' })
+    await router.replace({ name: 'portal-home' })
   } else if (!auth.totpRequired) {
     formError.value = auth.error || 'Invalid credentials'
   }

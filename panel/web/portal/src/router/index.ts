@@ -27,7 +27,8 @@ router.beforeEach(async (to) => {
   const { usePortalAuthStore } = await import('@/stores/auth')
   const auth = usePortalAuthStore()
 
-  if (!auth.isAuthenticated && !auth.loading) {
+  // Only check auth if not already authenticated
+  if (!auth.isAuthenticated) {
     await auth.checkAuth()
   }
 

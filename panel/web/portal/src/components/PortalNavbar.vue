@@ -24,11 +24,9 @@ async function handleLogout() {
     </div>
 
     <nav class="portal-navbar__nav">
-      <router-link :to="{ name: 'portal-dashboard' }" class="portal-navbar__link">Dashboard</router-link>
+      <router-link :to="{ name: 'portal-home' }" class="portal-navbar__link">Dashboard</router-link>
       <router-link :to="{ name: 'portal-billing' }" class="portal-navbar__link">Billing</router-link>
-      <router-link :to="{ name: 'portal-usage' }" class="portal-navbar__link">Usage</router-link>
-      <router-link :to="{ name: 'portal-support' }" class="portal-navbar__link">Support</router-link>
-      <router-link :to="{ name: 'portal-vpn' }" class="portal-navbar__link">VPN Profiles</router-link>
+      <router-link :to="{ name: 'portal-wireguard' }" class="portal-navbar__link">WireGuard</router-link>
       <router-link :to="{ name: 'portal-profile' }" class="portal-navbar__link">Profile</router-link>
     </nav>
 
