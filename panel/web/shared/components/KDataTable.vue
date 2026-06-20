@@ -307,7 +307,7 @@ watch(() => props.currentPage, (val) => { internalPage.value = val })
 .k-table__th { padding: var(--space-3) var(--space-4); text-align: left; font-weight: var(--font-semibold); font-size: var(--text-xs); color: var(--color-muted); text-transform: uppercase; letter-spacing: var(--tracking-wider); background: var(--color-surface); border-bottom: 1px solid var(--color-border); white-space: nowrap; user-select: none; }
 .k-table__th--center { text-align: center; }
 .k-table__th--right { text-align: right; }
-.k-table__th--check { width: 32px; padding: var(--space-3) var(--space-2); }
+.k-table__th--check { width: 40px; padding: 0 var(--space-2); text-align: center; line-height: 0; }
 .k-table__th--sortable { cursor: pointer; }
 .k-table__th--sortable:hover { color: var(--color-text); }
 .k-table__th--sortable:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
@@ -324,7 +324,7 @@ watch(() => props.currentPage, (val) => { internalPage.value = val })
 .k-table__td { padding: var(--space-3) var(--space-4); color: var(--color-text); border-bottom: 1px solid var(--color-border); vertical-align: middle; }
 .k-table__td--center { text-align: center; }
 .k-table__td--right { text-align: right; }
-.k-table__td--check { width: 32px; padding: var(--space-3) var(--space-2); vertical-align: middle; text-align: center; }
+.k-table__td--check { width: 40px; padding: 0 var(--space-2); vertical-align: middle; text-align: center; line-height: 0; }
 
 /* Custom checkbox */
 .k-check {
