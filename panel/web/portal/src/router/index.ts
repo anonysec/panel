@@ -11,7 +11,7 @@ const router = createRouter({
         { path: '', name: 'portal-home', component: () => import('@/views/SinglePageView.vue') },
         { path: 'billing', name: 'portal-billing', component: () => import('@/views/BillingView.vue') },
         { path: 'profile', name: 'portal-profile', component: () => import('@/views/ProfileView.vue') },
-        { path: 'wireguard', name: 'portal-wireguard', component: () => import('@/views/WireGuardPeersView.vue') },
+        { path: 'wireguard', redirect: '/' },
       ]
     },
     { path: '/login', name: 'portal-login', component: () => import('@/views/LoginView.vue') },
