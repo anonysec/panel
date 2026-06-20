@@ -346,28 +346,19 @@ async function handleReply() {
             </a>
             <KButton v-else variant="ghost" size="sm" :disabled="true">{{ t('portal.vpn.unavailable') }}</KButton>
           </div>
+          <!-- WireGuard peers inline with other profiles -->
+          <div v-for="peer in peers" :key="'wg-' + peer.id" class="sp__profile-card">
+            <div class="sp__profile-icon">🛡️</div>
+            <div class="sp__profile-info">
+              <div class="sp__profile-name">WireGuard — {{ peer.node_name || 'Server' }}</div>
+              <div class="sp__profile-meta">{{ peer.allowed_ips }}</div>
+            </div>
+            <KButton variant="primary" size="sm" @click="downloadConfig(peer.id)">
+              {{ t('portal.vpn.download') }}
+            </KButton>
+          </div>
         </div>
       </template>
-    </section>
-
-    <!-- ===== Section: WireGuard ===== -->
-    <section v-if="peers.length > 0" class="sp__section">
-      <h2 class="sp__section-title">
-        <svg viewBox="0 0 20 20" fill="currentColor" width="20" height="20"><path d="M10 1a4.5 4.5 0 00-4.5 4.5V9H5a2 2 0 00-2 2v6a2 2 0 002 2h10a2 2 0 002-2v-6a2 2 0 00-2-2h-.5V5.5A4.5 4.5 0 0010 1zm3 8V5.5a3 3 0 10-6 0V9h6z"/></svg>
-        WireGuard
-      </h2>
-      <div class="sp__profiles-list">
-        <div v-for="peer in peers" :key="peer.id" class="sp__profile-card">
-          <div class="sp__profile-icon">🔐</div>
-          <div class="sp__profile-info">
-            <div class="sp__profile-name">{{ peer.node_name || 'WireGuard Peer' }}</div>
-            <div class="sp__profile-meta">{{ peer.allowed_ips }}</div>
-          </div>
-          <KButton variant="primary" size="sm" @click="downloadConfig(peer.id)">
-            {{ t('portal.vpn.download') }}
-          </KButton>
-        </div>
-      </div>
     </section>
 
     <!-- ===== Section: Download Apps ===== -->

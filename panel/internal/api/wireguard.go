@@ -568,7 +568,12 @@ func (s *Server) portalWireguardPeerConfig(w http.ResponseWriter, r *http.Reques
 	})
 
 	// Serve as downloadable .conf file
-	filename := fmt.Sprintf("wg-peer-%d.conf", id)
+	var nodeName string
+	_ = s.DB.QueryRow(`SELECT COALESCE(name,'') FROM nodes WHERE id=?`, peer.NodeID).Scan(&nodeName)
+	if nodeName == "" {
+		nodeName = fmt.Sprintf("node%d", peer.NodeID)
+	}
+	filename := fmt.Sprintf("KorisVPN-%s.conf", nodeName)
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
 	w.WriteHeader(http.StatusOK)
