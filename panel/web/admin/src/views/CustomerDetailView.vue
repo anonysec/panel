@@ -260,22 +260,27 @@ const switchingPlan = ref(false)
 
 async function loadPlans() {
   try {
-    if (isReseller.value) {
-      const res = await get<{ ok: boolean; plans: any[] }>('/api/reseller/plan-prices')
-      plans.value = (res.plans || []).map((p: any) => ({
-        id: p.id,
-        name: p.name,
-        data_gb: p.data_gb,
-        speed_mbps: 0,
-        duration_days: p.duration_days,
-        price: p.wholesale_price,
-        is_active: true,
-      }))
-    } else {
-      const res = await get<{ ok: boolean; plans: Plan[] }>('/api/plans')
-      plans.value = (res.plans || []).filter(p => p.is_active)
+    const res = await get<{ ok: boolean; plans: Plan[] }>('/api/plans')
+    if (res?.plans) {
+      plans.value = res.plans.filter(p => p.is_active)
     }
-  } catch { /* ignore */ }
+  } catch {
+    // Fallback for resellers: try reseller-specific endpoint
+    try {
+      const res = await get<{ ok: boolean; plans: any[] }>('/api/reseller/plan-prices')
+      if (res?.plans) {
+        plans.value = res.plans.map((p: any) => ({
+          id: p.id,
+          name: p.name,
+          data_gb: p.data_gb,
+          speed_mbps: p.speed_mbps || 0,
+          duration_days: p.duration_days,
+          price: p.wholesale_price,
+          is_active: true,
+        }))
+      }
+    } catch { /* ignore */ }
+  }
 }
 
 async function handleApplyPlan() {
