@@ -261,18 +261,36 @@ else
 fi
 
 # Nginx
-info "Configuring Nginx..."
+info "Configuring Nginx with HTTPS..."
+# Generate self-signed cert if no cert exists
+if [[ ! -f "${CONFIG_DIR}/cert.pem" ]]; then
+    openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
+        -keyout "${CONFIG_DIR}/key.pem" -out "${CONFIG_DIR}/cert.pem" \
+        -subj "/CN=${DOMAIN}" >/dev/null 2>&1
+    info "Self-signed SSL certificate generated."
+fi
 cat > /etc/nginx/sites-available/koris-panel.conf <<NGINX
 server {
     listen 80 default_server;
     server_name ${DOMAIN};
+    return 301 https://\$host\$request_uri;
+}
+server {
+    listen 443 ssl default_server;
+    server_name ${DOMAIN};
     client_max_body_size 20m;
+    ssl_certificate ${CONFIG_DIR}/cert.pem;
+    ssl_certificate_key ${CONFIG_DIR}/key.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+    ssl_session_cache shared:SSL:10m;
     location = / { return 302 /dashboard/; }
     location = /dashboard { return 302 /dashboard/; }
-    location /dashboard/ { proxy_pass http://${PANEL_ADDR}; proxy_set_header Host \$host; proxy_set_header X-Real-IP \$remote_addr; proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for; proxy_set_header X-Forwarded-Proto \$scheme; }
-    location /api/ { proxy_pass http://${PANEL_ADDR}; proxy_http_version 1.1; proxy_set_header Upgrade \$http_upgrade; proxy_set_header Connection "upgrade"; proxy_set_header Host \$host; proxy_set_header X-Real-IP \$remote_addr; proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for; proxy_set_header X-Forwarded-Proto \$scheme; }
+    location /dashboard/ { proxy_pass http://${PANEL_ADDR}; proxy_set_header Host \$host; proxy_set_header X-Real-IP \$remote_addr; proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for; proxy_set_header X-Forwarded-Proto https; }
+    location /api/ { proxy_pass http://${PANEL_ADDR}; proxy_http_version 1.1; proxy_set_header Upgrade \$http_upgrade; proxy_set_header Connection "upgrade"; proxy_set_header Host \$host; proxy_set_header X-Real-IP \$remote_addr; proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for; proxy_set_header X-Forwarded-Proto https; }
     location = /portal { return 302 /portal/; }
-    location /portal/ { proxy_pass http://${PANEL_ADDR}; proxy_set_header Host \$host; proxy_set_header X-Real-IP \$remote_addr; proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for; proxy_set_header X-Forwarded-Proto \$scheme; }
+    location /portal/ { proxy_pass http://${PANEL_ADDR}; proxy_set_header Host \$host; proxy_set_header X-Real-IP \$remote_addr; proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for; proxy_set_header X-Forwarded-Proto https; }
 }
 NGINX
 rm -f /etc/nginx/sites-enabled/default 2>/dev/null
