@@ -6,6 +6,8 @@
 
 set -e
 
+export TERM="${TERM:-xterm}"
+
 red='\033[0;31m'; green='\033[0;32m'; yellow='\033[0;33m'; blue='\033[0;34m'; cyan='\033[0;36m'; bold='\033[1m'; plain='\033[0m'
 info()  { echo -e "${green}[INFO]${plain} $*"; }
 warn()  { echo -e "${yellow}[WARN]${plain} $*"; }
@@ -25,7 +27,7 @@ INSTALL_DIR="/opt/KorisPanel"
 CONFIG_DIR="/etc/panel"
 
 # Banner
-clear
+clear 2>/dev/null || true
 echo -e "${bold}${blue}"
 cat << 'EOF'
   ██╗  ██╗ ██████╗ ██████╗ ██╗███████╗
@@ -41,12 +43,12 @@ echo -e "  ${cyan}OS:${plain} ${PRETTY_NAME:-$OS} ($(uname -m))"
 echo ""
 
 # Config prompts
-read -rp "$(echo -e "${cyan}Panel port [8080]: ${plain}")" PANEL_PORT; PANEL_PORT="${PANEL_PORT:-8080}"
-read -rp "$(echo -e "${cyan}Domain (blank for IP): ${plain}")" DOMAIN; DOMAIN="${DOMAIN:-_}"
-read -rp "$(echo -e "${cyan}DB name [radius]: ${plain}")" DB_NAME; DB_NAME="${DB_NAME:-radius}"
-read -rp "$(echo -e "${cyan}DB user [radius]: ${plain}")" DB_USER; DB_USER="${DB_USER:-radius}"
+read -rp "$(echo -e "${cyan}Panel port [8080]: ${plain}")" PANEL_PORT </dev/tty; PANEL_PORT="${PANEL_PORT:-8080}"
+read -rp "$(echo -e "${cyan}Domain (blank for IP): ${plain}")" DOMAIN </dev/tty; DOMAIN="${DOMAIN:-_}"
+read -rp "$(echo -e "${cyan}DB name [radius]: ${plain}")" DB_NAME </dev/tty; DB_NAME="${DB_NAME:-radius}"
+read -rp "$(echo -e "${cyan}DB user [radius]: ${plain}")" DB_USER </dev/tty; DB_USER="${DB_USER:-radius}"
 DB_PASS_DEFAULT="$(gen_secret 16)"
-read -rp "$(echo -e "${cyan}DB pass [auto]: ${plain}")" DB_PASS; DB_PASS="${DB_PASS:-$DB_PASS_DEFAULT}"
+read -rp "$(echo -e "${cyan}DB pass [auto]: ${plain}")" DB_PASS </dev/tty; DB_PASS="${DB_PASS:-$DB_PASS_DEFAULT}"
 SETUP_KEY="$(gen_secret 16)"
 SESSION_SECRET="$(gen_secret 32)"
 PANEL_SECRET="$(gen_secret 32)"

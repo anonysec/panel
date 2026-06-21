@@ -7,6 +7,8 @@
 
 set -e
 
+export TERM="${TERM:-xterm}"
+
 red='\033[0;31m'; green='\033[0;32m'; yellow='\033[0;33m'; blue='\033[0;34m'; cyan='\033[0;36m'; bold='\033[1m'; plain='\033[0m'
 info()  { echo -e "${green}[INFO]${plain} $*"; }
 warn()  { echo -e "${yellow}[WARN]${plain} $*"; }
@@ -20,7 +22,7 @@ REPO="anonysec/panel"
 BRANCH="main"
 INSTALL_DIR="/opt/KorisPanel"
 
-clear
+clear 2>/dev/null || true
 echo -e "${bold}${blue}"
 cat << 'EOF'
   ██╗  ██╗ ██████╗ ██████╗ ██╗███████╗
@@ -36,7 +38,7 @@ echo -e "  ${cyan}OS:${plain} ${PRETTY_NAME:-$OS} ($(uname -m))"
 echo ""
 
 # Config
-[[ -z "${PANEL_URL:-}" ]] && read -rp "$(echo -e "${cyan}Panel URL: ${plain}")" PANEL_URL
+[[ -z "${PANEL_URL:-}" ]] && read -rp "$(echo -e "${cyan}Panel URL: ${plain}")" PANEL_URL </dev/tty
 [[ -z "$PANEL_URL" ]] && fatal "Panel URL required."
 PANEL_URL="${PANEL_URL%/}"
 
@@ -48,11 +50,11 @@ if [[ -z "$HEALTH_RESPONSE" ]] || ! echo "$HEALTH_RESPONSE" | grep -qi "ok"; the
 fi
 info "Panel is reachable."
 
-[[ -z "${NODE_TOKEN:-}" ]] && read -rp "$(echo -e "${cyan}Node Token: ${plain}")" NODE_TOKEN
+[[ -z "${NODE_TOKEN:-}" ]] && read -rp "$(echo -e "${cyan}Node Token: ${plain}")" NODE_TOKEN </dev/tty
 [[ -z "$NODE_TOKEN" ]] && fatal "Node Token required."
 
 DEFAULT_NAME="$(hostname -s)"
-[[ -z "${NODE_NAME:-}" ]] && read -rp "$(echo -e "${cyan}Node Name [${DEFAULT_NAME}]: ${plain}")" NODE_NAME
+[[ -z "${NODE_NAME:-}" ]] && read -rp "$(echo -e "${cyan}Node Name [${DEFAULT_NAME}]: ${plain}")" NODE_NAME </dev/tty
 NODE_NAME="${NODE_NAME:-$DEFAULT_NAME}"
 
 echo ""
