@@ -1,3 +1,5 @@
+//go:build !lite
+
 // Package xray provides the Xray/VLESS management system for KorisPanel.
 // It handles Xray configuration, inbound protocol management (VLESS, VMess,
 // Trojan, Shadowsocks), routing rules, TLS/Reality settings, and per-node

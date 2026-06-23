@@ -1,3 +1,5 @@
+//go:build !lite
+
 // Package teleproxy provides Telegram MTProto proxy management for KorisPanel.
 // It handles proxy lifecycle, link generation, secret rotation, and plan assignment.
 package teleproxy

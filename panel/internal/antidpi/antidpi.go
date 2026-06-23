@@ -1,3 +1,5 @@
+//go:build !lite
+
 // Package antidpi provides anti-DPI (Deep Packet Inspection) obfuscation
 // configuration management for KorisPanel. It handles obfs4, QUIC tunneling,
 // and WebSocket tunnel configuration per node.

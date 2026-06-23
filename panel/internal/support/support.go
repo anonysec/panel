@@ -1,3 +1,5 @@
+//go:build !lite
+
 // Package support provides the ticket-based support system for KorisPanel.
 // It handles ticket CRUD, conversation threads, file attachments,
 // auto-assignment, and customer satisfaction ratings.

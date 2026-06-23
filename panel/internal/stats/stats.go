@@ -1,3 +1,5 @@
+//go:build !lite
+
 // Package stats provides data aggregation services for the statistics dashboard.
 // It rolls up raw usage snapshots into hourly/daily aggregation tables for
 // efficient time-series queries.

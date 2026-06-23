@@ -1,3 +1,5 @@
+//go:build !lite
+
 // Package billing provides the billing engine for KorisPanel.
 // It handles invoice management, payment gateway integration,
 // pro-rated plan upgrades, auto-renewal, and data pack purchases.

@@ -1,3 +1,5 @@
+//go:build !lite
+
 // Package bot provides a native Telegram Bot integration for KorisPanel.
 // Supports both webhook and long-polling modes.
 // Admin commands: /stats, /users, /find, /create, /renew, /disable, /enable, /traffic
