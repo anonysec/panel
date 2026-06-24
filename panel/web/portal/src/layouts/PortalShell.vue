@@ -4,12 +4,14 @@ import { useRouter } from 'vue-router'
 import { usePortalAuthStore } from '@/stores/auth'
 import { useTheme } from '@koris/composables/useTheme'
 import { useI18n } from '@koris/composables/useI18n'
+import { useEdition } from '@/composables/useEdition'
 import type { Locale } from '@koris/composables/useI18n'
 
 const router = useRouter()
 const auth = usePortalAuthStore()
 const { isDark, toggle: toggleTheme } = useTheme()
 const { t, locale, setLocale } = useI18n()
+const { isFull } = useEdition()
 
 const userMenuOpen = ref(false)
 const langMenuOpen = ref(false)
@@ -68,11 +70,11 @@ const langLabels: Record<Locale, string> = {
           <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"/></svg>
           {{ t('portal.nav.home') }}
         </router-link>
-        <router-link v-if="auth.billingEnabled" :to="{ name: 'portal-billing' }" class="portal-nav__link" active-class="portal-nav__link--active">
+        <router-link v-if="isFull && auth.billingEnabled" :to="{ name: 'portal-billing' }" class="portal-nav__link" active-class="portal-nav__link--active">
           <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18"><path d="M4 4a2 2 0 00-2 2v1h16V6a2 2 0 00-2-2H4z"/><path fill-rule="evenodd" d="M18 9H2v5a2 2 0 002 2h12a2 2 0 002-2V9zM4 13a1 1 0 011-1h1a1 1 0 110 2H5a1 1 0 01-1-1zm5-1a1 1 0 100 2h1a1 1 0 100-2H9z" clip-rule="evenodd"/></svg>
           {{ t('portal.nav.billing') }}
         </router-link>
-        <router-link :to="{ name: 'portal-xray' }" class="portal-nav__link" active-class="portal-nav__link--active">
+        <router-link v-if="isFull" :to="{ name: 'portal-xray' }" class="portal-nav__link" active-class="portal-nav__link--active">
           <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18"><path fill-rule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clip-rule="evenodd"/></svg>
           {{ t('portal.nav.xray') }}
         </router-link>

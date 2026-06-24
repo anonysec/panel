@@ -2,11 +2,13 @@
 import { useRouter } from 'vue-router'
 import { usePortalAuthStore } from '@/stores/auth'
 import { useTheme } from '@koris/composables/useTheme'
+import { useEdition } from '@/composables/useEdition'
 import KButton from '@koris/ui/KButton.vue'
 
 const router = useRouter()
 const auth = usePortalAuthStore()
 const { isDark, toggle: toggleTheme } = useTheme()
+const { isFull } = useEdition()
 
 async function handleLogout() {
   await auth.logout()
@@ -25,7 +27,7 @@ async function handleLogout() {
 
     <nav class="portal-navbar__nav">
       <router-link :to="{ name: 'portal-home' }" class="portal-navbar__link">Dashboard</router-link>
-      <router-link :to="{ name: 'portal-billing' }" class="portal-navbar__link">Billing</router-link>
+      <router-link v-if="isFull" :to="{ name: 'portal-billing' }" class="portal-navbar__link">Billing</router-link>
       <router-link :to="{ name: 'portal-wireguard' }" class="portal-navbar__link">WireGuard</router-link>
       <router-link :to="{ name: 'portal-profile' }" class="portal-navbar__link">Profile</router-link>
     </nav>

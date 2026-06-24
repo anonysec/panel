@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useI18n } from '@koris/composables/useI18n'
 import { useTheme } from '@koris/composables/useTheme'
+import { useEdition } from '@/composables/useEdition'
 import type { Locale } from '@koris/composables/useI18n'
 
 export interface Props {
@@ -28,6 +29,9 @@ const emit = defineEmits<{
 
 const { t, locale } = useI18n()
 const { isDark } = useTheme()
+const { isFull, fetchEdition } = useEdition()
+
+onMounted(fetchEdition)
 
 /** Derive user initials from username */
 const initials = computed(() =>
@@ -87,11 +91,11 @@ const navGroups = computed<NavGroup[]>(() => {
         label: t('nav.dashboard'),
         icon: 'dashboard',
       },
-      {
+      ...(isFull.value ? [{
         route: 'payments',
         label: t('nav.transactions'),
         icon: 'transactions',
-      },
+      }] : []),
     ],
   })
 
@@ -114,13 +118,15 @@ const navGroups = computed<NavGroup[]>(() => {
     )
   }
 
-  manageItems.push({
-    route: 'plans',
-    label: t('nav.plans'),
-    icon: 'plans',
-  })
+  if (isFull.value) {
+    manageItems.push({
+      route: 'plans',
+      label: t('nav.plans'),
+      icon: 'plans',
+    })
+  }
 
-  if (!isReseller) {
+  if (!isReseller && isFull.value) {
     manageItems.push({
       route: 'tickets',
       label: t('nav.tickets'),
