@@ -153,18 +153,21 @@ func (s *Server) handleMTProtoCreate(w http.ResponseWriter, r *http.Request) {
 
 	id, _ := result.LastInsertId()
 
-	// Insert task for node: action='mtproto_enable'
-	actor, _, _ := s.currentAdmin(r)
-	payload, _ := json.Marshal(map[string]any{
-		"port":   in.Port,
-		"secret": secret,
-	})
-	_, err = s.DB.Exec(
-		`INSERT INTO node_tasks (node_id, action, payload_json, status, created_by) VALUES (?, 'mtproto_enable', ?, 'pending', ?)`,
-		in.NodeID, string(payload), actor,
-	)
-	if err != nil {
-		log.Printf("[mtproto] failed to create enable task: %v", err)
+	// Enable MTProto core on node via gRPC
+	if s.CoreMgr != nil {
+		extraConfig, _ := json.Marshal(map[string]any{
+			"port":   in.Port,
+			"secret": secret,
+		})
+		if err := s.CoreMgr.EnableCore(r.Context(), in.NodeID, "mtproto", in.Port, extraConfig); err != nil {
+			log.Printf("[knode] EnableCore (mtproto) failed for node %d: %v", in.NodeID, err)
+			writeJSONCode(w, http.StatusBadGateway, map[string]any{"ok": false, "error": err.Error()})
+			return
+		}
+		// Update mtproto_proxies status to active on success
+		_, _ = s.DB.Exec(`UPDATE mtproto_proxies SET status = 'active' WHERE id = ?`, id)
+	} else {
+		log.Printf("[knode] gRPC not configured, cannot enable mtproto on node %d", in.NodeID)
 	}
 
 	writeJSON(w, map[string]any{"ok": true, "id": id})
@@ -181,14 +184,14 @@ func (s *Server) handleMTProtoDelete(w http.ResponseWriter, r *http.Request, id 
 		return
 	}
 
-	// Insert task: action='mtproto_disable'
-	actor, _, _ := s.currentAdmin(r)
-	_, err = s.DB.Exec(
-		`INSERT INTO node_tasks (node_id, action, payload_json, status, created_by) VALUES (?, 'mtproto_disable', '{}', 'pending', ?)`,
-		nodeID, actor,
-	)
-	if err != nil {
-		log.Printf("[mtproto] failed to create disable task: %v", err)
+	// Disable MTProto core on node via gRPC
+	if s.CoreMgr != nil {
+		if err := s.CoreMgr.DisableCore(r.Context(), nodeID, "mtproto"); err != nil {
+			log.Printf("[knode] DisableCore (mtproto) failed for node %d: %v", nodeID, err)
+			// Continue with deletion even if gRPC fails — the record will be cleaned up
+		}
+	} else {
+		log.Printf("[knode] gRPC not configured, cannot disable mtproto on node %d", nodeID)
 	}
 
 	// Delete from mtproto_proxies
@@ -230,17 +233,21 @@ func (s *Server) handleMTProtoRotate(w http.ResponseWriter, r *http.Request, id 
 		return
 	}
 
-	// Insert task: action='mtproto_rotate_secret'
-	actor, _, _ := s.currentAdmin(r)
-	payload, _ := json.Marshal(map[string]any{
-		"secret": newSecret,
-	})
-	_, err = s.DB.Exec(
-		`INSERT INTO node_tasks (node_id, action, payload_json, status, created_by) VALUES (?, 'mtproto_rotate_secret', ?, 'pending', ?)`,
-		nodeID, string(payload), actor,
-	)
-	if err != nil {
-		log.Printf("[mtproto] failed to create rotate task: %v", err)
+	// Push updated secret to node via gRPC EnableCore (reconfigure)
+	if s.CoreMgr != nil {
+		// Get port for the reconfigure
+		var port int
+		_ = s.DB.QueryRow(`SELECT port FROM mtproto_proxies WHERE id = ?`, id).Scan(&port)
+
+		extraConfig, _ := json.Marshal(map[string]any{
+			"secret": newSecret,
+		})
+		if err := s.CoreMgr.EnableCore(r.Context(), nodeID, "mtproto", port, extraConfig); err != nil {
+			log.Printf("[knode] EnableCore (mtproto rotate) failed for node %d: %v", nodeID, err)
+			// Non-fatal: secret is already updated in DB
+		}
+	} else {
+		log.Printf("[knode] gRPC not configured, cannot rotate mtproto secret on node %d", nodeID)
 	}
 
 	writeJSON(w, map[string]any{"ok": true, "secret": newSecret})

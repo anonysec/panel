@@ -20,7 +20,7 @@ var (
 )
 
 // UpdateBandwidthQuota adds the push delta (rx+tx bytes) to the node's
-// current_usage_gb in node_bandwidth_quotas. Called from the nodePush handler.
+// current_usage_gb in node_bandwidth_quotas. Called from the metrics stream handler.
 // This is a best-effort approximation — if no quota row exists, it's a no-op.
 func UpdateBandwidthQuota(db *sql.DB, nodeID int64, rxBytes, txBytes int64) {
 	totalBytes := rxBytes + txBytes

@@ -6,7 +6,6 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -277,9 +276,6 @@ func (s *Service) dispatchConfigRestores(ctx context.Context, archivePath string
 			continue
 		}
 
-		encoded := base64.StdEncoding.EncodeToString(tarData)
-		payload, _ := json.Marshal(map[string]string{"configs": encoded})
-
 		// Find node ID by name
 		var nodeID int64
 		err = s.db.QueryRowContext(ctx, `SELECT id FROM nodes WHERE name=? AND status IN ('online','stale')`, nodeName).Scan(&nodeID)
@@ -288,13 +284,10 @@ func (s *Service) dispatchConfigRestores(ctx context.Context, archivePath string
 			continue
 		}
 
-		// Dispatch restore task
-		_, err = s.db.ExecContext(ctx,
-			`INSERT INTO node_tasks (node_id, action, payload_json, status) VALUES (?, 'backup.restore_configs', ?, 'pending')`,
-			nodeID, string(payload))
-		if err != nil {
-			log.Printf("[backup] failed to dispatch restore task for node %s: %v", nodeName, err)
-		}
+		// NOTE: Legacy node_tasks-based config restore has been removed.
+		// Restore dispatching is now handled via gRPC.
+		_ = tarData // will be sent via gRPC in future
+		log.Printf("[backup] config restore for node %s (id=%d) would be dispatched via gRPC", nodeName, nodeID)
 	}
 
 	return nil

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -91,7 +92,7 @@ func (s *Server) nodeMaintenance(w http.ResponseWriter, r *http.Request, nodeID 
 
 // enableMaintenance sets a node into maintenance mode:
 // - Updates nodes table (maintenance_mode=TRUE, status='maintenance')
-// - Creates a maintenance_enter node task to drain connections
+// - Disables all running cores on the node via gRPC to drain connections
 // - Records a downtime entry for SLA tracking
 // - Optionally sends Telegram notification
 func (s *Server) enableMaintenance(nodeID int64, nodeName, reason, estimatedDuration string, notifyUsers bool, actor string) error {
@@ -104,17 +105,21 @@ func (s *Server) enableMaintenance(nodeID int64, nodeName, reason, estimatedDura
 		return fmt.Errorf("update node status: %w", err)
 	}
 
-	// Create maintenance_enter task (drains active connections gracefully)
-	payload, _ := json.Marshal(map[string]any{
-		"reason":             reason,
-		"estimated_duration": estimatedDuration,
-	})
-	_, err = s.DB.Exec(
-		`INSERT INTO node_tasks(node_id, action, payload_json, status, created_by) VALUES(?, 'maintenance_enter', ?, 'pending', ?)`,
-		nodeID, string(payload), actor,
-	)
-	if err != nil {
-		return fmt.Errorf("create maintenance_enter task: %w", err)
+	// Drain connections by disabling cores via gRPC
+	if s.CoreMgr != nil {
+		ctx := context.Background()
+		statuses, err := s.CoreMgr.AllCoreStatuses(ctx, nodeID)
+		if err == nil {
+			for _, cs := range statuses {
+				if cs.State == "running" {
+					if disableErr := s.CoreMgr.DisableCore(ctx, nodeID, cs.Type); disableErr != nil {
+						log.Printf("[knode] maintenance drain: DisableCore %q on node %d failed: %v", cs.Type, nodeID, disableErr)
+					}
+				}
+			}
+		} else {
+			log.Printf("[knode] maintenance: AllCoreStatuses failed for node %d: %v", nodeID, err)
+		}
 	}
 
 	// Record downtime entry for SLA tracking (task 3.8)
@@ -146,7 +151,7 @@ func (s *Server) enableMaintenance(nodeID int64, nodeName, reason, estimatedDura
 
 // disableMaintenance takes a node out of maintenance mode:
 // - Updates nodes table (maintenance_mode=FALSE, status='online')
-// - Creates a maintenance_exit node task to resume accepting connections
+// - Re-enables cores on the node via gRPC to resume accepting connections
 // - Closes the open downtime entry (sets ended_at, calculates duration for SLA tracking)
 // - Optionally sends Telegram notification
 func (s *Server) disableMaintenance(nodeID int64, nodeName string, notifyUsers bool, actor string) error {
@@ -159,14 +164,23 @@ func (s *Server) disableMaintenance(nodeID int64, nodeName string, notifyUsers b
 		return fmt.Errorf("update node status: %w", err)
 	}
 
-	// Create maintenance_exit task (resume accepting connections)
-	payload, _ := json.Marshal(map[string]any{})
-	_, err = s.DB.Exec(
-		`INSERT INTO node_tasks(node_id, action, payload_json, status, created_by) VALUES(?, 'maintenance_exit', ?, 'pending', ?)`,
-		nodeID, string(payload), actor,
-	)
-	if err != nil {
-		return fmt.Errorf("create maintenance_exit task: %w", err)
+	// Re-enable cores via gRPC (resume accepting connections)
+	if s.CoreMgr != nil {
+		ctx := context.Background()
+		rows, qErr := s.DB.Query(`SELECT core_name, COALESCE(port, 0) FROM node_cores WHERE node_id = ? AND status = 'installed'`, nodeID)
+		if qErr == nil {
+			defer rows.Close()
+			for rows.Next() {
+				var coreName string
+				var port int
+				if scanErr := rows.Scan(&coreName, &port); scanErr != nil {
+					continue
+				}
+				if enableErr := s.CoreMgr.EnableCore(ctx, nodeID, coreName, port, nil); enableErr != nil {
+					log.Printf("[knode] maintenance resume: EnableCore %q on node %d failed: %v", coreName, nodeID, enableErr)
+				}
+			}
+		}
 	}
 
 	// Close the most recent open downtime entry for this node (for SLA tracking)

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -140,11 +141,13 @@ func (s *Server) dispatchNodeCores(w http.ResponseWriter, r *http.Request, nodeI
 }
 
 // nodeCoresInstall handles POST /api/nodes/{id}/cores/install.
+// Uses direct gRPC EnableCore call instead of creating a node_task.
 func (s *Server) nodeCoresInstall(w http.ResponseWriter, r *http.Request, nodeID int64) {
 	limitBody(w, r, maxJSONBody)
 	var in struct {
 		CoreName string `json:"core_name"`
 		Version  string `json:"version"`
+		Port     int    `json:"port"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad_json"})
@@ -172,30 +175,35 @@ func (s *Server) nodeCoresInstall(w http.ResponseWriter, r *http.Request, nodeID
 		return
 	}
 
-	// Insert task for the node agent
-	payload, _ := json.Marshal(map[string]string{
-		"download_url":    downloadURL,
-		"checksum_sha256": checksum,
-		"core_name":       in.CoreName,
-		"version":         in.Version,
-	})
-	_, err = s.DB.Exec(`INSERT INTO node_tasks (node_id, action, payload_json, status, created_at) VALUES (?, 'core_install', ?, 'pending', NOW())`,
-		nodeID, string(payload))
-	if err != nil {
-		log.Printf("[cores] task insert failed: %v", err)
-		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "db_error"})
-		return
+	// Call EnableCore via gRPC instead of creating a node_task
+	if s.CoreMgr != nil {
+		extraConfig, _ := json.Marshal(map[string]string{
+			"download_url":    downloadURL,
+			"checksum_sha256": checksum,
+			"version":         in.Version,
+		})
+		if err := s.CoreMgr.EnableCore(r.Context(), nodeID, in.CoreName, in.Port, extraConfig); err != nil {
+			log.Printf("[cores] EnableCore gRPC failed for node %d core %s: %v", nodeID, in.CoreName, err)
+			writeJSONCode(w, http.StatusBadGateway, map[string]any{"ok": false, "error": err.Error()})
+			return
+		}
+		// Update node_cores status to installed on success
+		_, _ = s.DB.Exec(`UPDATE node_cores SET status = 'installed' WHERE node_id = ? AND core_name = ?`, nodeID, in.CoreName)
+	} else {
+		log.Printf("[cores] gRPC pool not configured, cannot install core %s on node %d", in.CoreName, nodeID)
 	}
 
 	writeJSON(w, map[string]any{"ok": true})
 }
 
 // nodeCoresUpdate handles POST /api/nodes/{id}/cores/update.
+// Uses direct gRPC EnableCore call instead of creating a node_task.
 func (s *Server) nodeCoresUpdate(w http.ResponseWriter, r *http.Request, nodeID int64) {
 	limitBody(w, r, maxJSONBody)
 	var in struct {
 		CoreName string `json:"core_name"`
 		Version  string `json:"version"`
+		Port     int    `json:"port"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad_json"})
@@ -228,25 +236,29 @@ func (s *Server) nodeCoresUpdate(w http.ResponseWriter, r *http.Request, nodeID 
 		return
 	}
 
-	// Insert task for the node agent
-	payload, _ := json.Marshal(map[string]string{
-		"download_url":    downloadURL,
-		"checksum_sha256": checksum,
-		"core_name":       in.CoreName,
-		"version":         in.Version,
-	})
-	_, err = s.DB.Exec(`INSERT INTO node_tasks (node_id, action, payload_json, status, created_at) VALUES (?, 'core_update', ?, 'pending', NOW())`,
-		nodeID, string(payload))
-	if err != nil {
-		log.Printf("[cores] task insert failed: %v", err)
-		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "db_error"})
-		return
+	// Call EnableCore via gRPC (update is effectively re-enable with new version config)
+	if s.CoreMgr != nil {
+		extraConfig, _ := json.Marshal(map[string]string{
+			"download_url":    downloadURL,
+			"checksum_sha256": checksum,
+			"version":         in.Version,
+		})
+		if err := s.CoreMgr.EnableCore(r.Context(), nodeID, in.CoreName, in.Port, extraConfig); err != nil {
+			log.Printf("[cores] EnableCore (update) gRPC failed for node %d core %s: %v", nodeID, in.CoreName, err)
+			writeJSONCode(w, http.StatusBadGateway, map[string]any{"ok": false, "error": err.Error()})
+			return
+		}
+		// Update node_cores status to installed on success
+		_, _ = s.DB.Exec(`UPDATE node_cores SET status = 'installed' WHERE node_id = ? AND core_name = ?`, nodeID, in.CoreName)
+	} else {
+		log.Printf("[cores] gRPC pool not configured, cannot update core %s on node %d", in.CoreName, nodeID)
 	}
 
 	writeJSON(w, map[string]any{"ok": true})
 }
 
 // nodeCoresRemove handles DELETE /api/nodes/{id}/cores/{name}.
+// Uses direct gRPC DisableCore call instead of creating a node_task.
 func (s *Server) nodeCoresRemove(w http.ResponseWriter, _ *http.Request, nodeID int64, coreName string) {
 	// Check if any active xray_inbounds depend on this core
 	var activeCount int
@@ -261,16 +273,16 @@ func (s *Server) nodeCoresRemove(w http.ResponseWriter, _ *http.Request, nodeID 
 		return
 	}
 
-	// Insert task: action='core_remove'
-	payload, _ := json.Marshal(map[string]string{
-		"core_name": coreName,
-	})
-	_, err = s.DB.Exec(`INSERT INTO node_tasks (node_id, action, payload_json, status, created_at) VALUES (?, 'core_remove', ?, 'pending', NOW())`,
-		nodeID, string(payload))
-	if err != nil {
-		log.Printf("[cores] task insert failed: %v", err)
-		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "db_error"})
-		return
+	// Call DisableCore via gRPC
+	if s.CoreMgr != nil {
+		ctx := context.Background()
+		if err := s.CoreMgr.DisableCore(ctx, nodeID, coreName); err != nil {
+			log.Printf("[cores] DisableCore gRPC failed for node %d core %s: %v", nodeID, coreName, err)
+			writeJSONCode(w, http.StatusBadGateway, map[string]any{"ok": false, "error": err.Error()})
+			return
+		}
+	} else {
+		log.Printf("[cores] gRPC pool not configured, cannot remove core %s on node %d", coreName, nodeID)
 	}
 
 	// Delete from node_cores

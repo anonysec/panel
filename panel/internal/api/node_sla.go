@@ -314,7 +314,7 @@ func RecordNodeDowntime(db *sql.DB, nodeID int64, reason string) {
 }
 
 // CloseNodeDowntime closes any open downtime entry for a node when it comes back online.
-// Called from the nodePush handler when a push is received for a node that was offline.
+// Called from the gRPC metrics stream handler when a node reconnects.
 func CloseNodeDowntime(db *sql.DB, nodeID int64) {
 	_, err := db.Exec(
 		`UPDATE node_downtimes SET ended_at = NOW(), duration_seconds = TIMESTAMPDIFF(SECOND, started_at, NOW()) WHERE node_id = ? AND ended_at IS NULL`,

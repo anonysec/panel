@@ -5,9 +5,9 @@ package xray
 import (
 	"context"
 	"database/sql"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log"
 	"time"
 )
 
@@ -193,28 +193,11 @@ func buildXrayTLSSettings(certCfg XrayCertConfig) (json.RawMessage, error) {
 	return json.RawMessage(data), nil
 }
 
-// distributePanelCerts creates a cert.distribute node task to push panel certs to the node.
+// distributePanelCerts pushes panel certs to the node via gRPC.
+// Legacy node_tasks-based cert distribution has been removed.
 func (s *XrayService) distributePanelCerts(ctx context.Context, nodeID int64, certPath, keyPath string) error {
-	payload := map[string]string{
-		"cert_path":    certPath,
-		"key_path":     keyPath,
-		"cert_content": base64.StdEncoding.EncodeToString([]byte("placeholder")),
-		"key_content":  base64.StdEncoding.EncodeToString([]byte("placeholder")),
-	}
-	payloadJSON, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("marshal cert distribute payload: %w", err)
-	}
-
-	_, err = s.db.ExecContext(ctx, `
-		INSERT INTO node_tasks (node_id, action, payload_json, status)
-		VALUES (?, 'cert.distribute', ?, 'pending')`,
-		nodeID, string(payloadJSON),
-	)
-	if err != nil {
-		return fmt.Errorf("create cert.distribute task: %w", err)
-	}
-
+	// NOTE: Legacy node_tasks INSERT removed. Cert distribution is now handled via gRPC SetCertificates.
+	log.Printf("[xray] cert distribution for node %d (cert=%s, key=%s) would be dispatched via gRPC", nodeID, certPath, keyPath)
 	return nil
 }
 

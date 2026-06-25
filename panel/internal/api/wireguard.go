@@ -1,9 +1,11 @@
 package api
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"strconv"
@@ -231,15 +233,18 @@ func (s *Server) createWireguardPeer(w http.ResponseWriter, r *http.Request) {
 	}
 	peerID, _ := res.LastInsertId()
 
-	// Create node task for adding the peer on the node
-	payload, _ := json.Marshal(map[string]any{
-		"public_key":    publicKey,
-		"preshared_key": presharedKey,
-		"allowed_ips":   in.AllowedIPs,
-	})
-	actor, _, _ := s.currentAdmin(r)
-	_, _ = s.DB.Exec(`INSERT INTO node_tasks(node_id, action, payload_json, status, created_by) VALUES(?,?,?,?,?)`,
-		in.NodeID, "wireguard.add_peer", string(payload), "pending", actor)
+	// Sync user to knode via gRPC (the peer add is communicated via user sync)
+	if s.UserSync != nil {
+		var username string
+		_ = s.DB.QueryRow(`SELECT username FROM customers WHERE id = ?`, in.CustomerID).Scan(&username)
+		if username != "" {
+			go func() {
+				if err := s.UserSync.SyncUser(context.Background(), username); err != nil {
+					log.Printf("[knode] SyncUser failed after WireGuard peer add for %q: %v", username, err)
+				}
+			}()
+		}
+	}
 
 	writeJSON(w, map[string]any{"ok": true, "id": peerID, "public_key": publicKey})
 }
@@ -267,7 +272,8 @@ func (s *Server) wireguardPeerByID(w http.ResponseWriter, r *http.Request) {
 func (s *Server) deleteWireguardPeer(w http.ResponseWriter, r *http.Request, id int64) {
 	var nodeID int64
 	var publicKey string
-	err := s.DB.QueryRow(`SELECT node_id, public_key FROM wg_peers WHERE id=?`, id).Scan(&nodeID, &publicKey)
+	var customerID int64
+	err := s.DB.QueryRow(`SELECT node_id, public_key, customer_id FROM wg_peers WHERE id=?`, id).Scan(&nodeID, &publicKey, &customerID)
 	if err != nil {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "peer_not_found"})
 		return
@@ -279,13 +285,18 @@ func (s *Server) deleteWireguardPeer(w http.ResponseWriter, r *http.Request, id 
 		return
 	}
 
-	// Create node task to remove the peer
-	payload, _ := json.Marshal(map[string]any{
-		"public_key": publicKey,
-	})
-	actor, _, _ := s.currentAdmin(r)
-	_, _ = s.DB.Exec(`INSERT INTO node_tasks(node_id, action, payload_json, status, created_by) VALUES(?,?,?,?,?)`,
-		nodeID, "wireguard.remove_peer", string(payload), "pending", actor)
+	// Sync user to knode via gRPC (the peer removal is communicated via user sync)
+	if s.UserSync != nil {
+		var username string
+		_ = s.DB.QueryRow(`SELECT username FROM customers WHERE id = ?`, customerID).Scan(&username)
+		if username != "" {
+			go func() {
+				if err := s.UserSync.SyncUser(context.Background(), username); err != nil {
+					log.Printf("[knode] SyncUser failed after WireGuard peer delete for %q: %v", username, err)
+				}
+			}()
+		}
+	}
 
 	writeJSON(w, map[string]any{"ok": true})
 }
@@ -683,92 +694,84 @@ func (s *Server) autoProvisionWireGuardPeer(customerID int64) {
 			continue
 		}
 
-		// Dispatch add_peer task
-		payload, _ := json.Marshal(map[string]any{
-			"public_key":    publicKey,
-			"preshared_key": presharedKey,
-			"allowed_ips":   formattedIP,
-		})
-		_, _ = s.DB.Exec(`INSERT INTO node_tasks(node_id, action, payload_json, status, created_by) VALUES(?,?,?,?,?)`,
-			node.NodeID, "wireguard.add_peer", string(payload), "pending", "system")
+		// Sync user to knode via gRPC after peer creation
+		if s.UserSync != nil {
+			var username string
+			_ = s.DB.QueryRow(`SELECT username FROM customers WHERE id = ?`, customerID).Scan(&username)
+			if username != "" {
+				go func() {
+					if syncErr := s.UserSync.SyncUser(context.Background(), username); syncErr != nil {
+						log.Printf("[knode] SyncUser failed after WireGuard auto-provision for %q: %v", username, syncErr)
+					}
+				}()
+			}
+		}
 	}
 }
 
 // autoRevokeWireGuardPeers revokes all active WireGuard peers for a customer
-// and dispatches remove_peer tasks to the respective nodes.
+// and triggers user sync to propagate the change via gRPC.
 func (s *Server) autoRevokeWireGuardPeers(customerID int64) {
-	rows, err := s.DB.Query(`SELECT id, node_id, public_key FROM wg_peers WHERE customer_id=? AND status='active'`, customerID)
+	rows, err := s.DB.Query(`SELECT id FROM wg_peers WHERE customer_id=? AND status='active'`, customerID)
 	if err != nil {
 		return
 	}
 	defer rows.Close()
 
-	type peerInfo struct {
-		ID        int64
-		NodeID    int64
-		PublicKey string
-	}
-	var peers []peerInfo
+	var peerIDs []int64
 	for rows.Next() {
-		var p peerInfo
-		if err := rows.Scan(&p.ID, &p.NodeID, &p.PublicKey); err != nil {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
 			continue
 		}
-		peers = append(peers, p)
+		peerIDs = append(peerIDs, id)
 	}
 	if err := rows.Err(); err != nil {
 		return
 	}
 
-	for _, p := range peers {
-		// Set peer status to revoked
-		if _, err := s.DB.Exec(`UPDATE wg_peers SET status='revoked' WHERE id=?`, p.ID); err != nil {
-			continue
+	for _, id := range peerIDs {
+		_, _ = s.DB.Exec(`UPDATE wg_peers SET status='revoked' WHERE id=?`, id)
+	}
+
+	// Sync user to knode via gRPC (disabled state will be communicated)
+	if s.UserSync != nil && len(peerIDs) > 0 {
+		var username string
+		_ = s.DB.QueryRow(`SELECT username FROM customers WHERE id = ?`, customerID).Scan(&username)
+		if username != "" {
+			go func() {
+				if err := s.UserSync.SyncUser(context.Background(), username); err != nil {
+					log.Printf("[knode] SyncUser failed after WireGuard revoke for %q: %v", username, err)
+				}
+			}()
 		}
-		// Dispatch remove_peer task
-		payload, _ := json.Marshal(map[string]any{
-			"public_key": p.PublicKey,
-		})
-		_, _ = s.DB.Exec(`INSERT INTO node_tasks(node_id, action, payload_json, status, created_by) VALUES(?,?,?,?,?)`,
-			p.NodeID, "wireguard.remove_peer", string(payload), "pending", "system")
 	}
 }
 
 // AutoRevokeWireGuardPeersByDB is a standalone function for use by the background worker.
 // It revokes all active WireGuard peers for a given customer ID.
+// Note: User sync is triggered by the caller (background worker) after revocation.
 func AutoRevokeWireGuardPeersByDB(db *sql.DB, customerID int64) {
-	rows, err := db.Query(`SELECT id, node_id, public_key FROM wg_peers WHERE customer_id=? AND status='active'`, customerID)
+	rows, err := db.Query(`SELECT id FROM wg_peers WHERE customer_id=? AND status='active'`, customerID)
 	if err != nil {
 		return
 	}
 	defer rows.Close()
 
-	type peerInfo struct {
-		ID        int64
-		NodeID    int64
-		PublicKey string
-	}
-	var peers []peerInfo
+	var peerIDs []int64
 	for rows.Next() {
-		var p peerInfo
-		if err := rows.Scan(&p.ID, &p.NodeID, &p.PublicKey); err != nil {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
 			continue
 		}
-		peers = append(peers, p)
+		peerIDs = append(peerIDs, id)
 	}
 	if err := rows.Err(); err != nil {
 		return
 	}
 
-	for _, p := range peers {
-		if _, err := db.Exec(`UPDATE wg_peers SET status='revoked' WHERE id=?`, p.ID); err != nil {
-			continue
-		}
-		payload, _ := json.Marshal(map[string]any{
-			"public_key": p.PublicKey,
-		})
-		_, _ = db.Exec(`INSERT INTO node_tasks(node_id, action, payload_json, status, created_by) VALUES(?,?,?,?,?)`,
-			p.NodeID, "wireguard.remove_peer", string(payload), "pending", "system")
+	for _, id := range peerIDs {
+		_, _ = db.Exec(`UPDATE wg_peers SET status='revoked' WHERE id=?`, id)
 	}
 }
 

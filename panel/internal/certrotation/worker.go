@@ -1,10 +1,9 @@
 package certrotation
 
 import (
+	"context"
 	"crypto/sha256"
 	"database/sql"
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -24,12 +23,19 @@ type ExpiringCert struct {
 	DaysUntilExpiry int
 }
 
+// CertPusher is the interface for pushing certificates to nodes via gRPC.
+// Implemented by grpcclient.CertManager.
+type CertPusher interface {
+	SetCertificates(ctx context.Context, nodeID int64, coreType string, caCert, cert, key []byte) error
+}
+
 // Worker periodically checks for expiring certificates and handles rotation.
 type Worker struct {
 	db       *sql.DB
 	interval time.Duration
 	done     chan struct{}
 	eventFn  func(eventType, severity, title, message string)
+	pusher   CertPusher // gRPC cert pusher for distributing certs to nodes
 }
 
 // New creates a new certificate rotation Worker with a 1-hour check interval.
@@ -40,6 +46,13 @@ func New(db *sql.DB, eventFn func(string, string, string, string)) *Worker {
 		done:     make(chan struct{}),
 		eventFn:  eventFn,
 	}
+}
+
+// SetPusher sets the gRPC certificate pusher. When set, DistributeToNodes will use
+// gRPC SetCertificates calls to push certificates to nodes.
+// This should be called during startup after the gRPC pool is initialized.
+func (w *Worker) SetPusher(pusher CertPusher) {
+	w.pusher = pusher
 }
 
 // Start launches the background goroutine that periodically checks for expiring certs.
@@ -199,14 +212,39 @@ func (w *Worker) Regenerate(cert ExpiringCert) (string, error) {
 	return newFingerprint, nil
 }
 
-// DistributeToNodes creates cert.distribute tasks for all online/stale nodes.
+// DistributeToNodes pushes regenerated certificates to all online/stale nodes.
+// Uses gRPC SetCertificates calls via the configured CertPusher.
 func (w *Worker) DistributeToNodes(cert ExpiringCert) error {
 	// Read cert content for distribution
 	certData, err := os.ReadFile(cert.CertPath)
 	if err != nil {
 		return fmt.Errorf("read cert for distribution: %v", err)
 	}
-	certContent := base64.StdEncoding.EncodeToString(certData)
+
+	// Use gRPC SetCertificates for distribution
+	if w.pusher != nil {
+		return w.distributeViaGRPC(cert, certData)
+	}
+
+	// No pusher configured — log warning
+	log.Printf("[certrotation] no gRPC pusher configured, cannot distribute cert %q to nodes", cert.Name)
+	return nil
+}
+
+// distributeViaGRPC pushes certificates to nodes using the gRPC SetCertificates RPC.
+// Satisfies Requirement 12.4: When the cert rotation worker detects an expiring
+// certificate, the panel SHALL call SetCertificates to push the renewed cert to the node.
+func (w *Worker) distributeViaGRPC(cert ExpiringCert, certData []byte) error {
+	coreType := certType(cert.CertPath)
+	ctx := context.Background()
+
+	// Also read key file if it exists alongside the cert
+	keyPath := strings.TrimSuffix(cert.CertPath, filepath.Ext(cert.CertPath)) + ".key"
+	keyData, _ := os.ReadFile(keyPath)
+
+	// Read CA cert if available (look in same directory)
+	caPath := filepath.Join(filepath.Dir(cert.CertPath), "ca.crt")
+	caData, _ := os.ReadFile(caPath)
 
 	// Query online and stale nodes
 	rows, err := w.db.Query(`SELECT id FROM nodes WHERE status IN ('online', 'stale')`)
@@ -215,42 +253,25 @@ func (w *Worker) DistributeToNodes(cert ExpiringCert) error {
 	}
 	defer rows.Close()
 
-	payload := map[string]string{
-		"cert_path":    cert.CertPath,
-		"cert_content": certContent,
-	}
-	payloadJSON, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("marshal payload: %v", err)
-	}
-
+	var lastErr error
 	for rows.Next() {
 		var nodeID int64
 		if err := rows.Scan(&nodeID); err != nil {
 			continue
 		}
 
-		// Check if there is already a pending cert.distribute task for this node and cert_path.
-		// Skip to avoid duplicate tasks accumulating if the worker fires again before
-		// previous distribution tasks are completed.
-		var existingCount int
-		err := w.db.QueryRow(
-			`SELECT COUNT(*) FROM node_tasks WHERE node_id = ? AND action = 'cert.distribute' AND status = 'pending' AND payload_json LIKE ?`,
-			nodeID, fmt.Sprintf(`%%"cert_path":"%s"%%`, cert.CertPath),
-		).Scan(&existingCount)
-		if err == nil && existingCount > 0 {
+		if err := w.pusher.SetCertificates(ctx, nodeID, coreType, caData, certData, keyData); err != nil {
+			log.Printf("[certrotation] SetCertificates via gRPC failed for node %d, cert %q: %v", nodeID, cert.Name, err)
+			lastErr = err
 			continue
 		}
-
-		_, err = w.db.Exec(
-			`INSERT INTO node_tasks (node_id, action, payload_json, status) VALUES (?, 'cert.distribute', ?, 'pending')`,
-			nodeID, string(payloadJSON),
-		)
-		if err != nil {
-			log.Printf("[certrotation] create task for node %d: %v", nodeID, err)
-		}
+		log.Printf("[certrotation] pushed cert %q to node %d via gRPC", cert.Name, nodeID)
 	}
-	return rows.Err()
+
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	return lastErr
 }
 
 // certType determines the certificate type from its file path.

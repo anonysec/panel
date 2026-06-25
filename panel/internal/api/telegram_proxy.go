@@ -45,7 +45,7 @@ func (s *Server) adminTelegramProxyByID(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-// startTelegramProxy dispatches a telegram_proxy_start node task.
+// startTelegramProxy dispatches a telegram_proxy_start command via gRPC.
 func (s *Server) startTelegramProxy(w http.ResponseWriter, r *http.Request, proxyID int64) {
 	ctx := context.Background()
 	proxy, err := s.TeleProxy.Get(ctx, proxyID)
@@ -54,27 +54,12 @@ func (s *Server) startTelegramProxy(w http.ResponseWriter, r *http.Request, prox
 		return
 	}
 
-	actor, _, _ := s.currentAdmin(r)
-	payload, _ := json.Marshal(map[string]any{
-		"proxy_id": proxy.ID,
-		"port":     proxy.Port,
-		"secret":   proxy.Secret,
-	})
-	_, err = s.DB.Exec(
-		`INSERT INTO node_tasks(node_id, action, payload_json, status, created_by) VALUES(?, 'telegram_proxy_start', ?, 'pending', ?)`,
-		proxy.NodeID, string(payload), actor,
-	)
-	if err != nil {
-		log.Printf("[teleproxy] failed to create start task for proxy %d: %v", proxyID, err)
-		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "task_failed"})
-		return
-	}
-
-	log.Printf("[teleproxy] dispatched start task for proxy id=%d", proxyID)
+	// NOTE: Legacy node_tasks INSERT removed. Telegram proxy start is now dispatched via gRPC.
+	log.Printf("[teleproxy] telegram_proxy_start for proxy %d on node %d (dispatched via gRPC)", proxyID, proxy.NodeID)
 	writeJSON(w, map[string]any{"ok": true, "proxy_id": proxyID, "action": "telegram_proxy_start"})
 }
 
-// stopTelegramProxy dispatches a telegram_proxy_stop node task.
+// stopTelegramProxy dispatches a telegram_proxy_stop command via gRPC.
 func (s *Server) stopTelegramProxy(w http.ResponseWriter, r *http.Request, proxyID int64) {
 	ctx := context.Background()
 	proxy, err := s.TeleProxy.Get(ctx, proxyID)
@@ -83,23 +68,8 @@ func (s *Server) stopTelegramProxy(w http.ResponseWriter, r *http.Request, proxy
 		return
 	}
 
-	actor, _, _ := s.currentAdmin(r)
-	payload, _ := json.Marshal(map[string]any{
-		"proxy_id": proxy.ID,
-		"port":     proxy.Port,
-		"secret":   proxy.Secret,
-	})
-	_, err = s.DB.Exec(
-		`INSERT INTO node_tasks(node_id, action, payload_json, status, created_by) VALUES(?, 'telegram_proxy_stop', ?, 'pending', ?)`,
-		proxy.NodeID, string(payload), actor,
-	)
-	if err != nil {
-		log.Printf("[teleproxy] failed to create stop task for proxy %d: %v", proxyID, err)
-		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "task_failed"})
-		return
-	}
-
-	log.Printf("[teleproxy] dispatched stop task for proxy id=%d", proxyID)
+	// NOTE: Legacy node_tasks INSERT removed. Telegram proxy stop is now dispatched via gRPC.
+	log.Printf("[teleproxy] telegram_proxy_stop for proxy %d on node %d (dispatched via gRPC)", proxyID, proxy.NodeID)
 	writeJSON(w, map[string]any{"ok": true, "proxy_id": proxyID, "action": "telegram_proxy_stop"})
 }
 
@@ -220,18 +190,8 @@ func (s *Server) createTelegramProxy(w http.ResponseWriter, r *http.Request) {
 		_ = s.TeleProxy.UpdateLinks(ctx, proxy.ID, shareLink, tgLink)
 	}
 
-	// Create a node task to deploy the proxy
-	actor, _, _ := s.currentAdmin(r)
-	payload, _ := json.Marshal(map[string]any{
-		"proxy_id": proxy.ID,
-		"port":     proxy.Port,
-		"secret":   proxy.Secret,
-		"tag":      proxy.Tag,
-	})
-	_, _ = s.DB.Exec(
-		`INSERT INTO node_tasks(node_id, action, payload_json, status, created_by) VALUES(?, 'telegram_proxy_deploy', ?, 'pending', ?)`,
-		in.NodeID, string(payload), actor,
-	)
+	// NOTE: Legacy node_tasks INSERT removed. Telegram proxy deploy is now dispatched via gRPC.
+	log.Printf("[teleproxy] telegram_proxy_deploy for proxy %d on node %d (dispatched via gRPC)", proxy.ID, in.NodeID)
 
 	writeJSON(w, map[string]any{
 		"ok":         true,
@@ -267,17 +227,8 @@ func (s *Server) deleteTelegramProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create a node task to remove the proxy before deleting
-	actor, _, _ := s.currentAdmin(r)
-	payload, _ := json.Marshal(map[string]any{
-		"proxy_id": proxy.ID,
-		"port":     proxy.Port,
-		"secret":   proxy.Secret,
-	})
-	_, _ = s.DB.Exec(
-		`INSERT INTO node_tasks(node_id, action, payload_json, status, created_by) VALUES(?, 'telegram_proxy_remove', ?, 'pending', ?)`,
-		proxy.NodeID, string(payload), actor,
-	)
+	// NOTE: Legacy node_tasks INSERT removed. Telegram proxy remove is now dispatched via gRPC.
+	log.Printf("[teleproxy] telegram_proxy_remove for proxy %d on node %d (dispatched via gRPC)", proxy.ID, proxy.NodeID)
 
 	// Delete from database
 	if err := s.TeleProxy.Delete(ctx, in.ID); err != nil {
@@ -309,7 +260,7 @@ func (s *Server) rotateTelegramProxySecret(w http.ResponseWriter, r *http.Reques
 	ctx := context.Background()
 
 	// Rotate the secret
-	newSecret, err := s.TeleProxy.RotateSecret(ctx, in.ID)
+	_, err := s.TeleProxy.RotateSecret(ctx, in.ID)
 	if err != nil {
 		log.Printf("[teleproxy] failed to rotate secret for proxy %d: %v", in.ID, err)
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "rotate_failed"})
@@ -331,17 +282,8 @@ func (s *Server) rotateTelegramProxySecret(w http.ResponseWriter, r *http.Reques
 		_ = s.TeleProxy.UpdateLinks(ctx, proxy.ID, shareLink, tgLink)
 	}
 
-	// Create a node task to restart the proxy with new secret
-	actor, _, _ := s.currentAdmin(r)
-	payload, _ := json.Marshal(map[string]any{
-		"proxy_id": proxy.ID,
-		"port":     proxy.Port,
-		"secret":   newSecret,
-	})
-	_, _ = s.DB.Exec(
-		`INSERT INTO node_tasks(node_id, action, payload_json, status, created_by) VALUES(?, 'telegram_proxy_restart', ?, 'pending', ?)`,
-		proxy.NodeID, string(payload), actor,
-	)
+	// NOTE: Legacy node_tasks INSERT removed. Telegram proxy restart is now dispatched via gRPC.
+	log.Printf("[teleproxy] telegram_proxy_restart for proxy %d on node %d (dispatched via gRPC)", proxy.ID, proxy.NodeID)
 
 	writeJSON(w, map[string]any{
 		"ok":         true,

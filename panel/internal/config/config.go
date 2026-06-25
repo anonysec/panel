@@ -1,9 +1,12 @@
 package config
 
 import (
+	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 )
 
 type Config struct {
@@ -15,7 +18,10 @@ type Config struct {
 	TLSCertDir     string
 	TLSDomain      string
 	TLSEmail       string
+	TLSMode        string // acme | manual | selfsigned | disabled
 	DBDSN          string
+	DBBackend      string // timescaledb | postgres | mariadb | sqlite
+	PGDSN          string
 	SetupKey       string
 	SessionSecret  string
 	Version        string
@@ -28,6 +34,23 @@ type Config struct {
 	SecureCookies  bool
 	TrustedProxies []string
 	AllowedOrigins []string
+
+	// Multi-worker
+	Workers  int
+	WorkerID string
+
+	// gRPC client settings
+	GRPCConnectTimeout    time.Duration
+	GRPCKeepaliveInterval time.Duration
+	GRPCMetricsInterval   time.Duration
+
+	// Alert thresholds (percent)
+	AlertCPUThreshold  int
+	AlertRAMThreshold  int
+	AlertDiskThreshold int
+
+	// Logging
+	LogFormat string // "json" or "text" (default: "text", "json" in Docker)
 }
 
 func Load() Config {
@@ -102,6 +125,37 @@ func Load() Config {
 
 	tlsEnabled := strings.ToLower(os.Getenv("PANEL_TLS_ENABLED")) == "true"
 
+	// Database backend selection
+	dbBackend := getenv("PANEL_DB_BACKEND", "timescaledb")
+	pgDSN := getenv("PANEL_PG_DSN", "")
+
+	// Multi-worker settings
+	workers := getenvInt("PANEL_WORKERS", 1)
+	if workers < 1 {
+		workers = 1
+	}
+	workerID := getenv("PANEL_WORKER_ID", "")
+	if workerID == "" {
+		hostname, _ := os.Hostname()
+		workerID = fmt.Sprintf("%s-%d", hostname, os.Getpid())
+	}
+
+	// gRPC client settings
+	grpcConnectTimeout := getenvDuration("PANEL_GRPC_CONNECT_TIMEOUT", 10*time.Second)
+	grpcKeepaliveInterval := getenvDuration("PANEL_GRPC_KEEPALIVE_INTERVAL", 30*time.Second)
+	grpcMetricsInterval := getenvDuration("PANEL_GRPC_METRICS_INTERVAL", 10*time.Second)
+
+	// Alert thresholds
+	alertCPU := getenvInt("PANEL_ALERT_CPU_THRESHOLD", 90)
+	alertRAM := getenvInt("PANEL_ALERT_RAM_THRESHOLD", 85)
+	alertDisk := getenvInt("PANEL_ALERT_DISK_THRESHOLD", 90)
+
+	// TLS mode
+	tlsMode := getenv("PANEL_TLS_MODE", "acme")
+
+	// Log format
+	logFormat := getenv("PANEL_LOG_FORMAT", "text")
+
 	return Config{
 		Addr:           getenv("PANEL_ADDR", ":8080"),
 		TLSAddr:        getenv("PANEL_TLS_ADDR", ":443"),
@@ -111,7 +165,10 @@ func Load() Config {
 		TLSCertDir:     getenv("PANEL_TLS_CERT_DIR", "/etc/koris/certs"),
 		TLSDomain:      getenv("PANEL_TLS_DOMAIN", ""),
 		TLSEmail:       getenv("PANEL_TLS_EMAIL", ""),
+		TLSMode:        tlsMode,
 		DBDSN:          dbDSN,
+		DBBackend:      dbBackend,
+		PGDSN:          pgDSN,
 		SetupKey:       setupKey,
 		SessionSecret:  sessionSecret,
 		Version:        getenv("PANEL_VERSION", "next-dev"),
@@ -124,6 +181,19 @@ func Load() Config {
 		SecureCookies:  secureCookies,
 		TrustedProxies: trustedProxies,
 		AllowedOrigins: allowedOrigins,
+
+		Workers:  workers,
+		WorkerID: workerID,
+
+		GRPCConnectTimeout:    grpcConnectTimeout,
+		GRPCKeepaliveInterval: grpcKeepaliveInterval,
+		GRPCMetricsInterval:   grpcMetricsInterval,
+
+		AlertCPUThreshold:  alertCPU,
+		AlertRAMThreshold:  alertRAM,
+		AlertDiskThreshold: alertDisk,
+
+		LogFormat: logFormat,
 	}
 }
 
@@ -132,4 +202,30 @@ func getenv(k, d string) string {
 		return v
 	}
 	return d
+}
+
+func getenvInt(k string, d int) int {
+	v := os.Getenv(k)
+	if v == "" {
+		return d
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		log.Printf("[config] invalid integer for %s=%q, using default %d", k, v, d)
+		return d
+	}
+	return n
+}
+
+func getenvDuration(k string, d time.Duration) time.Duration {
+	v := os.Getenv(k)
+	if v == "" {
+		return d
+	}
+	dur, err := time.ParseDuration(v)
+	if err != nil {
+		log.Printf("[config] invalid duration for %s=%q, using default %s", k, v, d)
+		return d
+	}
+	return dur
 }

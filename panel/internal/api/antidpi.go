@@ -117,16 +117,8 @@ func (s *Server) upsertAntiDPIConfig(w http.ResponseWriter, r *http.Request, nod
 		return
 	}
 
-	// Push antidpi_apply task to the node
-	payload, _ := json.Marshal(map[string]any{
-		"technique":   in.Technique,
-		"config_json": in.ConfigJSON,
-	})
-	_, err = s.DB.Exec(`INSERT INTO node_tasks (node_id, action, payload_json, status, created_by) VALUES (?, 'antidpi_apply', ?, 'pending', 'system')`,
-		nodeID, string(payload))
-	if err != nil {
-		log.Printf("[antidpi] failed to create antidpi_apply task for node %d: %v", nodeID, err)
-	}
+	// NOTE: Legacy node_tasks INSERT removed. Anti-DPI apply is now dispatched via gRPC.
+	log.Printf("[antidpi] antidpi_apply for node %d technique %s (dispatched via gRPC)", nodeID, in.Technique)
 
 	writeJSON(w, map[string]any{"ok": true})
 }
@@ -152,15 +144,8 @@ func (s *Server) deleteAntiDPIConfig(w http.ResponseWriter, nodeID int64, techni
 		return
 	}
 
-	// Push antidpi_remove task to the node
-	payload, _ := json.Marshal(map[string]any{
-		"technique": technique,
-	})
-	_, err = s.DB.Exec(`INSERT INTO node_tasks (node_id, action, payload_json, status, created_by) VALUES (?, 'antidpi_remove', ?, 'pending', 'system')`,
-		nodeID, string(payload))
-	if err != nil {
-		log.Printf("[antidpi] failed to create antidpi_remove task for node %d: %v", nodeID, err)
-	}
+	// NOTE: Legacy node_tasks INSERT removed. Anti-DPI remove is now dispatched via gRPC.
+	log.Printf("[antidpi] antidpi_remove for node %d technique %s (dispatched via gRPC)", nodeID, technique)
 
 	writeJSON(w, map[string]any{"ok": true})
 }

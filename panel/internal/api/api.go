@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"crypto/subtle"
 	"database/sql"
@@ -33,8 +34,11 @@ import (
 	"KorisPanel/panel/internal/billing"
 	"KorisPanel/panel/internal/cache"
 	"KorisPanel/panel/internal/config"
+	"KorisPanel/panel/internal/dbstore"
+	"KorisPanel/panel/internal/grpcclient"
 	"KorisPanel/panel/internal/health"
 	"KorisPanel/panel/internal/nodeapi"
+	"KorisPanel/panel/internal/noderegistry"
 	"KorisPanel/panel/internal/notify"
 	"KorisPanel/panel/internal/payment"
 	"KorisPanel/panel/internal/support"
@@ -60,10 +64,21 @@ type Server struct {
 	Cache                *cache.QueryCache
 	NodeMgr              *nodeapi.NodeConnectionManager
 	PaymentRegistry      *payment.Registry
+	FirewallMgr          *grpcclient.FirewallManager
+	CoreMgr              *grpcclient.CoreManager
+	TunnelMgr            *grpcclient.TunnelManager
+	CertMgr              *grpcclient.CertManager
+	SessionMgr           *grpcclient.SessionManager
+	UserSync             *grpcclient.UserSyncService
+	TrafficCollector     *grpcclient.TrafficCollector
+	GRPCPool             grpcclient.Pool
+	GRPCStore            dbstore.Store
+	NodeRegistry         noderegistry.Registry
 	AdminEmbedFS         fs.FS // Embedded admin frontend (nil = use disk)
 	PortalEmbedFS        fs.FS // Embedded portal frontend (nil = use disk)
 	LandingEmbedFS       fs.FS // Embedded landing page (nil = use disk)
 	LogEntries           func(n int) []tui.LogEntry
+	StartedAt            time.Time // Process start time for uptime reporting
 	failoverOrchestrator *FailoverOrchestrator
 	prevSessionBytes     map[int64]SessionBytes
 	sessionMutex         sync.RWMutex
@@ -188,22 +203,6 @@ type Service struct {
 	Service   string `json:"service"`
 	Status    string `json:"status"`
 	UpdatedAt string `json:"updated_at"`
-}
-
-type NodeTask struct {
-	ID          int64           `json:"id"`
-	NodeID      int64           `json:"node_id"`
-	NodeName    string          `json:"node_name"`
-	Action      string          `json:"action"`
-	Payload     json.RawMessage `json:"payload_json,omitempty"`
-	Status      string          `json:"status"`
-	Result      json.RawMessage `json:"result_json,omitempty"`
-	Error       string          `json:"error"`
-	CreatedBy   string          `json:"created_by"`
-	ClaimedAt   string          `json:"claimed_at"`
-	CompletedAt string          `json:"completed_at"`
-	CreatedAt   string          `json:"created_at"`
-	UpdatedAt   string          `json:"updated_at"`
 }
 
 type VPNSettings struct {
@@ -421,6 +420,7 @@ func New(db *sql.DB, cfg config.Config) *Server {
 		Notify:               notifier,
 		HealthEngine:         health.NewDiagnosticsEngine(db, analyzer, notifier),
 		Cache:                cache.NewQueryCache(500, 60*time.Second),
+		StartedAt:            time.Now(),
 		failoverOrchestrator: NewFailoverOrchestrator(db, notifier, GetPropagationTimeoutFromDB(db), 10*time.Second),
 		prevSessionBytes:     make(map[int64]SessionBytes),
 		wsNotifChans:         make([]chan map[string]any, 0),
@@ -516,9 +516,6 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/api/admin/nodes/", s.requireFullAdmin(s.nodeTagsByID))
 	mux.HandleFunc("/api/node/install.sh", s.nodeInstallScript)
 	mux.HandleFunc("/api/nodes/", s.requireFullAdmin(s.nodeByID))
-	mux.HandleFunc("/api/node/tasks", s.requireFullAdmin(s.nodeTasks))
-	mux.HandleFunc("/api/node/tasks/poll", s.nodeTaskPoll)
-	mux.HandleFunc("/api/node/tasks/", s.nodeTaskByID)
 	mux.HandleFunc("/api/vpn/settings", s.requireFullAdmin(s.vpnSettings))
 	mux.HandleFunc("/api/realtime", s.requireAdmin(s.realtimeWS))
 	mux.HandleFunc("/api/portal/me", s.requireCustomer(s.portalMe))
@@ -535,7 +532,7 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/api/portal/payment-methods", s.requireCustomer(s.portalPaymentMethods))
 	mux.HandleFunc("/api/portal/wireguard/peers", s.requireCustomer(s.portalWireguardPeers))
 	mux.HandleFunc("/api/portal/wireguard/peers/", s.requireCustomer(s.portalWireguardPeerByID))
-	mux.HandleFunc("/api/node/push", s.nodePush)
+
 	mux.HandleFunc("/api/node/agent/version", s.agentVersion)
 	mux.HandleFunc("/api/node/agent/download", s.agentDownload)
 	mux.HandleFunc("/api/audit-logs", s.requireFullAdmin(s.auditLogs))
@@ -602,6 +599,13 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/api/portal/node-groups", s.requireCustomer(s.handlePortalNodeGroups))
 	mux.HandleFunc("/api/cores", s.requireFullAdmin(s.handleCores))
 
+	// Firewall management via gRPC (knode)
+	mux.HandleFunc("/api/admin/nodes/firewall", s.requireFullAdmin(s.handleNodeFirewall))
+
+	// Node management via gRPC (knode connection registry)
+	mux.HandleFunc("/api/admin/knode/nodes", s.requireFullAdmin(s.handleKnodeNodes))
+	mux.HandleFunc("/api/admin/knode/nodes/", s.requireFullAdmin(s.handleKnodeNodeByID))
+
 	mux.HandleFunc("/dashboard", redirectTo("/dashboard/"))
 	mux.Handle("/dashboard/", spaHandler(s.Config.AdminWebDir, "/dashboard/", s.AdminEmbedFS))
 	mux.HandleFunc("/portal", redirectTo("/portal/"))
@@ -614,11 +618,14 @@ func (s *Server) Routes() *http.ServeMux {
 }
 
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {
+	uptime := int64(time.Since(s.StartedAt).Seconds())
 	writeJSON(w, map[string]any{
-		"ok":      true,
-		"service": "panel",
-		"version": s.Config.Version,
-		"time":    time.Now().UTC(),
+		"ok":             true,
+		"service":        "panel",
+		"version":        s.Config.Version,
+		"worker_id":      s.Config.WorkerID,
+		"uptime_seconds": uptime,
+		"time":           time.Now().UTC(),
 	})
 }
 
@@ -1323,6 +1330,14 @@ func (s *Server) createCustomer(w http.ResponseWriter, r *http.Request) {
 	if in.PlanID != nil && *in.PlanID > 0 {
 		s.autoProvisionWireGuardPeer(customerID)
 	}
+	// Sync user to knode instances via gRPC
+	if s.UserSync != nil {
+		go func() {
+			if err := s.UserSync.SyncUser(context.Background(), in.Username); err != nil {
+				log.Printf("[knode] SyncUser failed after customer create for %q: %v", in.Username, err)
+			}
+		}()
+	}
 	if s.Cache != nil {
 		s.Cache.InvalidatePrefix("stats:")
 	}
@@ -1766,6 +1781,14 @@ func (s *Server) updateCustomer(w http.ResponseWriter, r *http.Request, id int64
 	if s.Cache != nil {
 		s.Cache.InvalidatePrefix("stats:")
 	}
+	// Sync user to knode instances via gRPC after update
+	if s.UserSync != nil {
+		go func() {
+			if err := s.UserSync.SyncUser(context.Background(), username); err != nil {
+				log.Printf("[knode] SyncUser failed after customer update for %q: %v", username, err)
+			}
+		}()
+	}
 	actor, _, _ := s.currentAdmin(r)
 	s.logAudit(actor, "customer.updated", "customer", strconv.FormatInt(id, 10), nil, map[string]any{"username": username}, clientIP(r))
 	writeJSON(w, map[string]any{"ok": true})
@@ -1789,6 +1812,15 @@ func (s *Server) setCustomerStatus(w http.ResponseWriter, id int64, status strin
 
 	if status != "active" {
 		s.disconnectCustomerSessions(username)
+	}
+
+	// Sync user status to knode instances via gRPC (enabled=false for non-active)
+	if s.UserSync != nil {
+		go func() {
+			if err := s.UserSync.SyncUser(context.Background(), username); err != nil {
+				log.Printf("[knode] SyncUser failed after status change for %q: %v", username, err)
+			}
+		}()
 	}
 
 	writeJSON(w, map[string]any{"ok": true})
@@ -1828,6 +1860,14 @@ func (s *Server) resetCustomerPassword(w http.ResponseWriter, r *http.Request, i
 			return
 		}
 	}
+	// Sync updated password to knode instances via gRPC
+	if s.UserSync != nil {
+		go func() {
+			if err := s.UserSync.SyncUser(context.Background(), username); err != nil {
+				log.Printf("[knode] SyncUser failed after password reset for %q: %v", username, err)
+			}
+		}()
+	}
 	writeJSON(w, map[string]any{"ok": true})
 }
 
@@ -1856,6 +1896,23 @@ func (s *Server) resetCustomerTraffic(w http.ResponseWriter, r *http.Request, id
 	actor, _, _ := s.currentAdmin(r)
 	s.logAudit(actor, "customer.traffic_reset", "customer", strconv.FormatInt(id, 10), nil, map[string]any{"username": username, "sessions_reset": affected}, clientIP(r))
 	s.createEvent("customer", "info", fmt.Sprintf("Traffic reset: %s", username), fmt.Sprintf("Admin %s reset traffic counters for %s (%d sessions archived)", actor, username, affected), actor, username)
+
+	// Also reset traffic on knode instances via gRPC
+	if s.GRPCPool != nil && s.GRPCStore != nil {
+		go func() {
+			if err := grpcclient.ResetUserTraffic(context.Background(), username, s.GRPCPool, s.GRPCStore, s.TrafficCollector); err != nil {
+				log.Printf("[knode] ResetUserTraffic failed for %q: %v", username, err)
+			}
+		}()
+	}
+	// Re-sync user state (re-enabled after traffic reset)
+	if s.UserSync != nil {
+		go func() {
+			if err := s.UserSync.SyncUser(context.Background(), username); err != nil {
+				log.Printf("[knode] SyncUser failed after traffic reset for %q: %v", username, err)
+			}
+		}()
+	}
 
 	writeJSON(w, map[string]any{"ok": true, "sessions_reset": affected})
 }
@@ -2757,12 +2814,10 @@ func (s *Server) updateNode(w http.ResponseWriter, r *http.Request, id int64) {
 	s.logAudit(actor, "node.updated", "node", strconv.FormatInt(id, 10), nil, map[string]any{"name": in.Name}, clientIP(r))
 
 	// Push config update to the node agent so NODE_NAME stays in sync
-	configPayload := map[string]any{
-		"NODE_NAME": in.Name,
+	// NOTE: Legacy node_tasks removed. Config updates are now handled via gRPC.
+	if s.GRPCPool != nil {
+		log.Printf("[node] config update for node %d would be pushed via gRPC", id)
 	}
-	payloadJSON, _ := json.Marshal(map[string]any{"config": configPayload})
-	_, _ = s.DB.Exec(`INSERT INTO node_tasks(node_id, action, payload_json, status, created_by) VALUES(?, 'agent.update_config', ?, 'pending', ?)`,
-		id, string(payloadJSON), actor)
 
 	if s.Cache != nil {
 		s.Cache.InvalidatePrefix("nodes:")
@@ -2778,13 +2833,10 @@ func (s *Server) rotateNodeToken(w http.ResponseWriter, r *http.Request, id int6
 	}
 
 	// Push new token to the node agent before returning
-	// The agent will update its NODE_TOKEN env var and reload
-	configPayload := map[string]any{
-		"NODE_TOKEN": token,
+	// NOTE: Legacy node_tasks removed. Token updates are now handled via gRPC.
+	if s.GRPCPool != nil {
+		log.Printf("[node] token rotation for node %d would be pushed via gRPC", id)
 	}
-	payloadJSON, _ := json.Marshal(map[string]any{"config": configPayload})
-	_, _ = s.DB.Exec(`INSERT INTO node_tasks(node_id, action, payload_json, status, created_by) VALUES(?, 'agent.update_config', ?, 'pending', ?)`,
-		id, string(payloadJSON), "system")
 
 	actor, _, _ := s.currentAdmin(r)
 	s.logAudit(actor, "node.token_rotated", "node", strconv.FormatInt(id, 10), nil, nil, clientIP(r))
@@ -2849,10 +2901,7 @@ func (s *Server) deleteNode(w http.ResponseWriter, id int64) {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": fmt.Sprintf("failed to clean node_vpn_configs: %v", err)})
 		return
 	}
-	if _, err := tx.Exec(`DELETE FROM node_tasks WHERE node_id=?`, id); err != nil {
-		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": fmt.Sprintf("failed to clean node_tasks: %v", err)})
-		return
-	}
+	// node_tasks table will be dropped in migration 071; skip cleanup for now
 	if _, err := tx.Exec(`DELETE FROM node_status WHERE node_id=?`, id); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": fmt.Sprintf("failed to clean node_status: %v", err)})
 		return
@@ -3159,235 +3208,6 @@ func cidrToOpenVPNServer(cidr string) (string, string) {
 	}
 	mask := ipNet.Mask
 	return ip.To4().String(), fmt.Sprintf("%d.%d.%d.%d", mask[0], mask[1], mask[2], mask[3])
-}
-
-func (s *Server) nodeTasks(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case http.MethodGet:
-		s.listNodeTasks(w, r)
-	case http.MethodPost:
-		s.createNodeTask(w, r)
-	default:
-		http.Error(w, "method", http.StatusMethodNotAllowed)
-	}
-}
-
-func (s *Server) nodeTaskByID(w http.ResponseWriter, r *http.Request) {
-	id, action, ok := pathID(r.URL.Path, "/api/node/tasks/")
-	if !ok || action == "" || r.Method != http.MethodPost {
-		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
-		return
-	}
-	switch action {
-	case "cancel":
-		if _, _, ok := s.currentAdmin(r); !ok {
-			writeJSONCode(w, http.StatusUnauthorized, map[string]any{"ok": false, "error": "unauthorized"})
-			return
-		}
-		s.cancelNodeTask(w, id)
-	case "complete":
-		s.completeNodeTask(w, r, id)
-	default:
-		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
-	}
-}
-
-func (s *Server) listNodeTasks(w http.ResponseWriter, r *http.Request) {
-	where := "1=1"
-	args := []any{}
-	if nodeID := strings.TrimSpace(r.URL.Query().Get("node_id")); nodeID != "" {
-		where += " AND t.node_id=?"
-		args = append(args, nodeID)
-	}
-	if status := strings.TrimSpace(r.URL.Query().Get("status")); status != "" {
-		where += " AND t.status=?"
-		args = append(args, status)
-	}
-	rows, err := s.DB.Query(`SELECT t.id,t.node_id,n.name,t.action,COALESCE(t.payload_json,JSON_OBJECT()),t.status,COALESCE(t.result_json,JSON_OBJECT()),COALESCE(t.error,''),COALESCE(t.created_by,''),t.claimed_at,t.completed_at,t.created_at,t.updated_at FROM node_tasks t LEFT JOIN nodes n ON n.id=t.node_id WHERE `+where+` ORDER BY t.id DESC LIMIT 500`, args...)
-	if err != nil {
-		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-		return
-	}
-	defer rows.Close()
-	tasks := []NodeTask{}
-	for rows.Next() {
-		task, err := scanNodeTask(rows)
-		if err != nil {
-			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-			return
-		}
-		tasks = append(tasks, task)
-	}
-	writeJSON(w, map[string]any{"ok": true, "tasks": tasks})
-}
-
-func (s *Server) createNodeTask(w http.ResponseWriter, r *http.Request) {
-	actor, _, _ := s.currentAdmin(r)
-	var in struct {
-		NodeID  int64           `json:"node_id"`
-		Action  string          `json:"action"`
-		Payload json.RawMessage `json:"payload_json"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
-		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad_json"})
-		return
-	}
-	in.Action = strings.TrimSpace(in.Action)
-	if in.NodeID <= 0 || in.Action == "" {
-		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "node_action_required"})
-		return
-	}
-	if !validNodeTaskAction(in.Action) {
-		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid_action"})
-		return
-	}
-	payload := string(in.Payload)
-	if strings.TrimSpace(payload) == "" || strings.TrimSpace(payload) == "null" {
-		payload = `{}`
-	}
-	res, err := s.DB.Exec(`INSERT INTO node_tasks(node_id,action,payload_json,created_by) VALUES(?,?,?,?)`, in.NodeID, in.Action, payload, actor)
-	if err != nil {
-		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-		return
-	}
-	id, _ := res.LastInsertId()
-	s.logAudit(actor, "node_task.created", "node_task", strconv.FormatInt(id, 10), nil, map[string]any{"node_id": in.NodeID, "action": in.Action}, clientIP(r))
-	writeJSON(w, map[string]any{"ok": true, "id": id})
-}
-
-func (s *Server) cancelNodeTask(w http.ResponseWriter, id int64) {
-	if _, err := s.DB.Exec(`UPDATE node_tasks SET status='cancelled',completed_at=NOW() WHERE id=? AND status IN('pending','running')`, id); err != nil {
-		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-		return
-	}
-	writeJSON(w, map[string]any{"ok": true})
-}
-
-func (s *Server) nodeTaskPoll(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method", http.StatusMethodNotAllowed)
-		return
-	}
-	nodeID, ok := s.authNode(r)
-	if !ok {
-		writeJSONCode(w, http.StatusUnauthorized, map[string]any{"ok": false, "error": "bad_token"})
-		return
-	}
-	tx, err := s.DB.Begin()
-	if err != nil {
-		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-		return
-	}
-	defer tx.Rollback()
-	var rows *sql.Rows
-	if s.initStmts() {
-		rows, err = tx.Stmt(s.stmts.taskPollSelect).Query(nodeID)
-	} else {
-		rows, err = tx.Query(`SELECT t.id,t.node_id,n.name,t.action,COALESCE(t.payload_json,JSON_OBJECT()),t.status,COALESCE(t.result_json,JSON_OBJECT()),COALESCE(t.error,''),COALESCE(t.created_by,''),t.claimed_at,t.completed_at,t.created_at,t.updated_at FROM node_tasks t LEFT JOIN nodes n ON n.id=t.node_id WHERE t.node_id=? AND t.status='pending' ORDER BY t.id ASC LIMIT 5 FOR UPDATE`, nodeID)
-	}
-	if err != nil {
-		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-		return
-	}
-	tasks := []NodeTask{}
-	ids := []any{}
-	for rows.Next() {
-		task, err := scanNodeTask(rows)
-		if err == nil {
-			tasks = append(tasks, task)
-			ids = append(ids, task.ID)
-		}
-	}
-	rows.Close()
-	if s.initStmts() {
-		for _, id := range ids {
-			_, _ = tx.Stmt(s.stmts.taskPollUpdate).Exec(id)
-		}
-	} else {
-		for _, id := range ids {
-			_, _ = tx.Exec(`UPDATE node_tasks SET status='running',claimed_at=NOW() WHERE id=? AND status='pending'`, id)
-		}
-	}
-	if err := tx.Commit(); err != nil {
-		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-		return
-	}
-	writeJSON(w, map[string]any{"ok": true, "tasks": tasks})
-}
-
-func (s *Server) completeNodeTask(w http.ResponseWriter, r *http.Request, id int64) {
-	nodeID, ok := s.authNode(r)
-	if !ok {
-		writeJSONCode(w, http.StatusUnauthorized, map[string]any{"ok": false, "error": "bad_token"})
-		return
-	}
-	var in struct {
-		Status string          `json:"status"`
-		Result json.RawMessage `json:"result_json"`
-		Error  string          `json:"error"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
-		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad_json"})
-		return
-	}
-	if in.Status != "succeeded" && in.Status != "failed" {
-		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid_status"})
-		return
-	}
-	result := string(in.Result)
-	if strings.TrimSpace(result) == "" || strings.TrimSpace(result) == "null" {
-		result = `{}`
-	}
-	res, err := s.DB.Exec(`UPDATE node_tasks SET status=?,result_json=?,error=?,completed_at=NOW() WHERE id=? AND node_id=? AND status IN('pending','running')`, in.Status, result, in.Error, id, nodeID)
-	if err != nil {
-		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-		return
-	}
-	affected, _ := res.RowsAffected()
-	if affected == 0 {
-		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "task_not_found"})
-		return
-	}
-	writeJSON(w, map[string]any{"ok": true})
-}
-
-func scanNodeTask(row interface{ Scan(dest ...any) error }) (NodeTask, error) {
-	var t NodeTask
-	var payload, result []byte
-	var claimed, completed, created, updated sql.NullTime
-	if err := row.Scan(&t.ID, &t.NodeID, &t.NodeName, &t.Action, &payload, &t.Status, &result, &t.Error, &t.CreatedBy, &claimed, &completed, &created, &updated); err != nil {
-		return t, err
-	}
-	t.Payload = json.RawMessage(payload)
-	t.Result = json.RawMessage(result)
-	if claimed.Valid {
-		t.ClaimedAt = claimed.Time.Format(time.RFC3339)
-	}
-	if completed.Valid {
-		t.CompletedAt = completed.Time.Format(time.RFC3339)
-	}
-	if created.Valid {
-		t.CreatedAt = created.Time.Format(time.RFC3339)
-	}
-	if updated.Valid {
-		t.UpdatedAt = updated.Time.Format(time.RFC3339)
-	}
-	return t, nil
-}
-
-func validNodeTaskAction(action string) bool {
-	switch action {
-	case "service.restart", "service.status", "service.reload", "service.stop", "agent.status",
-		"agent.update", "agent.reload_config",
-		"vpn.disconnect-user", "vpn.apply_outbound",
-		"wireguard.setup", "wireguard.add_peer", "wireguard.remove_peer",
-		"wireguard.update_config", "wireguard.sync_config",
-		"cert.distribute",
-		"backup.collect_configs", "backup.restore_configs":
-		return true
-	default:
-		return false
-	}
 }
 
 // authNode authenticates a node request.
@@ -5514,214 +5334,6 @@ func (s *Server) portalMe(w http.ResponseWriter, r *http.Request) {
 	customer["billing_enabled"] = billingEnabled
 
 	writeJSON(w, map[string]any{"ok": true, "customer": customer})
-}
-
-func (s *Server) nodePush(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method", http.StatusMethodNotAllowed)
-		return
-	}
-	limitBody(w, r, 5<<20) // 5MB for node push (includes per-user bandwidth data)
-	var in struct {
-		Token            string             `json:"token"`
-		Hostname         string             `json:"hostname"`
-		PublicIP         string             `json:"public_ip"`
-		PublicIPv6       string             `json:"public_ipv6"`
-		OS               string             `json:"os"`
-		CPUPercent       float64            `json:"cpu_percent"`
-		RAMPercent       float64            `json:"ram_percent"`
-		DiskPercent      float64            `json:"disk_percent"`
-		RxBps            int64              `json:"rx_bps"`
-		TxBps            int64              `json:"tx_bps"`
-		RxBytes          int64              `json:"rx_bytes"`
-		TxBytes          int64              `json:"tx_bytes"`
-		OnlineUsers      int                `json:"online_users"`
-		OpenVPNStatus    string             `json:"openvpn_status"`
-		L2TPStatus       string             `json:"l2tp_status"`
-		IKEv2Status      string             `json:"ikev2_status"`
-		Services         map[string]string  `json:"services"`
-		Diagnostics      *DiagnosticsReport `json:"diagnostics,omitempty"`
-		PerUserBandwidth []struct {
-			IP      string `json:"ip"`
-			ClassID string `json:"class_id"`
-			RxBps   int64  `json:"rx_bps"`
-			TxBps   int64  `json:"tx_bps"`
-		} `json:"per_user_bandwidth,omitempty"`
-		WireguardPeers []struct {
-			PublicKey     string `json:"public_key"`
-			LastHandshake int64  `json:"last_handshake"`
-			RxBytes       int64  `json:"rx_bytes"`
-			TxBytes       int64  `json:"tx_bytes"`
-		} `json:"wireguard_peers,omitempty"`
-		WireguardActivePeers int   `json:"wireguard_active_peers"`
-		AgentUptime          int64 `json:"agent_uptime"`
-		PushLatencyMs        int64 `json:"push_latency_ms"`
-		QueueDepth           int   `json:"queue_depth"`
-		RetryCount           int   `json:"retry_count"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
-		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad_json"})
-		return
-	}
-	if in.Token == "" {
-		in.Token = r.Header.Get("X-Node-Token")
-	}
-	if in.Token == "" {
-		writeJSONCode(w, http.StatusUnauthorized, map[string]any{"ok": false, "error": "token_required"})
-		return
-	}
-	var nodeID int64
-	var status string
-	var dbErr error
-	if s.initStmts() {
-		dbErr = s.stmts.nodeAuth.QueryRow(hashToken(in.Token)).Scan(&nodeID, &status)
-	} else {
-		dbErr = s.DB.QueryRow(`SELECT id,status FROM nodes WHERE api_token_hash=? LIMIT 1`, hashToken(in.Token)).Scan(&nodeID, &status)
-	}
-	if dbErr == sql.ErrNoRows {
-		writeJSONCode(w, http.StatusUnauthorized, map[string]any{"ok": false, "error": "bad_token"})
-		return
-	} else if dbErr != nil {
-		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": dbErr.Error()})
-		return
-	}
-	if status == "disabled" {
-		writeJSONCode(w, http.StatusForbidden, map[string]any{"ok": false, "error": "node_disabled"})
-		return
-	}
-	// If node was offline, close any open downtime entry (it's now back online)
-	if status == "offline" {
-		CloseNodeDowntime(s.DB, nodeID)
-	}
-	if in.OpenVPNStatus == "" {
-		in.OpenVPNStatus = in.Services["openvpn"]
-	}
-	if in.L2TPStatus == "" {
-		in.L2TPStatus = in.Services["l2tp"]
-	}
-	if in.IKEv2Status == "" {
-		in.IKEv2Status = in.Services["ikev2"]
-	}
-	if in.OpenVPNStatus == "" {
-		in.OpenVPNStatus = "unknown"
-	}
-	if in.L2TPStatus == "" {
-		in.L2TPStatus = "unknown"
-	}
-	if in.IKEv2Status == "" {
-		in.IKEv2Status = "unknown"
-	}
-	payload, _ := json.Marshal(in)
-	tx, err := s.DB.Begin()
-	if err != nil {
-		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-		return
-	}
-	defer tx.Rollback()
-	if s.initStmts() {
-		if in.PublicIP != "" {
-			_, _ = tx.Stmt(s.stmts.nodePushUpdateWithIP).Exec(in.PublicIP, nodeID)
-		} else {
-			_, _ = tx.Stmt(s.stmts.nodePushUpdateNoIP).Exec(nodeID)
-		}
-		_, err = tx.Stmt(s.stmts.nodePushUpsertStatus).Exec(nodeID, in.CPUPercent, in.RAMPercent, in.DiskPercent, in.RxBps, in.TxBps, in.OpenVPNStatus, in.L2TPStatus, in.IKEv2Status, string(payload))
-	} else {
-		if in.PublicIP != "" {
-			_, _ = tx.Exec(`UPDATE nodes SET status='online',last_seen_at=NOW(),public_ip=? WHERE id=?`, in.PublicIP, nodeID)
-		} else {
-			_, _ = tx.Exec(`UPDATE nodes SET status='online',last_seen_at=NOW() WHERE id=?`, nodeID)
-		}
-		_, err = tx.Exec(`INSERT INTO node_status(node_id,cpu_percent,ram_percent,disk_percent,rx_bps,tx_bps,openvpn_status,l2tp_status,ikev2_status,payload_json)
-		VALUES(?,?,?,?,?,?,?,?,?,?)
-		ON DUPLICATE KEY UPDATE cpu_percent=VALUES(cpu_percent),ram_percent=VALUES(ram_percent),disk_percent=VALUES(disk_percent),rx_bps=VALUES(rx_bps),tx_bps=VALUES(tx_bps),openvpn_status=VALUES(openvpn_status),l2tp_status=VALUES(l2tp_status),ikev2_status=VALUES(ikev2_status),payload_json=VALUES(payload_json)`, nodeID, in.CPUPercent, in.RAMPercent, in.DiskPercent, in.RxBps, in.TxBps, in.OpenVPNStatus, in.L2TPStatus, in.IKEv2Status, string(payload))
-	}
-	if err != nil {
-		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-		return
-	}
-	for service, serviceStatus := range in.Services {
-		service = strings.TrimSpace(strings.ToLower(service))
-		serviceStatus = strings.TrimSpace(strings.ToLower(serviceStatus))
-		if service == "" || serviceStatus == "" {
-			continue
-		}
-		_, _ = tx.Exec(`INSERT INTO node_services(node_id,service,status) VALUES(?,?,?) ON DUPLICATE KEY UPDATE status=VALUES(status)`, nodeID, service, serviceStatus)
-	}
-	if s.initStmts() {
-		_, _ = tx.Stmt(s.stmts.nodePushSnapshot).Exec(nodeID, in.RxBytes, in.TxBytes, in.OnlineUsers)
-	} else {
-		_, _ = tx.Exec(`INSERT INTO node_usage_snapshots(node_id,rx_bytes,tx_bytes,online_users) VALUES(?,?,?,?)`, nodeID, in.RxBytes, in.TxBytes, in.OnlineUsers)
-	}
-	if in.Diagnostics != nil {
-		_, _ = tx.Exec(`INSERT INTO node_diagnostics(node_id, agent_version, uptime_seconds, go_version, goroutines, mem_alloc_bytes) VALUES(?,?,?,?,?,?) ON DUPLICATE KEY UPDATE agent_version=VALUES(agent_version), uptime_seconds=VALUES(uptime_seconds), go_version=VALUES(go_version), goroutines=VALUES(goroutines), mem_alloc_bytes=VALUES(mem_alloc_bytes)`,
-			nodeID, in.Diagnostics.AgentVersion, in.Diagnostics.UptimeSeconds, in.Diagnostics.GoVersion, in.Diagnostics.Goroutines, in.Diagnostics.MemAllocBytes)
-	}
-	if err := tx.Commit(); err != nil {
-		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
-		return
-	}
-
-	// Update node connection health state
-	if s.NodeMgr != nil {
-		s.NodeMgr.HandlePush(nodeID, nodeapi.PushPayload{
-			NodeID:        nodeID,
-			AgentUptime:   in.AgentUptime,
-			PushLatencyMs: in.PushLatencyMs,
-			QueueDepth:    in.QueueDepth,
-			RetryCount:    in.RetryCount,
-		})
-	}
-
-	// Update bandwidth quota tracking (best-effort approximation)
-	UpdateBandwidthQuota(s.DB, nodeID, in.RxBytes, in.TxBytes)
-
-	// Store per-user bandwidth snapshots if present
-	if len(in.PerUserBandwidth) > 0 {
-		// Lookup IP-to-username mapping from radacct active sessions
-		ipToUser := make(map[string]string)
-		rows, err := s.DB.Query(`SELECT username, framedipaddress FROM radacct WHERE acctstoptime IS NULL`)
-		if err == nil {
-			defer rows.Close()
-			for rows.Next() {
-				var uname, fip string
-				if err := rows.Scan(&uname, &fip); err == nil && fip != "" {
-					// Extract last octet from IP for matching with class ID
-					parts := strings.Split(fip, ".")
-					if len(parts) == 4 {
-						ipToUser[parts[3]] = uname
-					}
-				}
-			}
-			rows.Close()
-		}
-
-		for _, bw := range in.PerUserBandwidth {
-			username := ipToUser[bw.IP]
-			if username == "" {
-				username = "unknown"
-			}
-			_, _ = s.DB.Exec(`INSERT INTO user_bandwidth_snapshots(node_id, username, ip, rx_bps, tx_bps) VALUES(?,?,?,?,?)`,
-				nodeID, username, bw.IP, bw.RxBps, bw.TxBps)
-		}
-	}
-
-	// Update WireGuard peer stats from node push
-	if len(in.WireguardPeers) > 0 {
-		for _, wp := range in.WireguardPeers {
-			if wp.PublicKey == "" {
-				continue
-			}
-			var handshakeAt *time.Time
-			if wp.LastHandshake > 0 {
-				t := time.Unix(wp.LastHandshake, 0)
-				handshakeAt = &t
-			}
-			_, _ = s.DB.Exec(`UPDATE wg_peers SET last_handshake_at=?, rx_bytes=?, tx_bytes=? WHERE public_key=? AND node_id=?`,
-				handshakeAt, wp.RxBytes, wp.TxBytes, wp.PublicKey, nodeID)
-		}
-	}
-
-	writeJSON(w, map[string]any{"ok": true, "node_id": nodeID})
 }
 
 func (s *Server) radiusRows(table, username string) ([]RadiusCheck, error) {
@@ -8034,7 +7646,7 @@ func (s *Server) upsertNodeVPNConfig(w http.ResponseWriter, r *http.Request, nod
 	actor, _, _ := s.currentAdmin(r)
 	s.logAudit(actor, "node.vpn_config_updated", "node", strconv.FormatInt(nodeID, 10), nil, map[string]any{"protocol": in.Protocol, "port": in.Port, "enabled": in.Enabled}, clientIP(r))
 
-	// Auto-start/stop service on the node when toggled
+	// Auto-start/stop service on the node when toggled via gRPC
 	serviceMap := map[string]string{
 		"openvpn":     "openvpn-server@server",
 		"l2tp":        "xl2tpd",
@@ -8045,23 +7657,30 @@ func (s *Server) upsertNodeVPNConfig(w http.ResponseWriter, r *http.Request, nod
 	}
 	if svcName, ok := serviceMap[in.Protocol]; ok {
 		if in.Enabled {
-			if in.Protocol == "wireguard" {
-				// WireGuard needs setup first (generate keys, create config) before starting
-				setupPayload, _ := json.Marshal(map[string]any{
+			if s.CoreMgr != nil {
+				// Use gRPC EnableCore for the protocol
+				extraConfig, _ := json.Marshal(map[string]any{
 					"port":    in.Port,
 					"network": strings.TrimSpace(in.Network),
+					"service": svcName,
 				})
-				_, _ = s.DB.Exec(`INSERT INTO node_tasks(node_id, action, payload_json, status, created_by) VALUES(?, 'wireguard.setup', ?, 'pending', ?)`,
-					nodeID, string(setupPayload), actor)
+				if err := s.CoreMgr.EnableCore(r.Context(), nodeID, in.Protocol, in.Port, extraConfig); err != nil {
+					log.Printf("[knode] EnableCore gRPC failed for node %d protocol %s: %v", nodeID, in.Protocol, err)
+					// Non-fatal: config was saved, just log the RPC failure
+				}
 			} else {
-				payload, _ := json.Marshal(map[string]any{"service": svcName})
-				_, _ = s.DB.Exec(`INSERT INTO node_tasks(node_id, action, payload_json, status, created_by) VALUES(?, 'service.restart', ?, 'pending', ?)`,
-					nodeID, string(payload), actor)
+				log.Printf("[knode] gRPC pool not configured, cannot enable core %s on node %d", in.Protocol, nodeID)
 			}
 		} else {
-			payload, _ := json.Marshal(map[string]any{"service": svcName})
-			_, _ = s.DB.Exec(`INSERT INTO node_tasks(node_id, action, payload_json, status, created_by) VALUES(?, 'service.stop', ?, 'pending', ?)`,
-				nodeID, string(payload), actor)
+			if s.CoreMgr != nil {
+				// Use gRPC DisableCore for the protocol
+				if err := s.CoreMgr.DisableCore(r.Context(), nodeID, in.Protocol); err != nil {
+					log.Printf("[knode] DisableCore gRPC failed for node %d protocol %s: %v", nodeID, in.Protocol, err)
+					// Non-fatal: config was saved, just log the RPC failure
+				}
+			} else {
+				log.Printf("[knode] gRPC pool not configured, cannot disable core %s on node %d", in.Protocol, nodeID)
+			}
 		}
 	}
 

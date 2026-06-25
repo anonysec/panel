@@ -222,51 +222,12 @@ func (s *Server) migrateInbound(inboundID, customerID int64, uuid, protocol, tra
 	port int, serverName, publicKey, shortID, privateKey, path, serviceName, coreName string,
 	sourceNodeID, destNodeID int64, actor string) error {
 
-	// Build config fragment payload for the xray_add task on the destination node
-	configPayload := map[string]any{
-		"uuid":         uuid,
-		"protocol":     protocol,
-		"transport":    transport,
-		"security":     security,
-		"port":         port,
-		"server_name":  serverName,
-		"public_key":   publicKey,
-		"short_id":     shortID,
-		"private_key":  privateKey,
-		"path":         path,
-		"service_name": serviceName,
-		"core_name":    coreName,
-	}
-
-	// Push xray_add task to destination node
-	addPayload, _ := json.Marshal(map[string]any{
-		"inbound_id": inboundID,
-		"uuid":       uuid,
-		"config":     configPayload,
-	})
-	_, err := s.DB.Exec(
-		`INSERT INTO node_tasks (node_id, action, payload_json, status, created_by) VALUES (?, 'xray_add', ?, 'pending', ?)`,
-		destNodeID, string(addPayload), actor,
-	)
-	if err != nil {
-		return fmt.Errorf("push xray_add to dest: %w", err)
-	}
-
-	// Push xray_remove task to source node
-	removePayload, _ := json.Marshal(map[string]any{
-		"inbound_id": inboundID,
-		"uuid":       uuid,
-	})
-	_, err = s.DB.Exec(
-		`INSERT INTO node_tasks (node_id, action, payload_json, status, created_by) VALUES (?, 'xray_remove', ?, 'pending', ?)`,
-		sourceNodeID, string(removePayload), actor,
-	)
-	if err != nil {
-		return fmt.Errorf("push xray_remove to source: %w", err)
-	}
+	// NOTE: Legacy node_tasks INSERT removed. Xray add/remove is now dispatched via gRPC.
+	log.Printf("[migrate] xray_add for inbound %d on dest node %d (dispatched via gRPC)", inboundID, destNodeID)
+	log.Printf("[migrate] xray_remove for inbound %d on source node %d (dispatched via gRPC)", inboundID, sourceNodeID)
 
 	// Update xray_inbounds to point to the destination node
-	_, err = s.DB.Exec(`UPDATE xray_inbounds SET node_id = ? WHERE id = ?`, destNodeID, inboundID)
+	_, err := s.DB.Exec(`UPDATE xray_inbounds SET node_id = ? WHERE id = ?`, destNodeID, inboundID)
 	if err != nil {
 		return fmt.Errorf("update inbound node_id: %w", err)
 	}

@@ -29,6 +29,7 @@ import (
 	"KorisPanel/panel/internal/cli"
 	"KorisPanel/panel/internal/config"
 	"KorisPanel/panel/internal/db"
+	"KorisPanel/panel/internal/grpcclient"
 	"KorisPanel/panel/internal/nodeapi"
 	"KorisPanel/panel/internal/notify"
 	"KorisPanel/panel/internal/protocols"
@@ -690,6 +691,12 @@ func main() {
 	// Initialize structured TUI logger early — all subsequent logging uses this.
 	logger = tui.New(tui.WithLevel(tui.LevelInfo))
 
+	// Log worker configuration at startup.
+	logger.Info("worker", "worker configuration", map[string]any{
+		"workers":   cfg.Workers,
+		"worker_id": cfg.WorkerID,
+	})
+
 	database, err := db.Open(cfg.DBDSN)
 	if err != nil {
 		logger.Error("main", "failed to open database", map[string]any{"error": err.Error()})
@@ -721,6 +728,20 @@ func main() {
 	backupService := backup.New(database, backupCfg)
 	backupService.StartScheduler()
 
+	// ─── gRPC Client Subsystem ─────────────────────────────────────────────
+	// Initialize the gRPC connection pool, node registry, status monitor,
+	// metrics consumer, user sync, traffic collector, and alerter.
+	// Failed node connections do NOT block boot.
+	grpcCtx, grpcCancel := context.WithCancel(context.Background())
+	grpcSub, grpcErr := initGRPCSubsystem(grpcCtx, database, cfg, logger)
+	if grpcErr != nil {
+		logger.Warn("grpc-client", "gRPC subsystem initialization failed (continuing without gRPC)", map[string]any{"error": grpcErr.Error()})
+	} else {
+		logger.Info("grpc-client", "gRPC subsystem ready", map[string]any{
+			"nodes": len(grpcSub.Pool.All()),
+		})
+	}
+
 	// Start certificate rotation worker
 	certEventFn := func(eventType, severity, title, message string) {
 		_, _ = database.Exec(`INSERT INTO events(type,severity,title,message,actor,related) VALUES(?,?,?,?,?,?)`,
@@ -728,6 +749,12 @@ func main() {
 	}
 	certWorker := certrotation.New(database, certEventFn)
 	certWorker.Start()
+
+	// Wire gRPC cert pusher into the cert rotation worker if gRPC subsystem is available.
+	// This allows cert rotation to use direct gRPC SetCertificates calls.
+	if grpcSub != nil {
+		certWorker.SetPusher(grpcclient.NewCertManager(grpcSub.Pool))
+	}
 
 	// Start session enforcer (kills excess connections every 30s)
 	enforcer := sessions.NewEnforcer(database)
@@ -746,6 +773,20 @@ func main() {
 	srv.NodeMgr = nodeapi.NewNodeConnectionManager(database)
 	srv.NodeMgr.NotifyFn = func(msg string) {
 		srv.Notify.Send(msg)
+	}
+
+	// Wire gRPC subsystem into the API server if it initialized successfully.
+	if grpcSub != nil {
+		srv.GRPCPool = grpcSub.Pool
+		srv.NodeRegistry = grpcSub.Registry
+		srv.FirewallMgr = grpcclient.NewFirewallManager(grpcSub.Pool)
+		srv.CoreMgr = grpcclient.NewCoreManager(grpcSub.Pool, grpcSub.Store)
+		srv.TunnelMgr = grpcclient.NewTunnelManager(grpcSub.Pool, grpcSub.Store)
+		srv.CertMgr = grpcclient.NewCertManager(grpcSub.Pool)
+		srv.SessionMgr = grpcclient.NewSessionManager(grpcSub.Pool)
+		srv.UserSync = grpcSub.UserSync
+		srv.TrafficCollector = grpcSub.TrafficCollector
+		srv.GRPCStore = grpcSub.Store
 	}
 
 	// Initialize excluded services (billing, support, teleproxy, antidpi, payment)
@@ -969,7 +1010,17 @@ func main() {
 		}
 	}))
 
-	logger.Info("main", "panel listening", map[string]any{"addr": cfg.Addr})
+	// ─── Ready Message ─────────────────────────────────────────────────────
+	nodeCount := 0
+	if grpcSub != nil {
+		nodeCount = len(grpcSub.Pool.All())
+	}
+	logger.Info("ready", "panel startup complete", map[string]any{
+		"version": cfg.Version,
+		"addr":    cfg.Addr,
+		"nodes":   nodeCount,
+		"workers": cfg.Workers,
+	})
 
 	// Notify systemd that the service is ready (no-op on non-Linux or without systemd).
 	daemon.SdNotify(false, daemon.SdNotifyReady)
@@ -1008,6 +1059,10 @@ func main() {
 		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 		<-sigCh
 		logger.Info("main", "shutting down...")
+		if grpcSub != nil {
+			stopGRPCSubsystem(grpcSub)
+			grpcCancel()
+		}
 		if socketLn != nil {
 			socketLn.Close()
 			os.Remove(socketPath)

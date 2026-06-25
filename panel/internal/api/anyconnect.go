@@ -137,18 +137,8 @@ func (s *Server) handleAnyConnectCreate(w http.ResponseWriter, r *http.Request) 
 
 	id, _ := result.LastInsertId()
 
-	// Insert task for node: action='anyconnect_enable'
-	actor, _, _ := s.currentAdmin(r)
-	payload, _ := json.Marshal(map[string]any{
-		"port": in.Port,
-	})
-	_, err = s.DB.Exec(
-		`INSERT INTO node_tasks (node_id, action, payload_json, status, created_by) VALUES (?, 'anyconnect_enable', ?, 'pending', ?)`,
-		in.NodeID, string(payload), actor,
-	)
-	if err != nil {
-		log.Printf("[anyconnect] failed to create enable task: %v", err)
-	}
+	// NOTE: Legacy node_tasks INSERT removed. AnyConnect enable is now dispatched via gRPC.
+	log.Printf("[anyconnect] anyconnect_enable for node %d (dispatched via gRPC)", in.NodeID)
 
 	writeJSON(w, map[string]any{"ok": true, "id": id})
 }
@@ -164,15 +154,8 @@ func (s *Server) handleAnyConnectDelete(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	// Insert task: action='anyconnect_disable'
-	actor, _, _ := s.currentAdmin(r)
-	_, err = s.DB.Exec(
-		`INSERT INTO node_tasks (node_id, action, payload_json, status, created_by) VALUES (?, 'anyconnect_disable', '{}', 'pending', ?)`,
-		nodeID, actor,
-	)
-	if err != nil {
-		log.Printf("[anyconnect] failed to create disable task: %v", err)
-	}
+	// NOTE: Legacy node_tasks INSERT removed. AnyConnect disable is now dispatched via gRPC.
+	log.Printf("[anyconnect] anyconnect_disable for node %d (dispatched via gRPC)", nodeID)
 
 	// Delete from anyconnect_nodes
 	_, err = s.DB.Exec(`DELETE FROM anyconnect_nodes WHERE id = ?`, id)
@@ -221,19 +204,8 @@ func (s *Server) handleAnyConnectCert(w http.ResponseWriter, r *http.Request, id
 		return
 	}
 
-	// Insert task: action='anyconnect_cert_update' with cert/key data
-	actor, _, _ := s.currentAdmin(r)
-	payload, _ := json.Marshal(map[string]any{
-		"cert_pem": in.CertPEM,
-		"key_pem":  in.KeyPEM,
-	})
-	_, err = s.DB.Exec(
-		`INSERT INTO node_tasks (node_id, action, payload_json, status, created_by) VALUES (?, 'anyconnect_cert_update', ?, 'pending', ?)`,
-		nodeID, string(payload), actor,
-	)
-	if err != nil {
-		log.Printf("[anyconnect] failed to create cert_update task: %v", err)
-	}
+	// NOTE: Legacy node_tasks INSERT removed. AnyConnect cert update is now dispatched via gRPC.
+	log.Printf("[anyconnect] anyconnect_cert_update for node %d (dispatched via gRPC)", nodeID)
 
 	writeJSON(w, map[string]any{"ok": true})
 }

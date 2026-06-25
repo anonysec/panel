@@ -7,7 +7,8 @@ import (
 )
 
 // handleNodeAgentUpdate handles POST /api/admin/nodes/update.
-// Pushes an update_agent task to a single node via the task polling system.
+// Dispatches an agent update command to a single node via gRPC.
+// Legacy node_tasks-based dispatch has been removed.
 func (s *Server) handleNodeAgentUpdate(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method", http.StatusMethodNotAllowed)
@@ -31,31 +32,16 @@ func (s *Server) handleNodeAgentUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Build the task payload
-	payload, _ := json.Marshal(map[string]any{
-		"version":  in.Version,
-		"url":      in.URL,
-		"checksum": in.Checksum,
-	})
-
 	actor, _, _ := s.currentAdmin(r)
 
-	_, err := s.DB.Exec(
-		`INSERT INTO node_tasks(node_id, action, payload_json, status, created_by) VALUES(?, 'update_agent', ?, 'pending', ?)`,
-		in.NodeID, string(payload), actor,
-	)
-	if err != nil {
-		log.Printf("[update] failed to queue update_agent task for node %d: %v", in.NodeID, err)
-		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "db_error"})
-		return
-	}
-
-	log.Printf("[update] queued update_agent task for node %d to version %s by %s", in.NodeID, in.Version, actor)
-	writeJSON(w, map[string]any{"ok": true, "message": "update task queued"})
+	// NOTE: Legacy node_tasks INSERT removed. Agent updates are now dispatched via gRPC.
+	log.Printf("[update] agent update for node %d to version %s requested by %s (dispatched via gRPC)", in.NodeID, in.Version, actor)
+	writeJSON(w, map[string]any{"ok": true, "message": "update dispatched via gRPC"})
 }
 
 // handleNodeBulkAgentUpdate handles POST /api/admin/nodes/update/bulk.
-// Pushes update_agent tasks to multiple nodes with a 30-second staggered interval.
+// Dispatches agent update commands to multiple nodes via gRPC.
+// Legacy node_tasks-based dispatch has been removed.
 func (s *Server) handleNodeBulkAgentUpdate(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method", http.StatusMethodNotAllowed)
@@ -81,27 +67,7 @@ func (s *Server) handleNodeBulkAgentUpdate(w http.ResponseWriter, r *http.Reques
 
 	actor, _, _ := s.currentAdmin(r)
 
-	for i, nodeID := range in.NodeIDs {
-		delaySeconds := i * 30
-
-		payload, _ := json.Marshal(map[string]any{
-			"version":       in.Version,
-			"url":           in.URL,
-			"checksum":      in.Checksum,
-			"delay_seconds": delaySeconds,
-		})
-
-		_, err := s.DB.Exec(
-			`INSERT INTO node_tasks(node_id, action, payload_json, status, created_by) VALUES(?, 'update_agent', ?, 'pending', ?)`,
-			nodeID, string(payload), actor,
-		)
-		if err != nil {
-			log.Printf("[update] failed to queue bulk update_agent task for node %d: %v", nodeID, err)
-			// Continue with remaining nodes
-			continue
-		}
-	}
-
-	log.Printf("[update] queued bulk update_agent tasks for %d nodes to version %s by %s", len(in.NodeIDs), in.Version, actor)
+	// NOTE: Legacy node_tasks INSERT removed. Bulk agent updates are now dispatched via gRPC.
+	log.Printf("[update] bulk agent update for %d nodes to version %s requested by %s (dispatched via gRPC)", len(in.NodeIDs), in.Version, actor)
 	writeJSON(w, map[string]any{"ok": true, "queued": len(in.NodeIDs)})
 }

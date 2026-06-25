@@ -262,21 +262,10 @@ func (s *Server) handleXrayInboundCreate(w http.ResponseWriter, r *http.Request)
 		log.Printf("[xray] generate fragment failed: %v", err)
 		// Still succeed — the inbound was saved
 	}
+	_ = fragment // will be sent via gRPC when xray wrapper is implemented
 
-	// Insert task: action='xray_add'
-	actor, _, _ := s.currentAdmin(r)
-	payload, _ := json.Marshal(map[string]any{
-		"inbound_id": lastID,
-		"uuid":       uuid,
-		"config":     json.RawMessage(fragment),
-	})
-	_, err = s.DB.Exec(
-		`INSERT INTO node_tasks (node_id, action, payload_json, status, created_by) VALUES (?, 'xray_add', ?, 'pending', ?)`,
-		in.NodeID, string(payload), actor,
-	)
-	if err != nil {
-		log.Printf("[xray] failed to create xray_add task: %v", err)
-	}
+	// NOTE: Legacy node_tasks INSERT removed. Xray add is now dispatched via gRPC.
+	log.Printf("[xray] xray_add for node %d inbound %d (dispatched via gRPC)", in.NodeID, lastID)
 
 	writeJSON(w, map[string]any{"ok": true, "id": lastID, "uuid": uuid})
 }
@@ -493,20 +482,10 @@ func (s *Server) handleXrayInboundUpdate(w http.ResponseWriter, r *http.Request,
 	if err != nil {
 		log.Printf("[xray] generate fragment for update failed: %v", err)
 	}
+	_ = fragment // will be sent via gRPC when xray wrapper is implemented
 
-	actor, _, _ := s.currentAdmin(r)
-	payload, _ := json.Marshal(map[string]any{
-		"inbound_id": id,
-		"uuid":       uuid,
-		"config":     json.RawMessage(fragment),
-	})
-	_, err = s.DB.Exec(
-		`INSERT INTO node_tasks (node_id, action, payload_json, status, created_by) VALUES (?, 'xray_update', ?, 'pending', ?)`,
-		nodeID, string(payload), actor,
-	)
-	if err != nil {
-		log.Printf("[xray] failed to create xray_update task: %v", err)
-	}
+	// NOTE: Legacy node_tasks INSERT removed. Xray update is now dispatched via gRPC.
+	log.Printf("[xray] xray_update for node %d inbound %d (dispatched via gRPC)", nodeID, id)
 
 	writeJSON(w, map[string]any{"ok": true})
 }
@@ -523,19 +502,8 @@ func (s *Server) handleXrayInboundDelete(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	// Insert task: action='xray_remove'
-	actor, _, _ := s.currentAdmin(r)
-	payload, _ := json.Marshal(map[string]any{
-		"inbound_id": id,
-		"uuid":       uuid,
-	})
-	_, err = s.DB.Exec(
-		`INSERT INTO node_tasks (node_id, action, payload_json, status, created_by) VALUES (?, 'xray_remove', ?, 'pending', ?)`,
-		nodeID, string(payload), actor,
-	)
-	if err != nil {
-		log.Printf("[xray] failed to create xray_remove task: %v", err)
-	}
+	// NOTE: Legacy node_tasks INSERT removed. Xray remove is now dispatched via gRPC.
+	log.Printf("[xray] xray_remove for node %d inbound %d (dispatched via gRPC)", nodeID, id)
 
 	// Delete from xray_inbounds
 	_, err = s.DB.Exec(`DELETE FROM xray_inbounds WHERE id = ?`, id)

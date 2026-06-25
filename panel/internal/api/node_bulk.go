@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -18,7 +19,6 @@ type NodeBulkRequest struct {
 type NodeBulkResult struct {
 	NodeID  int64  `json:"node_id"`
 	Success bool   `json:"success"`
-	TaskID  *int64 `json:"task_id,omitempty"`
 	Error   string `json:"error,omitempty"`
 }
 
@@ -102,12 +102,12 @@ func (s *Server) nodeBulk(w http.ResponseWriter, r *http.Request) {
 			err = s.nodeBulkSetMaintenance(nodeID, true)
 		case "maintenance_off":
 			err = s.nodeBulkSetMaintenance(nodeID, false)
+		case "enable_protocol":
+			err = s.nodeBulkEnableProtocol(r.Context(), nodeID, req.Params)
+		case "disable_protocol":
+			err = s.nodeBulkDisableProtocol(r.Context(), nodeID, req.Params)
 		default:
-			var taskID int64
-			taskID, err = s.nodeBulkCreateTask(nodeID, req.Action, req.Params, actor)
-			if err == nil {
-				result.TaskID = &taskID
-			}
+			err = s.nodeBulkDispatchGRPC(r.Context(), nodeID, req.Action, req.Params)
 		}
 
 		if err != nil {
@@ -133,50 +133,80 @@ func (s *Server) nodeBulk(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// nodeBulkCreateTask inserts a node_task for the given action and returns the task ID.
-func (s *Server) nodeBulkCreateTask(nodeID int64, action string, params map[string]any, actor string) (int64, error) {
-	taskAction, payload, err := s.nodeBulkResolveTask(action, params)
-	if err != nil {
-		return 0, err
+// nodeBulkEnableProtocol enables a protocol (core) on a node via gRPC.
+func (s *Server) nodeBulkEnableProtocol(ctx context.Context, nodeID int64, params map[string]any) error {
+	proto, _ := params["protocol"].(string)
+	if proto == "" {
+		return fmt.Errorf("protocol required")
 	}
 
-	payloadJSON, _ := json.Marshal(payload)
-
-	res, err := s.DB.Exec(
-		`INSERT INTO node_tasks(node_id, action, payload_json, status, created_by) VALUES(?, ?, ?, 'pending', ?)`,
-		nodeID, taskAction, string(payloadJSON), actor,
-	)
-	if err != nil {
-		return 0, fmt.Errorf("failed to create task: %v", err)
+	if s.CoreMgr == nil {
+		return fmt.Errorf("grpc not configured")
 	}
 
-	taskID, err := res.LastInsertId()
-	if err != nil {
-		return 0, fmt.Errorf("failed to get task id: %v", err)
+	port := 0
+	if p, ok := params["port"].(float64); ok {
+		port = int(p)
 	}
-	return taskID, nil
+
+	return s.CoreMgr.EnableCore(ctx, nodeID, proto, port, nil)
 }
 
-// nodeBulkResolveTask maps a bulk action to the node_tasks action name and payload.
-func (s *Server) nodeBulkResolveTask(action string, params map[string]any) (string, map[string]any, error) {
+// nodeBulkDisableProtocol disables a protocol (core) on a node via gRPC.
+func (s *Server) nodeBulkDisableProtocol(ctx context.Context, nodeID int64, params map[string]any) error {
+	proto, _ := params["protocol"].(string)
+	if proto == "" {
+		return fmt.Errorf("protocol required")
+	}
+
+	if s.CoreMgr == nil {
+		return fmt.Errorf("grpc not configured")
+	}
+
+	return s.CoreMgr.DisableCore(ctx, nodeID, proto)
+}
+
+// nodeBulkDispatchGRPC dispatches bulk actions via gRPC.
+// For actions that don't have a direct gRPC mapping, logs and returns success
+// (these will be fully handled when xray/custom command gRPC wrappers are added).
+func (s *Server) nodeBulkDispatchGRPC(ctx context.Context, nodeID int64, action string, params map[string]any) error {
 	switch action {
 	case "restart_openvpn":
-		return "restart", map[string]any{"service": "openvpn"}, nil
+		// Restart = disable + enable
+		if s.CoreMgr != nil {
+			_ = s.CoreMgr.DisableCore(ctx, nodeID, "openvpn")
+			return s.CoreMgr.EnableCore(ctx, nodeID, "openvpn", 0, nil)
+		}
+		return fmt.Errorf("grpc not configured")
 	case "restart_all":
-		return "restart_all", map[string]any{}, nil
+		// Restart all cores on the node
+		if s.CoreMgr != nil {
+			statuses, err := s.CoreMgr.AllCoreStatuses(ctx, nodeID)
+			if err != nil {
+				return err
+			}
+			for _, cs := range statuses {
+				if cs.State == "running" {
+					_ = s.CoreMgr.DisableCore(ctx, nodeID, cs.Type)
+					_ = s.CoreMgr.EnableCore(ctx, nodeID, cs.Type, 0, nil)
+				}
+			}
+			return nil
+		}
+		return fmt.Errorf("grpc not configured")
 	case "push_config":
-		return "sync_config", map[string]any{}, nil
-	case "enable_protocol":
-		proto, _ := params["protocol"].(string)
-		return "enable_protocol", map[string]any{"protocol": proto}, nil
-	case "disable_protocol":
-		proto, _ := params["protocol"].(string)
-		return "disable_protocol", map[string]any{"protocol": proto}, nil
+		// Trigger user sync for the node
+		if s.UserSync != nil {
+			return s.UserSync.FullSyncForNode(ctx, nodeID)
+		}
+		return fmt.Errorf("grpc not configured")
 	case "run_command":
+		// Custom commands not yet supported via gRPC — log and report
 		cmd, _ := params["command"].(string)
-		return "run_command", map[string]any{"command": cmd}, nil
+		log.Printf("[knode] bulk run_command for node %d: %q — not yet supported via gRPC", nodeID, cmd)
+		return fmt.Errorf("run_command not yet supported via gRPC")
 	default:
-		return "", nil, fmt.Errorf("unsupported task action: %s", action)
+		return fmt.Errorf("unsupported action: %s", action)
 	}
 }
 

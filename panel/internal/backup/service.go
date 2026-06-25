@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -311,70 +312,12 @@ func (s *Service) collectNodeConfigs(ctx context.Context) ([]string, []SkippedNo
 		return nodesIncluded, nodesSkipped, nodeConfigs
 	}
 
-	// Dispatch backup.collect_configs tasks for each node
-	type taskEntry struct {
-		taskID int64
-		node   nodeInfo
-	}
-	var tasks []taskEntry
-
+	// NOTE: Legacy node_tasks-based backup.collect_configs has been removed.
+	// Node config collection is now handled via gRPC calls.
+	// For now, skip node config collection until gRPC backup integration is complete.
 	for _, n := range nodes {
-		res, err := s.db.ExecContext(ctx,
-			`INSERT INTO node_tasks (node_id, action, payload_json, status) VALUES (?, 'backup.collect_configs', '{}', 'pending')`,
-			n.id)
-		if err != nil {
-			nodesSkipped = append(nodesSkipped, SkippedNode{Name: n.name, Reason: "task_dispatch_failed"})
-			continue
-		}
-		taskID, _ := res.LastInsertId()
-		tasks = append(tasks, taskEntry{taskID: taskID, node: n})
-	}
-
-	// Poll for task completions with 60s timeout
-	deadline := time.Now().Add(60 * time.Second)
-	completed := make(map[int64]bool)
-
-	for len(completed) < len(tasks) && time.Now().Before(deadline) {
-		for _, t := range tasks {
-			if completed[t.taskID] {
-				continue
-			}
-
-			var status string
-			var resultJSON sql.NullString
-			err := s.db.QueryRowContext(ctx,
-				`SELECT status, result_json FROM node_tasks WHERE id=?`, t.taskID).Scan(&status, &resultJSON)
-			if err != nil {
-				continue
-			}
-
-			if status == "completed" || status == "succeeded" {
-				completed[t.taskID] = true
-				nodesIncluded = append(nodesIncluded, t.node.name)
-
-				// Parse result_json for config data
-				if resultJSON.Valid && resultJSON.String != "" {
-					nc := parseNodeConfigResult(t.node.name, resultJSON.String)
-					if nc != nil {
-						nodeConfigs = append(nodeConfigs, *nc)
-					}
-				}
-			} else if status == "failed" {
-				completed[t.taskID] = true
-				nodesSkipped = append(nodesSkipped, SkippedNode{Name: t.node.name, Reason: "task_failed"})
-			}
-		}
-
-		if len(completed) < len(tasks) {
-			time.Sleep(2 * time.Second)
-		}
-	}
-
-	// Mark any remaining tasks as timed out
-	for _, t := range tasks {
-		if !completed[t.taskID] {
-			nodesSkipped = append(nodesSkipped, SkippedNode{Name: t.node.name, Reason: "timeout"})
-		}
+		log.Printf("[backup] node config collection for %s would be dispatched via gRPC", n.name)
+		nodesSkipped = append(nodesSkipped, SkippedNode{Name: n.name, Reason: "grpc_backup_not_yet_wired"})
 	}
 
 	return nodesIncluded, nodesSkipped, nodeConfigs

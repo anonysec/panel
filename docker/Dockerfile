@@ -55,9 +55,9 @@ COPY --from=builder /build/panel/web/portal/www /app/www/portal
 # Switch to non-root user
 USER panel
 
-EXPOSE 8080
+EXPOSE 2026
 
 HEALTHCHECK --interval=10s --timeout=5s --retries=3 \
-    CMD wget -q --spider http://localhost:8080/api/health || exit 1
+    CMD wget -q --spider http://localhost:2026/api/health || exit 1
 
 ENTRYPOINT ["/app/panel"]

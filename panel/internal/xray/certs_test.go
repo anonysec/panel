@@ -108,10 +108,7 @@ func TestConfigureTLS(t *testing.T) {
 
 		svc := New(db)
 
-		// distributePanelCerts: insert cert.distribute task.
-		mock.ExpectExec("INSERT INTO node_tasks").
-			WithArgs(int64(1), sqlmock.AnyArg()).
-			WillReturnResult(sqlmock.NewResult(1, 1))
+		// distributePanelCerts: no longer inserts node_tasks (gRPC-based now, no DB operation).
 
 		// GetConfig: returns existing config.
 		now := time.Now()

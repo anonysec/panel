@@ -6,7 +6,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile
     ports:
-      - "8080:8080"
+      - "2026:2026"
     env_file:
       - docker/panel.env
     depends_on:
@@ -16,7 +16,7 @@ services:
       - panel-data:/var/lib/panel
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/api/health"]
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:2026/api/health"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -25,9 +25,9 @@ services:
     image: mariadb:10.11
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASS:-rootpass}
-      MYSQL_DATABASE: radius
-      MYSQL_USER: radius
-      MYSQL_PASSWORD: ${DB_PASS:-radiuspass}
+      MYSQL_DATABASE: koris
+      MYSQL_USER: koris
+      MYSQL_PASSWORD: ${DB_PASS:-korispass}
     volumes:
       - db-data:/var/lib/mysql
     healthcheck:
