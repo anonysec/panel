@@ -5,15 +5,15 @@
 # Node modules (rebuilt in Docker)
 **/node_modules
 
+# Pre-built frontend (rebuilt in Docker from source)
+panel/web/admin/www
+panel/web/portal/www
+panel/web/landing/www
+
 # Certificates and secrets
 *.pem
 .env
 docker/panel.env
-
-# Build artifacts (rebuilt inside Docker)
-panel/web/admin/www
-panel/web/portal/www
-panel/web/landing/www
 
 # IDE and editor files
 .vscode

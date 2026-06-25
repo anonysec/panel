@@ -7,35 +7,35 @@ services:
       context: .
       dockerfile: docker/Dockerfile
     ports:
-      - "2026:2026"
-      - "80:80"
       - "443:443"
+      - "80:80"
+      - "2026:2026"
     env_file:
       - docker/panel.env
     depends_on:
       db:
         condition: service_healthy
     volumes:
-      - panel-data:/var/lib/panel
+      - panel-data:/var/lib/koris
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:2026/api/health"]
+      test: ["CMD", "wget", "--no-check-certificate", "-q", "--spider", "https://localhost:2026/api/health"]
       interval: 10s
       timeout: 5s
-      retries: 3
+      retries: 5
+      start_period: 10s
 
   db:
     container_name: koris-db
-    image: mariadb:10.11
+    image: timescale/timescaledb:latest-pg16
     environment:
-      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASS}
-      MYSQL_DATABASE: koris
-      MYSQL_USER: koris
-      MYSQL_PASSWORD: ${DB_PASS}
+      POSTGRES_DB: ${POSTGRES_DB:-koris}
+      POSTGRES_USER: ${POSTGRES_USER:-koris}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
-      - db-data:/var/lib/mysql
+      - db-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      test: ["CMD-SHELL", "pg_isready -U koris"]
       interval: 5s
       timeout: 3s
       retries: 5

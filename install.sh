@@ -168,29 +168,34 @@ install_docker() {
   # Generate secrets
   local session_secret="$(gen_secret 32)"
   local setup_key="$(gen_secret 16)"
-  local panel_secret="$(gen_secret 32)"
+
+  # Determine TLS mode
+  local tls_mode="selfsigned"
+  [[ -n "${DOMAIN}" && "${DOMAIN}" != "_" ]] && tls_mode="acme"
 
   # Write env file
   mkdir -p "${CONFIG_DIR}"
-  local db_root_pass="$(gen_secret 16)"
   cat > "${CONFIG_DIR}/panel.env" <<ENV
-# KorisPanel Docker Configuration
+# KorisPanel Docker Configuration (TimescaleDB + built-in TLS)
 
-# Panel application
+# Database (TimescaleDB/PostgreSQL)
+PANEL_DB_BACKEND=timescaledb
+PANEL_PG_DSN=postgres://${DB_USER}:${DB_PASS}@db:5432/${DB_NAME}?sslmode=disable
+POSTGRES_DB=${DB_NAME}
+POSTGRES_USER=${DB_USER}
+POSTGRES_PASSWORD=${DB_PASS}
+
+# Panel
 PANEL_ADDR=0.0.0.0:${PANEL_PORT}
-PANEL_DB_DSN=${DB_USER}:${DB_PASS}@tcp(db:3306)/${DB_NAME}?parseTime=true&multiStatements=true&charset=utf8mb4,utf8
 PANEL_SESSION_SECRET=${session_secret}
 PANEL_SETUP_KEY=${setup_key}
 PANEL_MIGRATIONS=/app/migrations
-PANEL_TUI_ENABLED=false
-
-# MariaDB container
-DB_ROOT_PASS=${db_root_pass}
-DB_PASS=${DB_PASS}
+PANEL_TLS_MODE=${tls_mode}
+PANEL_DOMAIN=${DOMAIN:-}
 ENV
   chmod 600 "${CONFIG_DIR}/panel.env"
 
-  # Copy docker-compose and env to working directory
+  # Copy env to working directory
   cd "${INSTALL_DIR}"
   cp "${CONFIG_DIR}/panel.env" docker/panel.env
   # Docker Compose reads .env at project root for variable interpolation
@@ -204,15 +209,15 @@ ENV
   log "Waiting for panel to start..."
   local attempts=0
   while [[ $attempts -lt 30 ]]; do
-    if docker compose exec -T panel wget -q --spider "http://localhost:${PANEL_PORT}/api/health" 2>/dev/null; then
+    if docker inspect -f '{{.State.Health.Status}}' koris 2>/dev/null | grep -q healthy; then
       break
     fi
-    sleep 2
+    sleep 3
     attempts=$((attempts + 1))
   done
 
   if [[ $attempts -ge 30 ]]; then
-    warn "Panel health check timed out. Check: docker compose logs panel"
+    warn "Panel health check timed out. Check: koris logs"
   else
     log "Panel is ${GREEN}running${NC}"
   fi
