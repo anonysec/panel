@@ -51,6 +51,6 @@ COPY --from=builder /build/panel/migrations /app/migrations
 EXPOSE 2026
 
 HEALTHCHECK --interval=10s --timeout=5s --retries=5 --start-period=10s \
-    CMD wget -q --spider http://localhost:2026/api/health || exit 1
+    CMD wget --no-check-certificate -q --spider https://localhost:2026/api/health || exit 1
 
 ENTRYPOINT ["/app/koris"]

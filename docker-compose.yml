@@ -18,7 +18,7 @@ services:
       - /etc/koris:/etc/koris:ro
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:2026/api/health"]
+      test: ["CMD", "wget", "--no-check-certificate", "-q", "--spider", "https://localhost:2026/api/health"]
       interval: 10s
       timeout: 5s
       retries: 5

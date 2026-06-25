@@ -56,6 +56,8 @@ DB_USER="koris"
 DB_PASS=""
 WITH_KNODE="yes"
 TLS_MODE="selfsigned"
+CERT_PATH="/etc/koris/cert.pem"
+KEY_PATH="/etc/koris/key.pem"
 
 parse_args() {
   for arg in "$@"; do
@@ -139,10 +141,10 @@ prompt_config() {
   # SSL mode selection
   echo ""
   echo -e "  ${CYAN}1)${NC} Let's Encrypt (requires domain pointed to this server)"
-  echo -e "  ${CYAN}2)${NC} Manual cert (place cert.pem + key.pem in /etc/koris/)"
-  echo -e "  ${CYAN}3)${NC} No SSL — plain HTTP (default, use reverse proxy for HTTPS)"
+  echo -e "  ${CYAN}2)${NC} Self-signed certificate (works immediately, browser warning)"
+  echo -e "  ${CYAN}3)${NC} Custom cert path (provide your own cert.pem + key.pem)"
   echo ""
-  read -rp "$(echo -e "${CYAN}SSL mode [1/2/3, default=3]: ${NC}")" ssl_choice </dev/tty
+  read -rp "$(echo -e "${CYAN}SSL mode [1/2/3]: ${NC}")" ssl_choice </dev/tty
   case "${ssl_choice}" in
     1)
       TLS_MODE="acme"
@@ -150,8 +152,16 @@ prompt_config() {
         err "Let's Encrypt requires a domain. Re-run and provide one."
       fi
       ;;
-    2) TLS_MODE="manual" ;;
-    *) TLS_MODE="disabled" ;;
+    3)
+      TLS_MODE="manual"
+      read -rp "$(echo -e "${CYAN}Path to cert.pem [/etc/koris/cert.pem]: ${NC}")" cert_path </dev/tty
+      cert_path="${cert_path:-/etc/koris/cert.pem}"
+      read -rp "$(echo -e "${CYAN}Path to key.pem [/etc/koris/key.pem]: ${NC}")" key_path </dev/tty
+      key_path="${key_path:-/etc/koris/key.pem}"
+      CERT_PATH="${cert_path}"
+      KEY_PATH="${key_path}"
+      ;;
+    *) TLS_MODE="selfsigned" ;;
   esac
 
   echo ""
@@ -191,8 +201,20 @@ install_docker() {
 
   # Write env file
   mkdir -p "${CONFIG_DIR}"
+
+  # Generate self-signed cert if mode is selfsigned
+  if [[ "${TLS_MODE}" == "selfsigned" ]]; then
+    local cert_cn="${DOMAIN:-$(curl -fsS4 --max-time 3 https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}')}"
+    openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
+      -keyout "${CONFIG_DIR}/key.pem" -out "${CONFIG_DIR}/cert.pem" \
+      -subj "/CN=${cert_cn}" >/dev/null 2>&1
+    CERT_PATH="${CONFIG_DIR}/cert.pem"
+    KEY_PATH="${CONFIG_DIR}/key.pem"
+    log "Self-signed certificate generated for ${cert_cn}"
+  fi
+
   cat > "${CONFIG_DIR}/panel.env" <<ENV
-# KorisPanel Docker Configuration (TimescaleDB + built-in TLS)
+# KorisPanel Docker Configuration (TimescaleDB + HTTPS)
 
 # Database (TimescaleDB/PostgreSQL)
 PANEL_PG_DSN=postgres://${DB_USER}:${DB_PASS}@db:5432/${DB_NAME}?sslmode=disable
@@ -206,6 +228,8 @@ PANEL_SESSION_SECRET=${session_secret}
 PANEL_SETUP_KEY=${setup_key}
 PANEL_MIGRATIONS=/app/migrations
 PANEL_TLS_MODE=${TLS_MODE}
+PANEL_TLS_CERT=${CERT_PATH}
+PANEL_TLS_KEY=${KEY_PATH}
 PANEL_DOMAIN=${DOMAIN:-}
 ENV
   chmod 600 "${CONFIG_DIR}/panel.env"
@@ -618,12 +642,9 @@ show_result() {
   local server_ip
   server_ip=$(curl -fsS4 --max-time 3 https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}')
 
-  # Build access URL with port
+  # Build access URL with port — always HTTPS
   local access_host="${DOMAIN:-${server_ip}}"
-  local access_url="http://${access_host}:${PANEL_PORT}"
-  if [[ "${TLS_MODE}" == "acme" || "${TLS_MODE}" == "manual" ]]; then
-    access_url="https://${access_host}:${PANEL_PORT}"
-  fi
+  local access_url="https://${access_host}:${PANEL_PORT}"
 
   echo ""
   echo -e "${GREEN}═══════════════════════════════════════════════${NC}"
@@ -643,10 +664,15 @@ show_result() {
   echo ""
   echo -e "${GREEN}═══════════════════════════════════════════════${NC}"
   echo ""
-  echo -e "  ${CYAN}TLS/SSL:${NC}   Place cert files at:"
-  echo -e "             /etc/koris/cert.pem"
-  echo -e "             /etc/koris/key.pem"
-  echo -e "             Then: koris restart"
+  if [[ "${TLS_MODE}" == "selfsigned" ]]; then
+    echo -e "  ${CYAN}SSL:${NC}       Self-signed (accept browser warning)"
+  elif [[ "${TLS_MODE}" == "acme" ]]; then
+    echo -e "  ${CYAN}SSL:${NC}       Let's Encrypt (auto-renewed)"
+  elif [[ "${TLS_MODE}" == "manual" ]]; then
+    echo -e "  ${CYAN}SSL:${NC}       Custom cert"
+  fi
+  echo -e "  ${CYAN}Cert:${NC}      ${CERT_PATH}"
+  echo -e "  ${CYAN}Key:${NC}       ${KEY_PATH}"
   echo ""
   if [[ "${INSTALL_MODE}" == "docker" ]]; then
     echo -e "  ${CYAN}Logs:${NC}      koris logs"
