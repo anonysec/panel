@@ -139,10 +139,10 @@ prompt_config() {
   # SSL mode selection
   echo ""
   echo -e "  ${CYAN}1)${NC} Let's Encrypt (requires domain pointed to this server)"
-  echo -e "  ${CYAN}2)${NC} Self-signed certificate (works immediately, browser warning)"
-  echo -e "  ${CYAN}3)${NC} No SSL (plain HTTP)"
+  echo -e "  ${CYAN}2)${NC} Manual cert (place cert.pem + key.pem in /etc/koris/)"
+  echo -e "  ${CYAN}3)${NC} No SSL — plain HTTP (default, use reverse proxy for HTTPS)"
   echo ""
-  read -rp "$(echo -e "${CYAN}SSL mode [1/2/3]: ${NC}")" ssl_choice </dev/tty
+  read -rp "$(echo -e "${CYAN}SSL mode [1/2/3, default=3]: ${NC}")" ssl_choice </dev/tty
   case "${ssl_choice}" in
     1)
       TLS_MODE="acme"
@@ -150,8 +150,8 @@ prompt_config() {
         err "Let's Encrypt requires a domain. Re-run and provide one."
       fi
       ;;
-    3) TLS_MODE="disabled" ;;
-    *) TLS_MODE="selfsigned" ;;
+    2) TLS_MODE="manual" ;;
+    *) TLS_MODE="disabled" ;;
   esac
 
   echo ""
@@ -621,7 +621,7 @@ show_result() {
   # Build access URL with port
   local access_host="${DOMAIN:-${server_ip}}"
   local access_url="http://${access_host}:${PANEL_PORT}"
-  if [[ "${TLS_MODE}" == "acme" || "${TLS_MODE}" == "selfsigned" ]]; then
+  if [[ "${TLS_MODE}" == "acme" || "${TLS_MODE}" == "manual" ]]; then
     access_url="https://${access_host}:${PANEL_PORT}"
   fi
 

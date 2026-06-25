@@ -155,7 +155,7 @@ func Load() Config {
 	alertDisk := getenvInt("PANEL_ALERT_DISK_THRESHOLD", 90)
 
 	// TLS mode
-	tlsMode := getenv("PANEL_TLS_MODE", "acme")
+	tlsMode := getenv("PANEL_TLS_MODE", "disabled")
 
 	// Log format
 	logFormat := getenv("PANEL_LOG_FORMAT", "text")
