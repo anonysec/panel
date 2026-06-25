@@ -12,9 +12,34 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
+	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 func Open(dsn string) (*sql.DB, error) {
+	// Detect PostgreSQL/TimescaleDB DSN (starts with postgres:// or postgresql://)
+	if strings.HasPrefix(dsn, "postgres://") || strings.HasPrefix(dsn, "postgresql://") {
+		return openPostgres(dsn)
+	}
+	return openMySQL(dsn)
+}
+
+func openPostgres(dsn string) (*sql.DB, error) {
+	db, err := sql.Open("pgx", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("postgres open: %w", err)
+	}
+	db.SetMaxOpenConns(25)
+	db.SetMaxIdleConns(10)
+	db.SetConnMaxLifetime(5 * time.Minute)
+	db.SetConnMaxIdleTime(2 * time.Minute)
+	if err := db.Ping(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("postgres ping: %w", err)
+	}
+	return db, nil
+}
+
+func openMySQL(dsn string) (*sql.DB, error) {
 	// Append connection timeout params if not already specified in the DSN.
 	// This prevents "Aborted connection ... Got an error reading communication packets"
 	// by ensuring client-side timeouts are shorter than MariaDB's wait_timeout.

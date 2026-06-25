@@ -23,19 +23,17 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 10s
+      start_period: 15s
 
   db:
     container_name: koris-db
-    image: timescale/timescaledb:latest-pg16
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-koris}
-      POSTGRES_USER: ${POSTGRES_USER:-koris}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    image: mariadb:10.11
+    env_file:
+      - docker/panel.env
     volumes:
-      - db-data:/var/lib/postgresql/data
+      - db-data:/var/lib/mysql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U koris"]
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 5s
       timeout: 3s
       retries: 5
