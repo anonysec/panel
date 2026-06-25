@@ -29,9 +29,10 @@ const emit = defineEmits<{
 
 const { t, locale } = useI18n()
 const { isDark } = useTheme()
-const { isFull, fetchEdition } = useEditionStore()
+const editionStore = useEditionStore()
+const isFull = computed(() => editionStore.isFull)
 
-onMounted(fetchEdition)
+onMounted(() => editionStore.fetchEdition())
 
 /** Derive user initials from username */
 const initials = computed(() =>
