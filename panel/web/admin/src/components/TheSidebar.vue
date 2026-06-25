@@ -83,7 +83,7 @@ const navGroups = computed<NavGroup[]>(() => {
     return groups
   }
 
-  // Admin navigation (unchanged)
+  // Admin navigation
   groups.push({
     title: t('nav.group_overview'),
     items: [
@@ -92,10 +92,10 @@ const navGroups = computed<NavGroup[]>(() => {
         label: t('nav.dashboard'),
         icon: 'dashboard',
       },
-      ...(isFull.value ? [{
-        route: 'payments',
-        label: t('nav.transactions'),
-        icon: 'transactions',
+      ...(!isReseller ? [{
+        route: 'metrics',
+        label: t('nav.metrics'),
+        icon: 'metrics',
       }] : []),
     ],
   })
@@ -135,12 +135,11 @@ const navGroups = computed<NavGroup[]>(() => {
     })
   }
 
-  // Metrics always visible for admins
-  if (!isReseller) {
+  if (isFull.value) {
     manageItems.push({
-      route: 'metrics',
-      label: t('nav.metrics'),
-      icon: 'metrics',
+      route: 'payments',
+      label: t('nav.transactions'),
+      icon: 'transactions',
     })
   }
 

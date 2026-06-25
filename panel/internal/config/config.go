@@ -175,7 +175,7 @@ func Load() Config {
 		PGDSN:          pgDSN,
 		SetupKey:       setupKey,
 		SessionSecret:  sessionSecret,
-		Version:        getenv("PANEL_VERSION", "next-dev"),
+		Version:        getenv("PANEL_VERSION", readVersionFile()),
 		ReleaseURL:     getenv("PANEL_RELEASE_URL", ""),
 		PublicBase:     getenv("PANEL_PUBLIC_BASE", "/dashboard"),
 		AdminWebDir:    getenv("PANEL_ADMIN_WEB_DIR", "/opt/KorisPanel/panel/web/admin/www"),
@@ -206,6 +206,19 @@ func getenv(k, d string) string {
 		return v
 	}
 	return d
+}
+
+func readVersionFile() string {
+	// Try common locations
+	for _, path := range []string{"VERSION", "/opt/KorisPanel/VERSION", "/app/VERSION"} {
+		if data, err := os.ReadFile(path); err == nil {
+			v := strings.TrimSpace(string(data))
+			if v != "" {
+				return v
+			}
+		}
+	}
+	return "0.92.0"
 }
 
 func getenvInt(k string, d int) int {
