@@ -176,14 +176,13 @@ install_docker() {
   # Write env file
   mkdir -p "${CONFIG_DIR}"
   cat > "${CONFIG_DIR}/panel.env" <<ENV
-# KorisPanel Docker Configuration
+# KorisPanel Docker Configuration (TimescaleDB + built-in TLS)
 
-# Database (MariaDB)
-PANEL_DB_DSN=${DB_USER}:${DB_PASS}@tcp(db:3306)/${DB_NAME}?parseTime=true&multiStatements=true&charset=utf8mb4,utf8
-MYSQL_ROOT_PASSWORD=$(gen_secret 16)
-MYSQL_DATABASE=${DB_NAME}
-MYSQL_USER=${DB_USER}
-MYSQL_PASSWORD=${DB_PASS}
+# Database (TimescaleDB/PostgreSQL)
+PANEL_PG_DSN=postgres://${DB_USER}:${DB_PASS}@db:5432/${DB_NAME}?sslmode=disable
+POSTGRES_DB=${DB_NAME}
+POSTGRES_USER=${DB_USER}
+POSTGRES_PASSWORD=${DB_PASS}
 
 # Panel
 PANEL_ADDR=0.0.0.0:${PANEL_PORT}

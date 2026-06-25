@@ -110,9 +110,26 @@ func Migrate(db *sql.DB, dir string) error {
 	if dir == "" {
 		dir = "panel/migrations"
 	}
-	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS schema_migrations (version VARCHAR(80) PRIMARY KEY, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`); err != nil {
+
+	pg := isPostgres(db)
+
+	// If MySQL, redirect to mysql/ subdirectory
+	if !pg {
+		mysqlDir := filepath.Join(dir, "mysql")
+		if _, err := os.Stat(mysqlDir); err == nil {
+			dir = mysqlDir
+		}
+	}
+
+	// Create schema_migrations table with appropriate syntax
+	createSQL := `CREATE TABLE IF NOT EXISTS schema_migrations (version VARCHAR(80) PRIMARY KEY, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`
+	if pg {
+		createSQL = `CREATE TABLE IF NOT EXISTS schema_migrations (version VARCHAR(80) PRIMARY KEY, applied_at TIMESTAMPTZ DEFAULT NOW())`
+	}
+	if _, err := db.Exec(createSQL); err != nil {
 		return err
 	}
+
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return err
@@ -124,9 +141,18 @@ func Migrate(db *sql.DB, dir string) error {
 		}
 	}
 	sort.Strings(names)
+
+	// Use appropriate placeholder syntax
+	checkSQL := `SELECT COUNT(*) FROM schema_migrations WHERE version=?`
+	insertSQL := `INSERT INTO schema_migrations(version) VALUES(?)`
+	if pg {
+		checkSQL = `SELECT COUNT(*) FROM schema_migrations WHERE version=$1`
+		insertSQL = `INSERT INTO schema_migrations(version) VALUES($1)`
+	}
+
 	for _, name := range names {
 		var exists int
-		if err := db.QueryRow(`SELECT COUNT(*) FROM schema_migrations WHERE version=?`, name).Scan(&exists); err != nil {
+		if err := db.QueryRow(checkSQL, name).Scan(&exists); err != nil {
 			return err
 		}
 		if exists > 0 {
@@ -139,9 +165,16 @@ func Migrate(db *sql.DB, dir string) error {
 		if _, err := db.Exec(string(b)); err != nil {
 			return fmt.Errorf("migration %s: %w", name, err)
 		}
-		if _, err := db.Exec(`INSERT INTO schema_migrations(version) VALUES(?)`, name); err != nil {
+		if _, err := db.Exec(insertSQL, name); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// isPostgres detects whether the database connection is PostgreSQL.
+func isPostgres(db *sql.DB) bool {
+	var version string
+	err := db.QueryRow("SELECT version()").Scan(&version)
+	return err == nil && strings.Contains(strings.ToLower(version), "postgresql")
 }

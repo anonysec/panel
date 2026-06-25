@@ -45,7 +45,7 @@ WORKDIR /app
 # Copy binary
 COPY --from=builder /koris /app/koris
 
-# Copy migrations
+# Copy migrations (PostgreSQL default + MySQL legacy)
 COPY --from=builder /build/panel/migrations /app/migrations
 
 EXPOSE 2026 443 80
