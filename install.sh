@@ -219,7 +219,7 @@ install_docker() {
       chmod 600 "${KEY_PATH}"
       log "Let's Encrypt certificate obtained for ${DOMAIN}"
       # Add cron for auto-renewal
-      (crontab -l 2>/dev/null; echo "0 3 * * * certbot renew --quiet --deploy-hook 'cp /etc/letsencrypt/live/${DOMAIN}/fullchain.pem ${CERT_PATH} && cp /etc/letsencrypt/live/${DOMAIN}/privkey.pem ${KEY_PATH} && docker restart koris'") | crontab -
+      { crontab -l 2>/dev/null || true; echo "0 3 * * * certbot renew --quiet --deploy-hook 'cp /etc/letsencrypt/live/${DOMAIN}/fullchain.pem ${CERT_PATH} && cp /etc/letsencrypt/live/${DOMAIN}/privkey.pem ${KEY_PATH} && docker restart koris'"; } | crontab -
     else
       warn "Let's Encrypt failed — falling back to self-signed"
       openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
