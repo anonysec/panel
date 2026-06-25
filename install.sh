@@ -202,20 +202,46 @@ install_docker() {
   # Write env file
   mkdir -p "${CONFIG_DIR}"
 
-  # Generate self-signed cert if mode is selfsigned
-  if [[ "${TLS_MODE}" == "selfsigned" ]]; then
-    local cert_cn="${DOMAIN:-$(curl -fsS4 --max-time 3 https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}')}"
+  # Always generate a self-signed cert as baseline
+  local cert_cn="${DOMAIN:-$(curl -fsS4 --max-time 3 https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}')}"
+  CERT_PATH="${CONFIG_DIR}/cert.pem"
+  KEY_PATH="${CONFIG_DIR}/key.pem"
+
+  if [[ "${TLS_MODE}" == "acme" ]]; then
+    # Install certbot and get real cert
+    log "Installing certbot for Let's Encrypt..."
+    apt-get install -y -qq certbot >/dev/null 2>&1 || true
+    log "Requesting certificate for ${DOMAIN}..."
+    if certbot certonly --standalone -d "${DOMAIN}" --non-interactive --agree-tos --register-unsafely-without-email; then
+      # Copy LE certs to /etc/koris/
+      cp "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" "${CERT_PATH}"
+      cp "/etc/letsencrypt/live/${DOMAIN}/privkey.pem" "${KEY_PATH}"
+      chmod 600 "${KEY_PATH}"
+      log "Let's Encrypt certificate obtained for ${DOMAIN}"
+      # Add cron for auto-renewal
+      (crontab -l 2>/dev/null; echo "0 3 * * * certbot renew --quiet --deploy-hook 'cp /etc/letsencrypt/live/${DOMAIN}/fullchain.pem ${CERT_PATH} && cp /etc/letsencrypt/live/${DOMAIN}/privkey.pem ${KEY_PATH} && docker restart koris'") | crontab -
+    else
+      warn "Let's Encrypt failed — falling back to self-signed"
+      openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
+        -keyout "${KEY_PATH}" -out "${CERT_PATH}" \
+        -subj "/CN=${cert_cn}" >/dev/null 2>&1
+    fi
+  elif [[ "${TLS_MODE}" == "manual" ]]; then
+    # User provides cert — verify the files exist
+    if [[ ! -f "${CERT_PATH}" || ! -f "${KEY_PATH}" ]]; then
+      warn "Cert files not found at ${CERT_PATH} / ${KEY_PATH} — generating self-signed"
+      openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
+        -keyout "${KEY_PATH}" -out "${CERT_PATH}" \
+        -subj "/CN=${cert_cn}" >/dev/null 2>&1
+    else
+      log "Using custom certificate from ${CERT_PATH}"
+    fi
+  else
+    # Self-signed (default)
     openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
-      -keyout "${CONFIG_DIR}/key.pem" -out "${CONFIG_DIR}/cert.pem" \
+      -keyout "${KEY_PATH}" -out "${CERT_PATH}" \
       -subj "/CN=${cert_cn}" >/dev/null 2>&1
-    CERT_PATH="${CONFIG_DIR}/cert.pem"
-    KEY_PATH="${CONFIG_DIR}/key.pem"
     log "Self-signed certificate generated for ${cert_cn}"
-  elif [[ "${TLS_MODE}" == "acme" ]]; then
-    # ACME mode: no cert generated — panel will obtain from Let's Encrypt on first start
-    # Just create the cache directory
-    mkdir -p "${CONFIG_DIR}/certs"
-    log "ACME (Let's Encrypt) mode — cert will be obtained on first start for ${DOMAIN}"
   fi
 
   cat > "${CONFIG_DIR}/panel.env" <<ENV
@@ -233,7 +259,6 @@ PANEL_SESSION_SECRET=${session_secret}
 PANEL_SETUP_KEY=${setup_key}
 PANEL_MIGRATIONS=/app/migrations
 PANEL_TLS_ENABLED=true
-PANEL_TLS_MODE=${TLS_MODE}
 PANEL_TLS_CERT=${CERT_PATH}
 PANEL_TLS_KEY=${KEY_PATH}
 PANEL_TLS_ADDR=0.0.0.0:${PANEL_PORT}
