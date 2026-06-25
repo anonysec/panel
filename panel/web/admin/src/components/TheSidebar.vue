@@ -3,7 +3,6 @@ import { computed, onMounted } from 'vue'
 import { useI18n } from '@koris/composables/useI18n'
 import { useTheme } from '@koris/composables/useTheme'
 import { useEditionStore } from '@/stores/edition'
-import type { Locale } from '@koris/composables/useI18n'
 
 export interface Props {
   collapsed?: boolean
@@ -24,7 +23,6 @@ const emit = defineEmits<{
   'collapse-toggle': []
   logout: []
   'toggle-theme': []
-  'change-lang': [locale: string]
 }>()
 
 const { t, locale } = useI18n()
@@ -196,11 +194,6 @@ function handleLogout() {
 function handleToggleTheme() {
   emit('toggle-theme')
 }
-
-function handleChangeLang(event: Event) {
-  const target = event.target as HTMLSelectElement
-  emit('change-lang', target.value)
-}
 </script>
 
 <template>
@@ -318,17 +311,6 @@ function handleChangeLang(event: Event) {
           {{ user.username }}
           <small>{{ user.role }}</small>
         </div>
-        <select
-          class="lang-select"
-          :value="locale"
-          :title="t('label.language')"
-          @change="handleChangeLang"
-        >
-          <option value="en">EN</option>
-          <option value="fa">FA</option>
-          <option value="zh">ZH</option>
-          <option value="ru">RU</option>
-        </select>
         <button
           class="icon-btn"
           @click="handleToggleTheme"
@@ -548,21 +530,6 @@ function handleChangeLang(event: Event) {
   color: var(--color-muted, #8b98a5);
   font-weight: var(--font-normal, 400);
   font-size: 11px;
-}
-
-.lang-select {
-  background: var(--color-surface, #0b1120);
-  border: 1px solid var(--color-border, #28333f);
-  color: var(--color-text, #e6edf3);
-  font-size: 10px;
-  padding: 3px 4px;
-  border-radius: var(--radius-sm, 6px);
-  cursor: pointer;
-  outline: none;
-}
-
-.lang-select:focus {
-  border-color: var(--color-primary, #2563eb);
 }
 
 .icon-btn {

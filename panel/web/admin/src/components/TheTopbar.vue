@@ -26,6 +26,7 @@ const emit = defineEmits<{
   (e: 'open-command-palette'): void
   (e: 'open-notifications'): void
   (e: 'toggle-theme'): void
+  (e: 'change-lang', locale: string): void
 }>()
 
 // Platform-aware keyboard shortcut display
@@ -38,6 +39,36 @@ const shortcutLabel = computed(() => {
 // Notification dropdown hover state
 const showNotifDropdown = ref(false)
 let hideTimeout: ReturnType<typeof setTimeout> | null = null
+
+// Language dropdown state
+const showLangDropdown = ref(false)
+let langHideTimeout: ReturnType<typeof setTimeout> | null = null
+
+const langOptions = [
+  { code: 'en', label: 'EN' },
+  { code: 'fa', label: 'FA' },
+  { code: 'zh', label: 'ZH' },
+  { code: 'ru', label: 'RU' },
+]
+
+function onLangEnter() {
+  if (langHideTimeout) {
+    clearTimeout(langHideTimeout)
+    langHideTimeout = null
+  }
+  showLangDropdown.value = true
+}
+
+function onLangLeave() {
+  langHideTimeout = setTimeout(() => {
+    showLangDropdown.value = false
+  }, 200)
+}
+
+function selectLang(code: string) {
+  emit('change-lang', code)
+  showLangDropdown.value = false
+}
 
 function onBellEnter() {
   if (hideTimeout) {
@@ -151,6 +182,39 @@ function formatTime(timestamp: string): string {
         <span class="search-box-text">{{ t('topbar.search') }}</span>
         <kbd class="search-shortcut">{{ shortcutLabel }}</kbd>
       </button>
+
+      <!-- Language selector -->
+      <div
+        class="lang-dropdown-wrapper"
+        @mouseenter="onLangEnter"
+        @mouseleave="onLangLeave"
+      >
+        <button
+          class="icon-btn"
+          :title="t('label.language')"
+          :aria-label="t('label.language')"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M2 12h20" />
+            <path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z" />
+          </svg>
+          <span class="lang-badge">{{ locale.toUpperCase() }}</span>
+        </button>
+
+        <!-- Language dropdown -->
+        <div v-if="showLangDropdown" class="lang-dropdown">
+          <button
+            v-for="lang in langOptions"
+            :key="lang.code"
+            class="lang-option"
+            :class="{ 'lang-option--active': locale === lang.code }"
+            @click="selectLang(lang.code)"
+          >
+            {{ lang.label }}
+          </button>
+        </div>
+      </div>
 
       <!-- Notification bell with badge and dropdown -->
       <div
@@ -555,6 +619,63 @@ function formatTime(timestamp: string): string {
     width: 280px;
     right: -8px;
   }
+}
+
+/* Language dropdown */
+.lang-dropdown-wrapper {
+  position: relative;
+}
+
+.lang-badge {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  font-size: 8px;
+  font-weight: 700;
+  color: var(--color-text, #e6edf3);
+  background: var(--color-surface-2, #1e2630);
+  border-radius: 3px;
+  padding: 0 2px;
+  line-height: 1.2;
+}
+
+.lang-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 80px;
+  background: var(--color-surface, #0b1120);
+  border: 1px solid var(--color-border, #28333f);
+  border-radius: var(--radius-md, 8px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+  z-index: 100;
+  overflow: hidden;
+  padding: 4px;
+}
+
+.lang-option {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--color-muted, #8b98a5);
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.1s, color 0.1s;
+}
+
+.lang-option:hover {
+  background: var(--color-surface-2, #1e2630);
+  color: var(--color-text, #e6edf3);
+}
+
+.lang-option--active {
+  color: var(--color-primary, #2563eb);
+  font-weight: 600;
 }
 
 </style>

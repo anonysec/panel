@@ -783,20 +783,6 @@ onMounted(async () => {
           v-if="currentMainTab === 'users'"
           variant="ghost"
           size="sm"
-          :loading="exporting"
-          @click="handleExport('csv')"
-        >{{ t('customers.export_csv') }}</KButton>
-        <KButton
-          v-if="currentMainTab === 'users'"
-          variant="ghost"
-          size="sm"
-          :loading="exporting"
-          @click="handleExport('json')"
-        >{{ t('customers.export_json') }}</KButton>
-        <KButton
-          v-if="currentMainTab === 'users'"
-          variant="ghost"
-          size="sm"
           @click="openImportSlide"
         >{{ t('customers.import_csv') }}</KButton>
       </div>

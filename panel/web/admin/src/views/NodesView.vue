@@ -3,11 +3,9 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useNodesStore } from '@/stores/nodes'
 import { useMetricsStore } from '@/stores/metrics'
-import { storeToRefs } from 'pinia'
 import { useToast } from '@koris/composables/useToast'
 import { useConfirm } from '@koris/composables/useConfirm'
 import { useI18n } from '@koris/composables/useI18n'
-import { useSortable } from '@koris/composables/useSortable'
 import KTabs from '@koris/ui/KTabs.vue'
 import KButton from '@koris/ui/KButton.vue'
 import KStatusPill from '@koris/ui/KStatusPill.vue'
@@ -24,13 +22,10 @@ const { t } = useI18n()
 const router = useRouter()
 const store = useNodesStore()
 const metricsStore = useMetricsStore()
-const { list: nodesList } = storeToRefs(store)
 const toast = useToast()
 const { confirm } = useConfirm()
 const activeTab = ref('nodes')
 const showAddForm = ref(false)
-const creating = ref(false)
-const newToken = ref<string | null>(null)
 
 // ─── Edit Node State ─────────────────────────────────────────────────────────
 const editingNodeId = ref<number | null>(null)
@@ -52,11 +47,12 @@ const tabs = computed(() => [
   { key: 'cores', label: t('nodes.cores') },
 ])
 
-const nodeForm = ref({
-  name: '',
-  public_ip: '',
-  domain: '',
-})
+/** Called when the new NodeAddForm successfully creates a node */
+function onNodeCreated(nodeId: number) {
+  showAddForm.value = false
+  store.loadNodes()
+  router.push({ name: 'node-detail', params: { id: nodeId } })
+}
 
 // ─── Sorted Nodes: offline/stale first ───────────────────────────────────────
 const sortedNodes = computed(() => {
@@ -172,20 +168,6 @@ function getNodeConfig(nodeId: number, protocol: string) {
 }
 
 // ─── Node CRUD ───────────────────────────────────────────────────────────────
-async function handleCreateNode() {
-  creating.value = true
-  const token = await store.createNode({
-    name: nodeForm.value.name,
-    public_ip: nodeForm.value.public_ip,
-    domain: nodeForm.value.domain,
-  })
-  creating.value = false
-  if (token) {
-    newToken.value = token
-    nodeForm.value = { name: '', public_ip: '', domain: '' }
-    showAddForm.value = false
-  }
-}
 
 async function toggleNode(id: number, currentStatus: string) {
   const enable = currentStatus === 'disabled'
@@ -499,67 +481,29 @@ watch(activeTab, (tab) => {
 onMounted(() => {
   store.loadNodes()
 })
-
-// ─── Drag & Drop Reorder ─────────────────────────────────────────────────────
-const { containerRef: nodesContainerRef, isDragging: nodesDragging } = useSortable(nodesList, {
-  handle: '.drag-handle',
-  animation: 150,
-  persistEndpoint: '/api/admin/reorder',
-  entity: 'nodes',
-  idField: 'id',
-})
 </script>
 
 
 <template>
   <div class="page nodes-view">
     <header class="page-header">
-      <KButton variant="primary" icon="+" @click="showAddForm = true">{{ t('nodes.add_node') }}</KButton>
+      <KButton variant="primary" icon="+" @click="showAddForm = !showAddForm">{{ t('nodes.add_node') }}</KButton>
       <KButton variant="ghost" @click="router.push({ name: 'node-compare' })">{{ t('node_compare.compare_nodes') }}</KButton>
     </header>
 
-    <!-- New Token Display -->
-    <div v-if="newToken" class="token-banner">
-      <p><strong>{{ t('nodes.node_token') }}:</strong> <code>{{ newToken }}</code></p>
-      <p class="text-muted text-sm">{{ t('nodes.token_save_warning') }}</p>
-      <KButton variant="ghost" size="sm" @click="newToken = null">{{ t('nodes.dismiss') }}</KButton>
-    </div>
-
-    <!-- Add Node Form -->
-    <div v-if="showAddForm" class="panel">
-      <h4 class="panel-title">{{ t('nodes.add_node') }}</h4>
-      <form class="node-form" @submit.prevent="handleCreateNode">
-        <div class="form-grid">
-          <KFormField name="node-name" :label="t('nodes.node_name')" required>
-            <template #default="{ fieldId }">
-              <KInput :id="fieldId" v-model="nodeForm.name" placeholder="node-us-1" />
-            </template>
-          </KFormField>
-          <KFormField name="node-ip" :label="t('nodes.public_ip')" required>
-            <template #default="{ fieldId }">
-              <KInput :id="fieldId" v-model="nodeForm.public_ip" placeholder="1.2.3.4" />
-            </template>
-          </KFormField>
-          <KFormField name="node-domain" :label="t('nodes.domain')" required>
-            <template #default="{ fieldId }">
-              <KInput :id="fieldId" v-model="nodeForm.domain" placeholder="us1.example.com" />
-            </template>
-          </KFormField>
-        </div>
-        <div class="form-actions">
-          <KButton variant="ghost" @click="showAddForm = false">{{ t('btn.cancel') }}</KButton>
-          <KButton type="submit" variant="primary" :loading="creating">{{ t('nodes.create_node') }}</KButton>
-        </div>
-      </form>
-    </div>
+    <!-- Add Node Form (gRPC-based) -->
+    <NodeAddForm
+      v-if="showAddForm"
+      @created="onNodeCreated"
+    />
 
 
     <KTabs v-model="activeTab" :tabs="tabs" aria-label="Nodes navigation">
       <!-- Nodes Tab -->
       <template #nodes>
         <div class="nodes-content">
-          <div v-if="store.loading && store.list.length === 0" class="nodes-grid">
-            <KSkeleton v-for="i in 3" :key="i" variant="rect" :width="'100%'" :height="180" />
+          <div v-if="store.loading && store.list.length === 0" class="nodes-list">
+            <KSkeleton v-for="i in 3" :key="i" variant="rect" :width="'100%'" :height="64" />
           </div>
           <KEmptyState
             v-else-if="store.list.length === 0"
@@ -567,122 +511,13 @@ const { containerRef: nodesContainerRef, isDragging: nodesDragging } = useSortab
             :title="t('nodes.no_nodes')"
             :description="t('nodes.no_nodes_desc')"
           />
-          <div v-else ref="nodesContainerRef" class="nodes-grid" :class="{ 'nodes-grid--dragging': nodesDragging }">
-            <div v-for="node in store.list" :key="node.id" class="node-card">
-              <div class="node-card__header">
-                <div class="node-card__title">
-                  <button class="drag-handle" type="button" aria-label="Drag to reorder">
-                    <span aria-hidden="true">⋮⋮</span>
-                  </button>
-                  <h4 class="node-card__name">{{ node.name }}</h4>
-                  <KStatusPill :status="node.status" size="sm" />
-                </div>
-                <span class="node-card__ip text-muted">{{ node.public_ip }}</span>
-              </div>
-              <div class="node-card__metrics">
-                <div class="metric-row">
-                  <span class="metric-row__label">CPU</span>
-                  <div class="metric-row__bar">
-                    <div class="metric-row__fill" :style="{ width: `${node.status_metrics?.cpu_percent ?? 0}%` }" />
-                  </div>
-                  <span class="metric-row__val">{{ node.status_metrics?.cpu_percent ?? 0 }}%</span>
-                </div>
-                <div class="metric-row">
-                  <span class="metric-row__label">RAM</span>
-                  <div class="metric-row__bar">
-                    <div class="metric-row__fill metric-row__fill--accent" :style="{ width: `${node.status_metrics?.ram_percent ?? 0}%` }" />
-                  </div>
-                  <span class="metric-row__val">{{ node.status_metrics?.ram_percent ?? 0 }}%</span>
-                </div>
-                <div class="metric-row">
-                  <span class="metric-row__label">Disk</span>
-                  <div class="metric-row__bar">
-                    <div class="metric-row__fill metric-row__fill--warning" :style="{ width: `${node.status_metrics?.disk_percent ?? 0}%` }" />
-                  </div>
-                  <span class="metric-row__val">{{ node.status_metrics?.disk_percent ?? 0 }}%</span>
-                </div>
-                <div class="metric-text">
-                  <span class="text-muted">RX:</span> {{ formatBps(node.status_metrics?.rx_bps ?? 0) }}
-                  <span class="text-muted" style="margin-left:var(--space-3)">TX:</span> {{ formatBps(node.status_metrics?.tx_bps ?? 0) }}
-                </div>
-              </div>
-              <div class="node-card__actions">
-                <KButton variant="ghost" size="sm" @click="router.push({ name: 'node-detail', params: { id: node.id } })">
-                  {{ t('node_detail.view_details') }}
-                </KButton>
-                <KButton variant="ghost" size="sm" @click="startEditNode(node)">
-                  {{ t('btn.edit') }}
-                </KButton>
-                <KButton variant="ghost" size="sm" @click="toggleNode(node.id, node.status)">
-                  {{ node.status === 'disabled' ? t('btn.enable') : t('btn.disable') }}
-                </KButton>
-                <KButton variant="danger" size="sm" @click="handleDeleteNode(node.id, node.name)">
-                  {{ t('btn.delete') }}
-                </KButton>
-              </div>
-              <!-- Inline Edit Node Form -->
-              <div v-if="editingNodeId === node.id" class="node-edit-form">
-                <form @submit.prevent="handleEditNode">
-                  <div class="form-grid">
-                    <KFormField name="edit-name" :label="t('nodes.node_name')" required>
-                      <template #default="{ fieldId }">
-                        <KInput :id="fieldId" v-model="editNodeForm.name" placeholder="node-us-1" />
-                      </template>
-                    </KFormField>
-                    <KFormField name="edit-ip" :label="t('nodes.public_ip')" required>
-                      <template #default="{ fieldId }">
-                        <KInput :id="fieldId" v-model="editNodeForm.public_ip" placeholder="1.2.3.4" />
-                      </template>
-                    </KFormField>
-                    <KFormField name="edit-domain" :label="t('nodes.domain')" required>
-                      <template #default="{ fieldId }">
-                        <KInput :id="fieldId" v-model="editNodeForm.domain" placeholder="us1.example.com" />
-                      </template>
-                    </KFormField>
-                  </div>
-                  <!-- API Proxy Section -->
-                  <div class="form-group">
-                    <h5 class="form-group__title">{{ t('nodes.api_proxy') }}</h5>
-                    <div class="form-grid">
-                      <KFormField name="proxy-enabled" :label="t('nodes.proxy_enabled')">
-                        <template #default>
-                          <label class="toggle-switch">
-                            <input type="checkbox" :checked="editNodeForm.proxy_enabled" @change="editNodeForm.proxy_enabled = ($event.target as HTMLInputElement).checked" />
-                            <span class="toggle-switch__slider" />
-                          </label>
-                        </template>
-                      </KFormField>
-                      <template v-if="editNodeForm.proxy_enabled">
-                        <KFormField name="proxy-type" :label="t('nodes.proxy_type')">
-                          <template #default="{ fieldId }">
-                            <KSelect :id="fieldId" v-model="editNodeForm.proxy_type" :options="[{ label: 'HTTP', value: 'HTTP' }, { label: 'SOCKS5', value: 'SOCKS5' }]" />
-                          </template>
-                        </KFormField>
-                        <KFormField name="proxy-address" :label="t('nodes.proxy_address')">
-                          <template #default="{ fieldId }">
-                            <KInput :id="fieldId" v-model="editNodeForm.proxy_address" placeholder="127.0.0.1:8080" />
-                          </template>
-                        </KFormField>
-                        <KFormField name="proxy-username" :label="t('nodes.proxy_username')">
-                          <template #default="{ fieldId }">
-                            <KInput :id="fieldId" v-model="editNodeForm.proxy_username" placeholder="" />
-                          </template>
-                        </KFormField>
-                        <KFormField name="proxy-password" :label="t('nodes.proxy_password')">
-                          <template #default="{ fieldId }">
-                            <KInput :id="fieldId" v-model="editNodeForm.proxy_password" type="password" placeholder="" />
-                          </template>
-                        </KFormField>
-                      </template>
-                    </div>
-                  </div>
-                  <div class="form-actions">
-                    <KButton variant="ghost" size="sm" @click="cancelEditNode">{{ t('btn.cancel') }}</KButton>
-                    <KButton type="submit" variant="primary" size="sm" :loading="savingNode">{{ t('btn.save') }}</KButton>
-                  </div>
-                </form>
-              </div>
-            </div>
+          <div v-else class="nodes-list">
+            <NodeListCard
+              v-for="node in sortedNodes"
+              :key="node.id"
+              :node="node"
+              @select="(id) => router.push({ name: 'node-detail', params: { id } })"
+            />
           </div>
         </div>
       </template>
@@ -1153,6 +988,7 @@ const { containerRef: nodesContainerRef, isDragging: nodesDragging } = useSortab
 .form-actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
 
 .nodes-content, .cores-content { padding: var(--space-4) 0; }
+.nodes-list { display: flex; flex-direction: column; gap: var(--space-3); }
 .nodes-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: var(--space-4); }
 
 .node-card { padding: var(--space-4); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); display: flex; flex-direction: column; gap: var(--space-3); }

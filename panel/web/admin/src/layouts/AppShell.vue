@@ -131,7 +131,6 @@ function handleNotifications() {
       class="sidebar-wrapper"
       @navigate="handleNavigate"
       @collapse-toggle="handleCollapseToggle"
-      @change-lang="handleChangeLang"
       @logout="handleLogout"
       @toggle-theme="toggleTheme"
     />
@@ -144,6 +143,7 @@ function handleNotifications() {
         @toggle-theme="toggleTheme"
         @open-notifications="handleNotifications"
         @open-command-palette="openCommandPalette"
+        @change-lang="handleChangeLang"
       />
 
       <UpdateBanner />
