@@ -105,6 +105,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'label.download': 'Download',
     // Settings
     'settings.panel_settings': 'Panel Settings',
+    'settings.system': 'System',
     'settings.data_warnings': 'Data Warnings',
     'settings.telegram': 'Telegram Bot',
     'settings.certificates': 'Certificates',
@@ -1121,6 +1122,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'label.download': 'دانلود',
     // Settings
     'settings.panel_settings': 'تنظیمات پنل',
+    'settings.system': 'سیستم',
     'settings.data_warnings': 'هشدار مصرف',
     'settings.telegram': 'ربات تلگرام',
     'settings.certificates': 'گواهی‌نامه‌ها',
@@ -2019,6 +2021,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'label.download': '下载',
     // Settings
     'settings.panel_settings': '面板设置',
+    'settings.system': '系统',
     'settings.data_warnings': '流量警告',
     'settings.telegram': 'Telegram机器人',
     'settings.certificates': '证书',
@@ -2809,6 +2812,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'label.download': 'Скачать',
     // Settings
     'settings.panel_settings': 'Настройки панели',
+    'settings.system': 'Система',
     'settings.data_warnings': 'Предупреждения трафика',
     'settings.telegram': 'Telegram бот',
     'settings.certificates': 'Сертификаты',
