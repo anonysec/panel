@@ -21,7 +21,7 @@ interface UpdateApplyResponse {
   message?: string
 }
 
-const { get, post } = useApi()
+const { get, post } = useApi({ showErrorToast: false })
 const { confirm } = useConfirm()
 const { t } = useI18n()
 
