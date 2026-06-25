@@ -93,6 +93,21 @@ func (s *Server) nodeTagsByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Dispatch to metrics/history handler
+	if parts[1] == "metrics" {
+		nodeID, err := strconv.ParseInt(parts[0], 10, 64)
+		if err != nil || nodeID <= 0 {
+			writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid_node_id"})
+			return
+		}
+		if len(parts) >= 3 && parts[2] == "history" {
+			s.handleNodeMetricsHistory(w, r, nodeID)
+			return
+		}
+		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
+		return
+	}
+
 	if parts[1] != "tags" {
 		writeJSONCode(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
 		return

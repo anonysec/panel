@@ -787,6 +787,9 @@ func main() {
 		srv.UserSync = grpcSub.UserSync
 		srv.TrafficCollector = grpcSub.TrafficCollector
 		srv.GRPCStore = grpcSub.Store
+
+		// Wire WebSocket metrics broadcasting into pool status changes
+		srv.RegisterWSMetricsBroadcast()
 	}
 
 	// Initialize excluded services (billing, support, teleproxy, antidpi, payment)

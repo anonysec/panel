@@ -532,6 +532,8 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/api/portal/payment-methods", s.requireCustomer(s.portalPaymentMethods))
 	mux.HandleFunc("/api/portal/wireguard/peers", s.requireCustomer(s.portalWireguardPeers))
 	mux.HandleFunc("/api/portal/wireguard/peers/", s.requireCustomer(s.portalWireguardPeerByID))
+	mux.HandleFunc("/api/portal/connections", s.requireCustomer(s.handlePortalConnections))
+	mux.HandleFunc("/api/portal/configs/", s.requireCustomer(s.handlePortalConfigDownload))
 
 	mux.HandleFunc("/api/node/agent/version", s.agentVersion)
 	mux.HandleFunc("/api/node/agent/download", s.agentDownload)
@@ -605,6 +607,12 @@ func (s *Server) Routes() *http.ServeMux {
 	// Node management via gRPC (knode connection registry)
 	mux.HandleFunc("/api/admin/knode/nodes", s.requireFullAdmin(s.handleKnodeNodes))
 	mux.HandleFunc("/api/admin/knode/nodes/", s.requireFullAdmin(s.handleKnodeNodeByID))
+
+	// Settings management (overview, alerts, gRPC, TLS)
+	mux.HandleFunc("/api/admin/settings/overview", s.requireFullAdmin(s.handleSettingsOverview))
+	mux.HandleFunc("/api/admin/settings/alerts", s.requireFullAdmin(s.handleSettingsAlerts))
+	mux.HandleFunc("/api/admin/settings/grpc", s.requireFullAdmin(s.handleSettingsGrpc))
+	mux.HandleFunc("/api/admin/settings/tls/upload", s.requireFullAdmin(s.handleSettingsTLSUpload))
 
 	mux.HandleFunc("/dashboard", redirectTo("/dashboard/"))
 	mux.Handle("/dashboard/", spaHandler(s.Config.AdminWebDir, "/dashboard/", s.AdminEmbedFS))
@@ -3305,8 +3313,19 @@ func (s *Server) realtimeWS(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		case notif := <-notifCh:
-			if err := writeRealtime("notification", notif); err != nil {
-				return
+			// If the message already has a "type" field (e.g. node_metrics, node_status_change),
+			// send it directly as a top-level message instead of wrapping in "notification".
+			if msgType, ok := notif["type"].(string); ok && msgType != "" {
+				wsMu.Lock()
+				err := conn.WriteJSON(notif)
+				wsMu.Unlock()
+				if err != nil {
+					return
+				}
+			} else {
+				if err := writeRealtime("notification", notif); err != nil {
+					return
+				}
 			}
 		}
 	}
