@@ -5,7 +5,7 @@
 # ─── Build Stage ──────────────────────────────────────────────────────
 FROM golang:1.25-alpine AS builder
 
-RUN apk add --no-cache git
+RUN apk add --no-cache git nodejs npm
 
 WORKDIR /build
 
@@ -16,7 +16,24 @@ RUN go mod download
 # Copy source
 COPY . .
 
+# Install shared dependencies first (admin/portal import from shared)
+WORKDIR /build/panel/web/shared
+RUN npm install
+
+# Build frontend - Admin
+WORKDIR /build/panel/web/admin
+RUN npm install && npm run build
+
+# Build frontend - Portal
+WORKDIR /build/panel/web/portal
+RUN npm install && npm run build
+
+# Build frontend - Landing
+WORKDIR /build/panel/web/landing
+RUN npm install && npm run build
+
 # Build Go binary
+WORKDIR /build
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o /panel ./panel/cmd/panel
 
 # ─── Runtime Stage ────────────────────────────────────────────────────
@@ -38,10 +55,6 @@ COPY --from=builder /panel /app/panel
 
 # Copy migrations
 COPY --from=builder /build/panel/migrations /app/migrations
-
-# Copy pre-built frontend assets
-COPY --from=builder /build/panel/web/admin/www /app/www/dashboard
-COPY --from=builder /build/panel/web/portal/www /app/www/portal
 
 # Switch to non-root user
 USER panel

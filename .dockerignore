@@ -10,9 +10,10 @@
 .env
 docker/panel.env
 
-# Build artifacts
+# Build artifacts (rebuilt inside Docker)
 panel/web/admin/www
 panel/web/portal/www
+panel/web/landing/www
 
 # IDE and editor files
 .vscode
