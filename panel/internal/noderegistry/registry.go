@@ -96,19 +96,16 @@ func (r *DBRegistry) Create(ctx context.Context, input *NodeInput) (int64, error
 	}
 
 	now := time.Now().UTC()
-	result, err := r.db.ExecContext(ctx,
+	var id int64
+	err = r.db.QueryRowContext(ctx,
 		`INSERT INTO knode_connections (name, address, grpc_port, api_key_enc, client_cert, client_key_enc, ca_cert, enabled, status, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'offline', $9, $10)`,
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'offline', $9, $10)
+		 RETURNING id`,
 		input.Name, input.Address, input.Port, apiKeyEnc, input.ClientCertPEM, clientKeyEnc, input.CACertPEM, input.Enabled, now, now,
-	)
+	).Scan(&id)
 	if err != nil {
 		log.Printf("[noderegistry] Create failed for %q: %v", input.Name, err)
 		return 0, fmt.Errorf("insert node: %w", err)
-	}
-
-	id, err := result.LastInsertId()
-	if err != nil {
-		return 0, fmt.Errorf("last insert id: %w", err)
 	}
 
 	log.Printf("[noderegistry] Created node %q (id=%d) at %s:%d", input.Name, id, input.Address, input.Port)
