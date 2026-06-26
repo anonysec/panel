@@ -210,25 +210,29 @@ func buildNodeConfig(rec *noderegistry.NodeRecord, registry *noderegistry.DBRegi
 		return grpcclient.NodeConfig{}, err
 	}
 
-	clientKeyPEM, err := registry.DecryptClientKey(rec)
-	if err != nil {
-		return grpcclient.NodeConfig{}, err
+	cfg := grpcclient.NodeConfig{
+		NodeID:  rec.ID,
+		Name:    rec.Name,
+		Address: rec.Address,
+		Port:    rec.Port,
+		APIKey:  string(apiKey),
+		CACert:  rec.CACertPEM,
 	}
 
-	clientCert, err := tls.X509KeyPair(rec.ClientCertPEM, clientKeyPEM)
-	if err != nil {
-		return grpcclient.NodeConfig{}, err
+	// Client cert is optional — only parse if both cert and key are present
+	if len(rec.ClientCertPEM) > 0 && len(rec.ClientKeyEnc) > 0 {
+		clientKeyPEM, err := registry.DecryptClientKey(rec)
+		if err != nil {
+			return grpcclient.NodeConfig{}, err
+		}
+		clientCert, err := tls.X509KeyPair(rec.ClientCertPEM, clientKeyPEM)
+		if err != nil {
+			return grpcclient.NodeConfig{}, err
+		}
+		cfg.ClientCert = clientCert
 	}
 
-	return grpcclient.NodeConfig{
-		NodeID:     rec.ID,
-		Name:       rec.Name,
-		Address:    rec.Address,
-		Port:       rec.Port,
-		APIKey:     string(apiKey),
-		ClientCert: clientCert,
-		CACert:     rec.CACertPEM,
-	}, nil
+	return cfg, nil
 }
 
 // stopGRPCSubsystem gracefully shuts down all gRPC subsystem components.
