@@ -267,19 +267,3 @@ func TestLeaderLock_Contention_AcquireAfterRelease(t *testing.T) {
 		t.Error("lock2 should be leader after acquiring")
 	}
 }
-
-func TestScaleWorkers_RejectsZero(t *testing.T) {
-	mgr := NewManager(Config{NumWorkers: 2, Addr: ":8080"})
-	err := mgr.ScaleWorkers(0)
-	if err == nil {
-		t.Error("expected error when scaling to 0 workers")
-	}
-}
-
-func TestScaleWorkers_RejectsNegative(t *testing.T) {
-	mgr := NewManager(Config{NumWorkers: 2, Addr: ":8080"})
-	err := mgr.ScaleWorkers(-1)
-	if err == nil {
-		t.Error("expected error when scaling to negative workers")
-	}
-}

@@ -272,4 +272,3 @@ func (s *Server) portalNodeGroups(w http.ResponseWriter, _ *http.Request) {
 	}
 	writeJSON(w, map[string]any{"ok": true, "groups": groups})
 }
-

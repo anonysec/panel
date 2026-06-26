@@ -76,6 +76,11 @@ function formatUptime(seconds: number): string {
   return `${Math.floor(seconds / 60)}m`
 }
 
+function formatTimestamp(iso: string): string {
+  if (!iso) return '—'
+  return new Date(iso).toLocaleString()
+}
+
 // ─── Data Loading ────────────────────────────────────────────────────────────
 async function loadNodeDetail() {
   loading.value = true
@@ -123,6 +128,27 @@ onMounted(async () => {
           <span class="text-muted">{{ node.address }}</span>
           <span v-if="nodeMetrics" class="text-muted">{{ t('node_detail.uptime') }}: {{ formatUptime(nodeMetrics.uptime) }}</span>
           <span v-if="node.version" class="text-muted">v{{ node.version }}</span>
+        </div>
+
+        <!-- Sync Status Section -->
+        <div class="node-summary__sync-status">
+          <div class="sync-status-item">
+            <span class="sync-status-item__label">{{ t('node_detail.connection_state') }}</span>
+            <KStatusPill :status="node.connection_state || node.status" size="xs" />
+          </div>
+          <div class="sync-status-item">
+            <span class="sync-status-item__label">{{ t('node_detail.last_metrics') }}</span>
+            <span class="sync-status-item__value">{{ node.last_metrics_at ? formatTimestamp(node.last_metrics_at) : '—' }}</span>
+          </div>
+          <div class="sync-status-item">
+            <span class="sync-status-item__label">{{ t('node_detail.sync_failures') }}</span>
+            <span
+              class="sync-status-item__value"
+              :class="{ 'sync-status-item__value--warn': node.sync_failures_count > 0 }"
+            >
+              {{ node.sync_failures_count ?? 0 }}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -217,6 +243,39 @@ onMounted(async () => {
   display: flex;
   gap: var(--space-4);
   font-size: var(--text-sm);
+}
+
+/* ─── Sync Status ─── */
+.node-summary__sync-status {
+  display: flex;
+  gap: var(--space-5);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+  margin-top: var(--space-2);
+}
+
+.sync-status-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sync-status-item__label {
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+  text-transform: uppercase;
+  font-weight: var(--font-medium);
+}
+
+.sync-status-item__value {
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  font-family: monospace;
+}
+
+.sync-status-item__value--warn {
+  color: var(--color-warning);
+  font-weight: var(--font-semibold);
 }
 
 /* ─── Tab Navigation ─── */

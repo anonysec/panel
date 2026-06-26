@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref, watch, nextTick } from 'vue'
+import Sortable from 'sortablejs'
 import { useI18n } from '@koris/composables/useI18n'
 import { useTheme } from '@koris/composables/useTheme'
 import { useEditionStore } from '@/stores/edition'
+import { useSidebarStore } from '@/stores/sidebar'
+import type { MenuItem } from '@/stores/sidebar'
 
 export interface Props {
   collapsed?: boolean
@@ -28,9 +31,122 @@ const emit = defineEmits<{
 const { t, locale } = useI18n()
 const { isDark } = useTheme()
 const editionStore = useEditionStore()
+const sidebarStore = useSidebarStore()
 const isFull = computed(() => editionStore.isFull)
 
-onMounted(() => editionStore.fetchEdition())
+// ─── SortableJS instances ─────────────────────────────────────────────────
+const categoriesContainerRef = ref<HTMLElement | null>(null)
+let categorySortable: Sortable | null = null
+const itemSortables: Sortable[] = []
+
+onMounted(() => {
+  editionStore.fetchEdition()
+  // Initialize sidebar store after navGroups is computed
+  nextTick(() => {
+    initSidebarStore()
+    initSortable()
+  })
+})
+
+onBeforeUnmount(() => {
+  destroySortables()
+})
+
+// Watch collapsed state — disable/enable drag
+watch(() => props.collapsed, (isCollapsed) => {
+  if (isCollapsed) {
+    destroySortables()
+  } else {
+    nextTick(() => initSortable())
+  }
+})
+
+// ─── SortableJS Helpers ───────────────────────────────────────────────────
+
+function destroySortables() {
+  categorySortable?.destroy()
+  categorySortable = null
+  itemSortables.forEach(s => s.destroy())
+  itemSortables.length = 0
+}
+
+function initSidebarStore() {
+  if (sidebarStore.initialized) return
+
+  const groups = navGroups.value
+  const defaultCategories = groups.map(g => g.id)
+  const menuItems: MenuItem[] = []
+
+  for (const group of groups) {
+    for (const item of group.items) {
+      menuItems.push({ id: item.route, categoryId: group.id })
+    }
+  }
+
+  sidebarStore.initialize(menuItems, defaultCategories)
+}
+
+function initSortable() {
+  destroySortables()
+
+  // Don't enable drag when collapsed
+  if (props.collapsed) return
+
+  const container = categoriesContainerRef.value
+  if (!container) return
+
+  // Category-level sortable (drag entire category groups)
+  categorySortable = Sortable.create(container, {
+    animation: 150,
+    handle: '.nav-group-handle',
+    ghostClass: 'sortable-ghost',
+    chosenClass: 'sortable-chosen',
+    dragClass: 'sortable-drag',
+    onEnd(evt) {
+      if (evt.oldIndex == null || evt.newIndex == null) return
+      const categoryIds = orderedGroups.value.map(g => g.id)
+      const moved = categoryIds.splice(evt.oldIndex, 1)[0]
+      categoryIds.splice(evt.newIndex, 0, moved)
+      sidebarStore.reorderCategories(categoryIds)
+    },
+  })
+
+  // Item-level sortables (one per category)
+  const itemContainers = container.querySelectorAll<HTMLElement>('[data-category-id]')
+  itemContainers.forEach(el => {
+    const categoryId = el.getAttribute('data-category-id')!
+    const sortable = Sortable.create(el, {
+      animation: 150,
+      group: { name: categoryId, pull: false, put: false },  // constrain to own category
+      ghostClass: 'sortable-ghost',
+      chosenClass: 'sortable-chosen',
+      dragClass: 'sortable-drag',
+      onEnd(evt) {
+        if (evt.oldIndex == null || evt.newIndex == null) return
+        const items = getItemsForCategory(categoryId)
+        const itemIds = items.map(i => i.route)
+        const moved = itemIds.splice(evt.oldIndex, 1)[0]
+        itemIds.splice(evt.newIndex, 0, moved)
+        sidebarStore.reorderItems(categoryId, itemIds)
+      },
+    })
+    itemSortables.push(sortable)
+  })
+}
+
+function getItemsForCategory(categoryId: string): NavItem[] {
+  const group = navGroups.value.find(g => g.id === categoryId)
+  if (!group) return []
+  const savedOrder = sidebarStore.itemOrder[categoryId]
+  if (!savedOrder) return group.items
+  // Sort items according to saved order
+  const orderMap = new Map(savedOrder.map((id, idx) => [id, idx]))
+  return [...group.items].sort((a, b) => {
+    const ai = orderMap.get(a.route) ?? Infinity
+    const bi = orderMap.get(b.route) ?? Infinity
+    return ai - bi
+  })
+}
 
 /** Derive user initials from username */
 const initials = computed(() =>
@@ -46,6 +162,7 @@ interface NavItem {
 }
 
 interface NavGroup {
+  id: string
   title: string
   items: NavItem[]
 }
@@ -58,12 +175,14 @@ const navGroups = computed<NavGroup[]>(() => {
   if (isReseller) {
     // Reseller navigation
     groups.push({
+      id: 'overview',
       title: t('nav.group_overview'),
       items: [
         { route: 'reseller-dashboard', label: t('nav.dashboard'), icon: 'dashboard' },
       ],
     })
     groups.push({
+      id: 'manage',
       title: t('nav.group_manage'),
       items: [
         { route: 'users', label: t('nav.users'), icon: 'users' },
@@ -73,6 +192,7 @@ const navGroups = computed<NavGroup[]>(() => {
       ],
     })
     groups.push({
+      id: 'system',
       title: t('nav.group_system'),
       items: [
         { route: 'reseller-settings', label: t('nav.settings'), icon: 'settings' },
@@ -83,6 +203,7 @@ const navGroups = computed<NavGroup[]>(() => {
 
   // Admin navigation
   groups.push({
+    id: 'overview',
     title: t('nav.group_overview'),
     items: [
       {
@@ -142,12 +263,14 @@ const navGroups = computed<NavGroup[]>(() => {
   }
 
   groups.push({
+    id: 'manage',
     title: t('nav.group_manage'),
     items: manageItems,
   })
 
   if (!isReseller) {
     groups.push({
+      id: 'system',
       title: t('nav.group_system'),
       items: [
         {
@@ -160,6 +283,47 @@ const navGroups = computed<NavGroup[]>(() => {
   }
 
   return groups
+})
+
+/**
+ * Computed ordered nav groups — applies saved category and item order from the store.
+ */
+const orderedGroups = computed<NavGroup[]>(() => {
+  if (!sidebarStore.initialized) return navGroups.value
+
+  const categoryOrder = sidebarStore.categoryOrder
+  const itemOrderMap = sidebarStore.itemOrder
+  const groupMap = new Map(navGroups.value.map(g => [g.id, g]))
+
+  // Order categories by store order
+  const ordered: NavGroup[] = []
+  for (const catId of categoryOrder) {
+    const group = groupMap.get(catId)
+    if (!group) continue
+
+    // Order items within this category
+    const savedItemOrder = itemOrderMap[catId]
+    let items = group.items
+    if (savedItemOrder && savedItemOrder.length > 0) {
+      const orderMap = new Map(savedItemOrder.map((id, idx) => [id, idx]))
+      items = [...group.items].sort((a, b) => {
+        const ai = orderMap.get(a.route) ?? Infinity
+        const bi = orderMap.get(b.route) ?? Infinity
+        return ai - bi
+      })
+    }
+
+    ordered.push({ ...group, items })
+  }
+
+  // Append any groups not in the store order (safety)
+  for (const group of navGroups.value) {
+    if (!ordered.find(g => g.id === group.id)) {
+      ordered.push(group)
+    }
+  }
+
+  return ordered
 })
 
 /** Determine if a nav item is active based on current route */
@@ -217,86 +381,91 @@ function handleToggleTheme() {
       </button>
     </div>
 
-    <!-- Navigation Groups -->
-    <template v-for="group in navGroups" :key="group.title">
-      <div v-if="!collapsed" class="nav-group">{{ group.title }}</div>
-      <button
-        v-for="item in group.items"
-        :key="item.route"
-        class="nav-item"
-        :class="{ active: isActive(item.route) }"
-        :title="collapsed ? item.label : undefined"
-        @click="handleNavigate(item.route)"
-      >
-        <!-- Dashboard icon -->
-        <svg v-if="item.icon === 'dashboard'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="3" y="3" width="7" height="9" rx="1" />
-          <rect x="14" y="3" width="7" height="5" rx="1" />
-          <rect x="14" y="12" width="7" height="9" rx="1" />
-          <rect x="3" y="16" width="7" height="5" rx="1" />
-        </svg>
-        <!-- Transactions icon -->
-        <svg v-else-if="item.icon === 'transactions'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />
-        </svg>
-        <!-- Users icon -->
-        <svg v-else-if="item.icon === 'users'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="9" cy="8" r="3.5" />
-          <path d="M2.5 20a6.5 6.5 0 0113 0" />
-          <circle cx="17" cy="9" r="2.5" />
-          <path d="M16 14.5A5 5 0 0121.5 20" />
-        </svg>
-        <!-- Services icon -->
-        <svg v-else-if="item.icon === 'services'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="3" y="4" width="18" height="6" rx="1" />
-          <rect x="3" y="14" width="18" height="6" rx="1" />
-          <circle cx="7" cy="7" r="1" fill="currentColor" />
-          <circle cx="7" cy="17" r="1" fill="currentColor" />
-        </svg>
-        <!-- Plans icon -->
-        <svg v-else-if="item.icon === 'plans'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="2" y="5" width="20" height="14" rx="2" />
-          <path d="M2 10h20" />
-        </svg>
-        <!-- Tickets icon -->
-        <svg v-else-if="item.icon === 'tickets'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
-          <path d="M8 9h8M8 13h4" />
-        </svg>
-        <!-- Backups icon -->
-        <svg v-else-if="item.icon === 'backups'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
-          <polyline points="7 10 12 15 17 10" />
-          <line x1="12" y1="15" x2="12" y2="3" />
-        </svg>
-        <!-- WireGuard icon (shield/lock) -->
-        <svg v-else-if="item.icon === 'wireguard'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-        </svg>
-        <!-- Settings icon -->
-        <svg v-else-if="item.icon === 'settings'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="3" />
-          <path d="M19.4 15a1.7 1.7 0 00.3 1.9l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.9-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.9.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.9 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.9l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.9.3H10a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.9-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.9V10a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z" />
-        </svg>
-        <!-- Telegram icon -->
-        <svg v-else-if="item.icon === 'telegram'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M22 2L11 13" />
-          <path d="M22 2L15 22L11 13L2 9L22 2Z" />
-        </svg>
-        <!-- Xray icon (lightning/bolt) -->
-        <svg v-else-if="item.icon === 'xray'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
-        </svg>
-        <!-- Metrics icon (chart) -->
-        <svg v-else-if="item.icon === 'metrics'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M3 3v18h18" />
-          <path d="M7 14l4-4 4 4 5-5" />
-        </svg>
+    <!-- Navigation Groups (drag-and-drop enabled) -->
+    <div ref="categoriesContainerRef" class="nav-categories">
+      <div v-for="group in orderedGroups" :key="group.id" class="nav-category-wrapper">
+        <div v-if="!collapsed" class="nav-group nav-group-handle">{{ group.title }}</div>
+        <div :data-category-id="group.id" class="nav-items-container">
+          <button
+            v-for="item in group.items"
+            :key="item.route"
+            class="nav-item"
+            :class="{ active: isActive(item.route) }"
+            :data-id="item.route"
+            :title="collapsed ? item.label : undefined"
+            @click="handleNavigate(item.route)"
+          >
+            <!-- Dashboard icon -->
+            <svg v-if="item.icon === 'dashboard'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="7" height="9" rx="1" />
+              <rect x="14" y="3" width="7" height="5" rx="1" />
+              <rect x="14" y="12" width="7" height="9" rx="1" />
+              <rect x="3" y="16" width="7" height="5" rx="1" />
+            </svg>
+            <!-- Transactions icon -->
+            <svg v-else-if="item.icon === 'transactions'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />
+            </svg>
+            <!-- Users icon -->
+            <svg v-else-if="item.icon === 'users'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="9" cy="8" r="3.5" />
+              <path d="M2.5 20a6.5 6.5 0 0113 0" />
+              <circle cx="17" cy="9" r="2.5" />
+              <path d="M16 14.5A5 5 0 0121.5 20" />
+            </svg>
+            <!-- Services icon -->
+            <svg v-else-if="item.icon === 'services'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="4" width="18" height="6" rx="1" />
+              <rect x="3" y="14" width="18" height="6" rx="1" />
+              <circle cx="7" cy="7" r="1" fill="currentColor" />
+              <circle cx="7" cy="17" r="1" fill="currentColor" />
+            </svg>
+            <!-- Plans icon -->
+            <svg v-else-if="item.icon === 'plans'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="5" width="20" height="14" rx="2" />
+              <path d="M2 10h20" />
+            </svg>
+            <!-- Tickets icon -->
+            <svg v-else-if="item.icon === 'tickets'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+              <path d="M8 9h8M8 13h4" />
+            </svg>
+            <!-- Backups icon -->
+            <svg v-else-if="item.icon === 'backups'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            <!-- WireGuard icon (shield/lock) -->
+            <svg v-else-if="item.icon === 'wireguard'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+            </svg>
+            <!-- Settings icon -->
+            <svg v-else-if="item.icon === 'settings'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.7 1.7 0 00.3 1.9l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.9-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.9.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.9 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.9l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.9.3H10a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.9-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.9V10a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z" />
+            </svg>
+            <!-- Telegram icon -->
+            <svg v-else-if="item.icon === 'telegram'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 2L11 13" />
+              <path d="M22 2L15 22L11 13L2 9L22 2Z" />
+            </svg>
+            <!-- Xray icon (lightning/bolt) -->
+            <svg v-else-if="item.icon === 'xray'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+            </svg>
+            <!-- Metrics icon (chart) -->
+            <svg v-else-if="item.icon === 'metrics'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 3v18h18" />
+              <path d="M7 14l4-4 4 4 5-5" />
+            </svg>
 
-        <span v-if="!collapsed" class="nav-label">{{ item.label }}</span>
-        <span v-if="!collapsed && item.badge" class="badge">{{ item.badge }}</span>
-      </button>
-    </template>
+            <span v-if="!collapsed" class="nav-label">{{ item.label }}</span>
+            <span v-if="!collapsed && item.badge" class="badge">{{ item.badge }}</span>
+          </button>
+        </div>
+      </div>
+    </div>
 
     <!-- Sidebar Footer -->
     <div class="sidebar-foot">
@@ -569,6 +738,56 @@ function handleToggleTheme() {
 :deep([data-theme="light"]) .sidebar,
 :global([data-theme="light"]) .sidebar {
   background: rgba(255, 255, 255, 0.97);
+}
+
+/* SortableJS drag-and-drop styles */
+.nav-categories {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-height: 0;
+}
+
+.nav-category-wrapper {
+  /* Wrapper for each category group — sortable at category level */
+}
+
+.nav-items-container {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav-group-handle {
+  cursor: grab;
+}
+
+.nav-group-handle:active {
+  cursor: grabbing;
+}
+
+/* Ghost element: 50% opacity during drag */
+.sortable-ghost {
+  opacity: 0.5;
+}
+
+/* Chosen element style */
+.sortable-chosen {
+  background: var(--color-surface-2, #1e2630);
+  border-radius: 9px;
+}
+
+/* Drag element (follows cursor) */
+.sortable-drag {
+  opacity: 0.9;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  border-radius: 9px;
+}
+
+/* Collapsed state: hide drag handles */
+.collapsed .nav-group-handle {
+  cursor: default;
 }
 
 </style>

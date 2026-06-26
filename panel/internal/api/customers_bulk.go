@@ -1,4 +1,4 @@
-﻿package api
+package api
 
 import (
 	"database/sql"
@@ -103,6 +103,7 @@ func (s *Server) adminCustomersBulk(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{
 		"ok":        true,
 		"total":     len(req.CustomerIDs),
+		"affected":  affected,
 		"succeeded": affected,
 		"failed":    len(errors),
 		"failures":  errors,

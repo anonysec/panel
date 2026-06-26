@@ -1,4 +1,4 @@
-﻿package api
+package api
 
 import (
 	"database/sql"
@@ -11,17 +11,17 @@ import (
 
 // UserTemplate represents a user configuration template for quick customer provisioning.
 type UserTemplate struct {
-	ID              int64            `json:"id"`
-	Name            string           `json:"name"`
-	PlanID          *int64           `json:"plan_id"`
-	Status          string           `json:"status"`
-	ConnectionLimit int              `json:"connection_limit"`
-	RadiusChecks    json.RawMessage  `json:"radius_checks"`
-	RadiusReplies   json.RawMessage  `json:"radius_replies"`
-	CreatedBy       string           `json:"created_by"`
-	DeletedAt       *string          `json:"deleted_at"`
-	CreatedAt       string           `json:"created_at"`
-	UpdatedAt       string           `json:"updated_at"`
+	ID              int64           `json:"id"`
+	Name            string          `json:"name"`
+	PlanID          *int64          `json:"plan_id"`
+	Status          string          `json:"status"`
+	ConnectionLimit int             `json:"connection_limit"`
+	RadiusChecks    json.RawMessage `json:"radius_checks"`
+	RadiusReplies   json.RawMessage `json:"radius_replies"`
+	CreatedBy       string          `json:"created_by"`
+	DeletedAt       *string         `json:"deleted_at"`
+	CreatedAt       string          `json:"created_at"`
+	UpdatedAt       string          `json:"updated_at"`
 }
 
 // templates handles GET /api/templates (list) and POST /api/templates (create).

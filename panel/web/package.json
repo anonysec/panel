@@ -1,0 +1,19 @@
+{
+  "name": "koris-web",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "packageManager": "pnpm@9.15.4",
+  "scripts": {
+    "dev:admin": "pnpm --filter admin dev",
+    "dev:portal": "pnpm --filter portal dev",
+    "dev:landing": "pnpm --filter landing dev",
+    "build:admin": "pnpm --filter admin build",
+    "build:portal": "pnpm --filter portal build",
+    "build:landing": "pnpm --filter landing build",
+    "build": "pnpm --filter admin build && pnpm --filter portal build && pnpm --filter landing build",
+    "test": "pnpm --filter admin test && pnpm --filter shared test && pnpm --filter landing test"
+  }
+}

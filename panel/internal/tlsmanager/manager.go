@@ -108,7 +108,7 @@ func New(cfg Config) (*Manager, error) {
 	switch cfg.Mode {
 	case ModeACME:
 		if cfg.Domain == "" {
-			return nil, errors.New("tlsmanager: domain is required for ACME mode")
+			return nil, errors.New("tlsmanager: a domain is required for ACME mode; set PANEL_TLS_DOMAIN to use Let's Encrypt")
 		}
 		if cfg.CertDir == "" {
 			m.certDir = "/etc/koris/certs"
@@ -119,13 +119,18 @@ func New(cfg Config) (*Manager, error) {
 		}
 		// Verify files exist
 		if _, err := os.Stat(cfg.Cert); err != nil {
-			return nil, fmt.Errorf("tlsmanager: cert file: %w", err)
+			return nil, fmt.Errorf("tlsmanager: cert file not found: %s: %w", cfg.Cert, err)
 		}
 		if _, err := os.Stat(cfg.Key); err != nil {
-			return nil, fmt.Errorf("tlsmanager: key file: %w", err)
+			return nil, fmt.Errorf("tlsmanager: key file not found: %s: %w", cfg.Key, err)
+		}
+		// Verify cert and key are valid X.509 at startup
+		if _, err := tls.LoadX509KeyPair(cfg.Cert, cfg.Key); err != nil {
+			return nil, fmt.Errorf("tlsmanager: invalid X.509 certificate/key pair at %s / %s: %w", cfg.Cert, cfg.Key, err)
 		}
 	case ModeSelfSigned:
 		// No external config needed; cert generated on first TLSConfig() call
+		log.Printf("[tlsmanager] WARNING: using self-signed certificate mode. This is not recommended for production use.")
 	case ModePlainHTTP:
 		// Nothing to validate
 	}

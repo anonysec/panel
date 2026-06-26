@@ -1,1 +1,0 @@
-import{r as o}from"./vendor-qDoAYKeI.js";const u=2e3;function i(){const e=o(!1);let t=null;async function a(l){try{await navigator.clipboard.writeText(l),t!==null&&clearTimeout(t),e.value=!0,t=setTimeout(()=>{e.value=!1,t=null},u)}catch{e.value=!1}}return{copy:a,copied:e}}export{i as u};

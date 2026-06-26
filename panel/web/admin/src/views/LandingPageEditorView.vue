@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { useToast } from '@koris/composables/useToast'
 import { useI18n } from '@koris/composables/useI18n'
 import { useApi } from '@koris/composables/useApi'
+import { useConfirm } from '@koris/composables/useConfirm'
 import KButton from '@koris/ui/KButton.vue'
 import KTextarea from '@koris/ui/KTextarea.vue'
 import KFormField from '@koris/ui/KFormField.vue'
@@ -10,10 +11,33 @@ import KFormField from '@koris/ui/KFormField.vue'
 const { t } = useI18n()
 const toast = useToast()
 const { get, post } = useApi()
+const { confirm } = useConfirm()
 
 const content = ref('')
 const loading = ref(false)
 const saving = ref(false)
+
+/** VPN blocklist terms for client-side pre-check */
+const vpnBlocklist = [
+  'vpn', 'proxy', 'tunnel', 'openvpn', 'wireguard', 'ikev2',
+  'l2tp', 'xray', 'vless', 'vmess', 'trojan', 'mtproto',
+  'ssh tunnel', 'shadowsocks', 'v2ray', 'koris', 'korispanel',
+]
+
+interface BlocklistMatch {
+  field: string
+  term: string
+}
+
+/**
+ * Check content against the VPN blocklist (client-side).
+ * Returns an array of matching terms found in the content.
+ */
+function checkBlocklist(text: string): string[] {
+  if (!text) return []
+  const lower = text.toLowerCase()
+  return vpnBlocklist.filter(term => lower.includes(term))
+}
 
 async function loadContent() {
   loading.value = true
@@ -30,6 +54,28 @@ async function loadContent() {
 }
 
 async function handleSave() {
+  // Check content against blocklist before saving
+  const matches = checkBlocklist(content.value)
+
+  if (matches.length > 0) {
+    const termList = matches.map(m => `"${m}"`).join(', ')
+    const confirmed = await confirm({
+      title: t('landing_editor.blocklist_warning_title', 'Content Warning'),
+      message: t(
+        'landing_editor.blocklist_warning_message',
+        `The content contains terms that may reveal the server's purpose: ${termList}. These terms could compromise the decoy appearance of the landing page. Do you want to save anyway?`,
+      ),
+      variant: 'warning',
+      confirmText: t('landing_editor.blocklist_confirm', 'Save Anyway'),
+      cancelText: t('landing_editor.blocklist_revise', 'Revise Content'),
+      icon: '⚠️',
+    })
+
+    if (!confirmed) {
+      return // User chose to revise
+    }
+  }
+
   saving.value = true
   try {
     await post('/api/admin/landing-page', { content: content.value })

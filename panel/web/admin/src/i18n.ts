@@ -167,11 +167,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'metrics.no_nodes': 'No nodes registered',
     'metrics.no_nodes_desc': 'Add a node to start monitoring',
     'metrics.just_now': 'just now',
-    // Node Detail
-    'node_detail.back': 'Back to Nodes',
-    'node_detail.load_error': 'Failed to load node',
-    'node_detail.not_found': 'Node not found',
-    'node_detail.not_found_desc': 'This node may have been removed',
+    // Node Detail (basic)
     'node_detail.tab_overview': 'Overview',
     'node_detail.tab_cores': 'Cores',
     'node_detail.tab_sessions': 'Sessions',
@@ -913,6 +909,9 @@ const messages: Record<Locale, Record<string, string>> = {
     'node_detail.load_error': 'Failed to load node details.',
     'node_detail.not_found': 'Node Not Found',
     'node_detail.not_found_desc': 'The requested node could not be found.',
+    'node_detail.connection_state': 'Connection',
+    'node_detail.last_metrics': 'Last Metrics',
+    'node_detail.sync_failures': 'Sync Failures',
     // Node Compare
     'node_compare.title': 'Compare Nodes',
     'node_compare.back': 'Back to Nodes',
@@ -1813,6 +1812,9 @@ const messages: Record<Locale, Record<string, string>> = {
     'node_detail.load_error': 'بارگذاری جزئیات نود ناموفق بود.',
     'node_detail.not_found': 'نود یافت نشد',
     'node_detail.not_found_desc': 'نود مورد نظر یافت نشد.',
+    'node_detail.connection_state': 'اتصال',
+    'node_detail.last_metrics': 'آخرین متریک',
+    'node_detail.sync_failures': 'خطاهای همگام‌سازی',
     // Node Compare
     'node_compare.title': 'مقایسه نودها',
     'node_compare.back': 'بازگشت به نودها',

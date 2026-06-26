@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"KorisPanel/panel/internal/dbstore"
+	"KorisPanel/panel/internal/knodepb"
 )
 
 // UserSyncPayload represents the data pushed to a knode for a single user.
@@ -157,9 +158,9 @@ func (s *UserSyncService) syncToNode(ctx context.Context, nodeID int64, coreType
 	s.recordSyncFailure(nodeID, coreTypes, payload, retryErr.Error())
 }
 
-// callSyncUsers makes the actual RPC call to a knode instance.
-// This is currently a stub since generated gRPC proto clients are not yet available.
-// The fan-out logic, retry mechanism, and failure recording are fully implemented.
+// callSyncUsers makes the actual RPC call to a knode instance using the generated
+// knodepb proto client. It constructs a SyncUsersRequest with a single UserEntry
+// and calls SyncUsers on the target node.
 func (s *UserSyncService) callSyncUsers(ctx context.Context, nodeID int64, payload UserSyncPayload) error {
 	node, err := s.pool.Get(nodeID)
 	if err != nil {
@@ -170,21 +171,29 @@ func (s *UserSyncService) callSyncUsers(ctx context.Context, nodeID int64, paylo
 		return fmt.Errorf("node %q is %s, cannot sync", node.NodeName, node.Status)
 	}
 
-	// TODO: Replace with actual gRPC call when proto client is generated.
-	// The call would be:
-	//   client := knodepb.NewKnodeServiceClient(node.Conn)
-	//   _, err = client.SyncUsers(ctx, &knodepb.SyncUsersRequest{
-	//       Users: []*knodepb.UserEntry{{
-	//           Username:       payload.Username,
-	//           Password:       payload.Password,
-	//           Enabled:        payload.Enabled,
-	//           MaxDataBytes:   payload.MaxDataBytes,
-	//           MaxConnections: int32(payload.MaxConnections),
-	//           BandwidthBps:   payload.BandwidthBPS,
-	//       }},
-	//   })
-	log.Printf("[knode] SyncUsers stub: would push user %q (enabled=%t) to node %q (id=%d)",
-		payload.Username, payload.Enabled, node.NodeName, nodeID)
+	client := knodepb.NewKnodeServiceClient(node.Conn)
+
+	req := &knodepb.SyncUsersRequest{
+		Users: []*knodepb.UserEntry{{
+			Username: payload.Username,
+			Password: payload.Password,
+			Enabled:  payload.Enabled,
+			Limits: &knodepb.UserLimits{
+				MaxDataBytes:      payload.MaxDataBytes,
+				MaxConnections:    int32(payload.MaxConnections),
+				BandwidthLimitBps: payload.BandwidthBPS,
+			},
+		}},
+	}
+
+	resp, err := client.SyncUsers(ctx, req)
+	if err != nil {
+		return fmt.Errorf("SyncUsers RPC failed: %w", err)
+	}
+
+	log.Printf("[knode] SyncUsers: pushed user %q (enabled=%t) to node %q (id=%d) — added=%d updated=%d removed=%d",
+		payload.Username, payload.Enabled, node.NodeName, nodeID,
+		resp.GetAdded(), resp.GetUpdated(), resp.GetRemoved())
 	return nil
 }
 

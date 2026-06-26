@@ -1,9 +1,8 @@
 # Dependencies
 node_modules/
 
-# Build output - committed for reliable deploys (rebuild with 'npm run build')
-# panel/web/admin/www/
-# panel/web/portal/www/
+# Build output (rebuild with 'npm run build')
+panel/web/*/www/
 
 # Lock files
 package-lock.json

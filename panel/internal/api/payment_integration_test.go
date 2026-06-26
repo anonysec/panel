@@ -109,17 +109,17 @@ func testInitiatePayment(t *testing.T) {
 	srv.Config.SessionSecret = testSessionSecret
 
 	// Mock: currentCustomer checks customer status
-	mock.ExpectQuery("SELECT status FROM customers WHERE username=\\? AND deleted_at IS NULL LIMIT 1").
+	mock.ExpectQuery("SELECT status FROM customers WHERE username=\\$1 AND deleted_at IS NULL LIMIT 1").
 		WithArgs("testuser").
 		WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow("active"))
 
 	// Mock: check gateway is active in DB
-	mock.ExpectQuery("SELECT is_active FROM payment_gateways WHERE name = \\? LIMIT 1").
+	mock.ExpectQuery("SELECT is_active FROM payment_gateways WHERE name = \\$1 LIMIT 1").
 		WithArgs("test_gateway").
 		WillReturnRows(sqlmock.NewRows([]string{"is_active"}).AddRow(1))
 
 	// Mock: get customer ID
-	mock.ExpectQuery("SELECT id FROM customers WHERE username = \\? AND deleted_at IS NULL LIMIT 1").
+	mock.ExpectQuery("SELECT id FROM customers WHERE username = \\$1 AND deleted_at IS NULL LIMIT 1").
 		WithArgs("testuser").
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(42))
 
@@ -205,12 +205,12 @@ func testGatewayCallbackSuccess(t *testing.T) {
 	srv.Config.SessionSecret = testSessionSecret
 
 	// Mock: store raw callback data
-	mock.ExpectExec("UPDATE payment_transactions SET callback_data = \\? WHERE gateway_name = \\? AND reference_id = \\?").
+	mock.ExpectExec("UPDATE payment_transactions SET callback_data = \\$1 WHERE gateway_name = \\$2 AND reference_id = \\$3").
 		WithArgs(sqlmock.AnyArg(), "test_gateway", "REF-001").
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	// Mock: completePaymentTransaction - get transaction details
-	mock.ExpectQuery("SELECT id, customer_id, amount, currency FROM payment_transactions WHERE gateway_name = \\? AND reference_id = \\? AND status = 'pending' LIMIT 1").
+	mock.ExpectQuery("SELECT id, customer_id, amount, currency FROM payment_transactions WHERE gateway_name = \\$1 AND reference_id = \\$2 AND status = 'pending' LIMIT 1").
 		WithArgs("test_gateway", "REF-001").
 		WillReturnRows(sqlmock.NewRows([]string{"id", "customer_id", "amount", "currency"}).
 			AddRow(10, 42, 50000.0, "IRR"))
@@ -221,12 +221,12 @@ func testGatewayCallbackSuccess(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	// Mock: credit wallet
-	mock.ExpectExec("UPDATE customers SET wallet_balance = COALESCE\\(wallet_balance, 0\\) \\+ \\? WHERE id = \\?").
+	mock.ExpectExec("UPDATE customers SET wallet_balance = COALESCE\\(wallet_balance, 0\\) \\+ \\$1 WHERE id = \\$2").
 		WithArgs(50000.0, int64(42)).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	// Mock: get username for wallets table
-	mock.ExpectQuery("SELECT username FROM customers WHERE id = \\? LIMIT 1").
+	mock.ExpectQuery("SELECT username FROM customers WHERE id = \\$1 LIMIT 1").
 		WithArgs(int64(42)).
 		WillReturnRows(sqlmock.NewRows([]string{"username"}).AddRow("testuser"))
 
@@ -309,7 +309,7 @@ func testGatewayCallbackFailure(t *testing.T) {
 	srv.Config.SessionSecret = testSessionSecret
 
 	// Mock: store raw callback data
-	mock.ExpectExec("UPDATE payment_transactions SET callback_data = \\? WHERE gateway_name = \\? AND reference_id = \\?").
+	mock.ExpectExec("UPDATE payment_transactions SET callback_data = \\$1 WHERE gateway_name = \\$2 AND reference_id = \\$3").
 		WithArgs(sqlmock.AnyArg(), "test_gateway", "REF-FAIL").
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
@@ -375,12 +375,12 @@ func testGatewayCallbackUnknownReference(t *testing.T) {
 	srv.Config.SessionSecret = testSessionSecret
 
 	// Mock: store raw callback data
-	mock.ExpectExec("UPDATE payment_transactions SET callback_data = \\? WHERE gateway_name = \\? AND reference_id = \\?").
+	mock.ExpectExec("UPDATE payment_transactions SET callback_data = \\$1 WHERE gateway_name = \\$2 AND reference_id = \\$3").
 		WithArgs(sqlmock.AnyArg(), "test_gateway", "REF-UNKNOWN").
 		WillReturnResult(sqlmock.NewResult(0, 0)) // no rows affected — doesn't exist, but ok
 
 	// Mock: completePaymentTransaction - transaction not found (no pending transaction with that reference)
-	mock.ExpectQuery("SELECT id, customer_id, amount, currency FROM payment_transactions WHERE gateway_name = \\? AND reference_id = \\? AND status = 'pending' LIMIT 1").
+	mock.ExpectQuery("SELECT id, customer_id, amount, currency FROM payment_transactions WHERE gateway_name = \\$1 AND reference_id = \\$2 AND status = 'pending' LIMIT 1").
 		WithArgs("test_gateway", "REF-UNKNOWN").
 		WillReturnRows(sqlmock.NewRows([]string{"id", "customer_id", "amount", "currency"})) // empty — no matching row
 

@@ -17,9 +17,9 @@ import (
 type DNSProvider struct {
 	ID                int64  `json:"id"`
 	Name              string `json:"name"`
-	Type              string `json:"type"`               // "cloudflare" | "manual"
-	APITokenEncrypted string `json:"-"`                  // never exposed via API
-	ZoneID            string `json:"zone_id,omitempty"`  // Cloudflare zone ID
+	Type              string `json:"type"`              // "cloudflare" | "manual"
+	APITokenEncrypted string `json:"-"`                 // never exposed via API
+	ZoneID            string `json:"zone_id,omitempty"` // Cloudflare zone ID
 	AccountID         string `json:"account_id,omitempty"`
 	IsActive          bool   `json:"is_active"`
 	CreatedAt         string `json:"created_at"`
@@ -46,17 +46,17 @@ type FailoverDomain struct {
 
 // FailoverEvent is an audit record tracking a single failover action.
 type FailoverEvent struct {
-	ID                            int64   `json:"id"`
-	DomainID                      int64   `json:"domain_id"`
-	FromNodeID                    int64   `json:"from_node_id"`
-	ToNodeID                      int64   `json:"to_node_id"`
-	Reason                        string  `json:"reason"`
-	Status                        string  `json:"status"`
-	DNSPropagationStartedAt       *string `json:"dns_propagation_started_at"`
-	DNSPropagationCompletedAt     *string `json:"dns_propagation_completed_at"`
-	TriggeredBy                   string  `json:"triggered_by"`
-	ErrorMessage                  *string `json:"error_message"`
-	CreatedAt                     string  `json:"created_at"`
+	ID                        int64   `json:"id"`
+	DomainID                  int64   `json:"domain_id"`
+	FromNodeID                int64   `json:"from_node_id"`
+	ToNodeID                  int64   `json:"to_node_id"`
+	Reason                    string  `json:"reason"`
+	Status                    string  `json:"status"`
+	DNSPropagationStartedAt   *string `json:"dns_propagation_started_at"`
+	DNSPropagationCompletedAt *string `json:"dns_propagation_completed_at"`
+	TriggeredBy               string  `json:"triggered_by"`
+	ErrorMessage              *string `json:"error_message"`
+	CreatedAt                 string  `json:"created_at"`
 	// Joined fields
 	DomainName   string `json:"domain_name,omitempty"`
 	FromNodeName string `json:"from_node_name,omitempty"`

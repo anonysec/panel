@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"KorisPanel/panel/internal/alerts"
+	"KorisPanel/panel/internal/knodepb"
 )
 
 // HealthStatus represents the result of a Health RPC call to a knode instance.
@@ -167,24 +168,35 @@ func (hc *HealthChecker) checkNode(ctx context.Context, nodeID int64) {
 	}
 }
 
-// callHealthRPC is a stub that calls the Health RPC on a knode instance.
-// Once proto clients are generated, this will invoke the actual Health RPC.
-// For now, it always returns HealthOK (no-op placeholder).
+// callHealthRPC calls the Health RPC on a knode instance via the generated proto client.
+// It maps the proto HealthStatus enum to the local HealthStatus type.
+// Uses a 5-second deadline for the Health RPC call.
 func (hc *HealthChecker) callHealthRPC(ctx context.Context, nodeID int64) (HealthStatus, error) {
-	// TODO: Replace with actual proto client call once generated:
-	//
-	//   conn, err := hc.pool.Get(nodeID)
-	//   if err != nil {
-	//       return "", err
-	//   }
-	//   client := knodepb.NewKnodeServiceClient(conn.Conn)
-	//   resp, err := client.Health(ctx, &knodepb.HealthRequest{})
-	//   if err != nil {
-	//       return "", err
-	//   }
-	//   return HealthStatus(resp.Status), nil
-	//
-	_ = ctx
-	_ = nodeID
-	return HealthOK, nil
+	conn, err := hc.pool.Get(nodeID)
+	if err != nil {
+		return "", err
+	}
+
+	client := knodepb.NewKnodeServiceClient(conn.Conn)
+
+	// Apply a 5-second deadline for health checks
+	rpcCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	resp, err := client.Health(rpcCtx, &knodepb.HealthRequest{})
+	if err != nil {
+		return "", err
+	}
+
+	// Map proto HealthStatus enum to local HealthStatus type
+	switch resp.GetStatus() {
+	case knodepb.HealthStatus_HEALTH_STATUS_HEALTHY:
+		return HealthOK, nil
+	case knodepb.HealthStatus_HEALTH_STATUS_DEGRADED:
+		return HealthDegraded, nil
+	case knodepb.HealthStatus_HEALTH_STATUS_UNHEALTHY:
+		return HealthUnhealthy, nil
+	default:
+		return HealthOK, nil
+	}
 }

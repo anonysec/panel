@@ -16,7 +16,7 @@ import KInput from '@koris/ui/KInput.vue'
 import KSelect from '@koris/ui/KSelect.vue'
 import KTextarea from '@koris/ui/KTextarea.vue'
 import NodeListCard from '@/components/nodes/NodeListCard.vue'
-import NodeAddForm from '@/components/nodes/NodeAddForm.vue'
+import NodeAddPanel from '@/components/nodes/NodeAddPanel.vue'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -491,9 +491,10 @@ onMounted(() => {
       <KButton variant="ghost" @click="router.push({ name: 'node-compare' })">{{ t('node_compare.compare_nodes') }}</KButton>
     </header>
 
-    <!-- Add Node Form (gRPC-based) -->
-    <NodeAddForm
-      v-if="showAddForm"
+    <!-- Add Node Slide-Over Panel -->
+    <NodeAddPanel
+      :open="showAddForm"
+      @close="showAddForm = false"
       @created="onNodeCreated"
     />
 

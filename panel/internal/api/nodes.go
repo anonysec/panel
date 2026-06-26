@@ -69,15 +69,18 @@ type knodeNodeRequest struct {
 
 // knodeNodeResponse is the JSON response for a single knode node.
 type knodeNodeResponse struct {
-	ID         int64  `json:"id"`
-	Name       string `json:"name"`
-	Address    string `json:"address"`
-	Port       int    `json:"port"`
-	Enabled    bool   `json:"enabled"`
-	Status     string `json:"status"`
-	LastSeenAt string `json:"last_seen_at,omitempty"`
-	CreatedAt  string `json:"created_at"`
-	UpdatedAt  string `json:"updated_at"`
+	ID              int64  `json:"id"`
+	Name            string `json:"name"`
+	Address         string `json:"address"`
+	Port            int    `json:"port"`
+	Enabled         bool   `json:"enabled"`
+	Status          string `json:"status"`
+	LastSeenAt      string `json:"last_seen_at,omitempty"`
+	CreatedAt       string `json:"created_at"`
+	UpdatedAt       string `json:"updated_at"`
+	LastMetricsAt   string `json:"last_metrics_at,omitempty"`
+	ConnectionState string `json:"connection_state,omitempty"`
+	SyncFailures    int    `json:"sync_failures_count"`
 }
 
 // listKnodeNodes handles GET /api/admin/knode/nodes — list all nodes with status.
@@ -184,7 +187,17 @@ func (s *Server) getKnodeNode(w http.ResponseWriter, r *http.Request, id int64) 
 	if s.GRPCPool != nil {
 		poolStatus := s.GRPCPool.Status(id)
 		resp.Status = string(poolStatus)
+		resp.ConnectionState = string(poolStatus)
+
+		// Get last metrics timestamp from pool connection
+		conn, connErr := s.GRPCPool.Get(id)
+		if connErr == nil && !conn.LastMetrics.IsZero() {
+			resp.LastMetricsAt = conn.LastMetrics.UTC().Format(time.RFC3339)
+		}
 	}
+
+	// Query unresolved sync_failures count for this node
+	resp.SyncFailures = s.getNodeSyncFailuresCount(r.Context(), id)
 
 	writeJSON(w, map[string]any{"ok": true, "node": resp})
 }
@@ -381,4 +394,18 @@ func nodeRecordToResponse(rec *noderegistry.NodeRecord) knodeNodeResponse {
 		resp.LastSeenAt = rec.LastSeenAt.Time.UTC().Format(time.RFC3339)
 	}
 	return resp
+}
+
+// getNodeSyncFailuresCount returns the count of unresolved sync_failures for a node.
+func (s *Server) getNodeSyncFailuresCount(ctx context.Context, nodeID int64) int {
+	var count int
+	err := s.DB.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM sync_failures WHERE node_id = ? AND resolved = FALSE`,
+		nodeID,
+	).Scan(&count)
+	if err != nil {
+		// Table might not exist yet or query error — return 0
+		return 0
+	}
+	return count
 }

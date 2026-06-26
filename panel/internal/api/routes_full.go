@@ -77,6 +77,10 @@ func (s *Server) registerExcludedRoutes(mux *http.ServeMux) {
 	// Landing page
 	mux.Handle("/", s.landingMetaHandler())
 
+	// Landing content (decoy) admin API
+	mux.HandleFunc("/api/admin/landing-content", s.requireFullAdmin(s.handleAdminLandingContent))
+	mux.HandleFunc("/api/admin/landing-page/check-blocklist", s.requireFullAdmin(s.adminLandingBlocklistCheck))
+
 	// Xray
 	mux.HandleFunc("/api/xray/inbounds", s.requireFullAdmin(s.handleXrayInbound))
 	mux.HandleFunc("/api/xray/inbounds/", s.requireFullAdmin(s.handleXrayInboundByID))

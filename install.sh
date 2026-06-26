@@ -4,6 +4,7 @@ set -euo pipefail
 # KorisPanel installer — Docker (default) or native (--native flag)
 # Usage: bash <(curl -Ls https://raw.githubusercontent.com/anonysec/panel/main/install.sh)
 #   install.sh                          # Docker mode (recommended)
+#   install.sh --lite                   # Lite edition (Docker)
 #   install.sh --native                 # Native mode (systemd)
 #   install.sh --native --lite          # Lite edition (native)
 #   install.sh --port=8080 --domain=panel.example.com
@@ -175,6 +176,83 @@ prompt_config() {
 }
 
 # ═══════════════════════════════════════════════════════════════════════
+# CLEAN REINSTALL LOGIC
+# ═══════════════════════════════════════════════════════════════════════
+
+# Detect whether a previous Docker-based installation exists.
+# Returns 0 (true) if docker-compose.yml exists AND at least one
+# associated container is present (running or stopped).
+is_existing_installation() {
+  if [[ ! -f "${INSTALL_DIR}/docker-compose.yml" ]]; then
+    return 1
+  fi
+  if docker ps -a --filter "name=koris" --format '{{.Names}}' 2>/dev/null | grep -q .; then
+    return 0
+  fi
+  return 1
+}
+
+# Perform a clean reinstall: stop containers, remove images/volumes (except db-data),
+# prune build cache, and log disk space reclaimed.
+clean_reinstall() {
+  log "Existing installation detected — performing clean reinstall..."
+
+  # Record disk space before cleanup (root partition, in MB)
+  local disk_before
+  disk_before=$(df -BM / | awk 'NR==2 {gsub(/M/,"",$4); print $4}')
+
+  cd "${INSTALL_DIR}"
+
+  # Step 1: Stop and remove all project containers
+  log "Stopping containers..."
+  if ! docker compose down 2>/dev/null; then
+    warn "docker compose down failed — attempting manual container removal"
+    for ctr in koris koris-db koris-pgadmin knode; do
+      docker stop "${ctr}" 2>/dev/null || warn "Could not stop container: ${ctr}"
+      docker rm -f "${ctr}" 2>/dev/null || warn "Could not remove container: ${ctr}"
+    done
+  fi
+
+  # Step 2: Remove previously built images (Panel + knode)
+  log "Removing project images..."
+  for img in koris:latest knode:latest koris-panel:latest; do
+    if docker image inspect "${img}" &>/dev/null; then
+      docker rmi "${img}" 2>/dev/null || warn "Could not remove image: ${img}"
+    fi
+  done
+  # Also remove images built by compose (project prefix)
+  for img in $(docker images --filter "reference=koris-*" --format '{{.Repository}}:{{.Tag}}' 2>/dev/null); do
+    docker rmi "${img}" 2>/dev/null || warn "Could not remove image: ${img}"
+  done
+
+  # Step 3: Remove volumes EXCEPT db-data (preserve database)
+  log "Removing volumes (preserving db-data)..."
+  local project_prefix="koris"
+  for vol in panel-data pgadmin-data; do
+    # Try both bare name and project-prefixed name
+    docker volume rm "${vol}" 2>/dev/null || true
+    docker volume rm "${project_prefix}_${vol}" 2>/dev/null || true
+  done
+
+  # Step 4: Prune dangling images and build cache
+  log "Pruning Docker system and build cache..."
+  docker system prune -f 2>/dev/null || warn "docker system prune failed"
+  docker builder prune -f 2>/dev/null || warn "docker builder prune failed"
+
+  # Step 5: Log disk space reclaimed
+  local disk_after
+  disk_after=$(df -BM / | awk 'NR==2 {gsub(/M/,"",$4); print $4}')
+  local reclaimed=$((disk_after - disk_before))
+  if [[ ${reclaimed} -gt 0 ]]; then
+    log "Disk space reclaimed: ${reclaimed} MB"
+  else
+    log "Disk space reclaimed: 0 MB (no net change)"
+  fi
+
+  log "Cleanup complete. Rebuilding from source..."
+}
+
+# ═══════════════════════════════════════════════════════════════════════
 # DOCKER MODE (default)
 # ═══════════════════════════════════════════════════════════════════════
 install_docker() {
@@ -191,6 +269,11 @@ install_docker() {
   fi
 
   log "Setting up KorisPanel via Docker Compose..."
+
+  # Clean reinstall: if previous installation exists, clean up first
+  if is_existing_installation; then
+    clean_reinstall
+  fi
 
   # Clone/update source
   clone_source
@@ -264,6 +347,7 @@ PANEL_TLS_KEY=${KEY_PATH}
 PANEL_TLS_ADDR=0.0.0.0:${PANEL_PORT}
 PANEL_TLS_DOMAIN=${DOMAIN:-}
 PANEL_DOMAIN=${DOMAIN:-}
+PANEL_EDITION=${EDITION}
 ENV
   chmod 600 "${CONFIG_DIR}/panel.env"
 
@@ -275,6 +359,9 @@ ENV
 
   # Build and start
   log "Building Docker images (this may take a few minutes)..."
+  if [[ "${EDITION}" == "lite" ]]; then
+    export BUILD_TAGS="lite"
+  fi
   docker compose up -d --build
 
   # Wait for health check
