@@ -1,4 +1,4 @@
-:root{--bg:#0f1419;--surface:#171d24;--surface-2:#1e2630;--border:#28333f;--text:#e6edf3;--muted:#8b98a5;--brand:#5b9dff;--brand-2:#7c5cff;--green:#34d399;--amber:#fbbf24;--red:#f87171;--radius:14px;--shadow:0 10px 30px rgba(0,0,0,.35)}
+:root{--bg:var(--koris-background,#0f1419);--surface:var(--koris-surface,#171d24);--surface-2:var(--koris-surface-hover,#1e2630);--border:var(--koris-border,#28333f);--text:var(--koris-text,#e6edf3);--muted:var(--koris-text-muted,#8b98a5);--brand:var(--koris-primary,#5b9dff);--brand-2:var(--koris-primary-hover,#7c5cff);--green:var(--koris-success,#34d399);--amber:var(--koris-warning,#fbbf24);--red:var(--koris-error,#f87171);--radius:var(--koris-border-radius,14px);--shadow:var(--koris-shadow-md,0 10px 30px rgba(0,0,0,.35))}
 *{box-sizing:border-box;margin:0;padding:0}
 html{height:100%;overflow:hidden}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);height:100%;overflow:hidden;-webkit-font-smoothing:antialiased}
@@ -231,7 +231,7 @@ kbd{font-size:10px;padding:2px 5px;border-radius:4px;background:var(--surface-2)
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:0.01ms!important;animation-iteration-count:1!important;transition-duration:0.01ms!important;scroll-behavior:auto!important}.page{animation:none}.toast{animation:none}.modal{animation:none}.status-dot{animation:none}.skeleton{animation:none}}
 
 /* Light theme */
-[data-theme="light"]{--bg:#f8fafc;--surface:#ffffff;--surface-2:#f1f5f9;--border:#e2e8f0;--text:#0f172a;--muted:#64748b;--brand:#3b82f6;--brand-2:#6366f1;--green:#16a34a;--amber:#d97706;--red:#dc2626;--shadow:0 4px 12px rgba(0,0,0,.08)}
+[data-theme="light"]{--bg:var(--koris-background,#f8fafc);--surface:var(--koris-surface,#ffffff);--surface-2:var(--koris-surface-hover,#f1f5f9);--border:var(--koris-border,#e2e8f0);--text:var(--koris-text,#0f172a);--muted:var(--koris-text-muted,#64748b);--brand:var(--koris-primary,#3b82f6);--brand-2:var(--koris-primary-hover,#6366f1);--green:var(--koris-success,#16a34a);--amber:var(--koris-warning,#d97706);--red:var(--koris-error,#dc2626);--shadow:var(--koris-shadow-md,0 4px 12px rgba(0,0,0,.08))}
 [data-theme="light"] .sidebar{background:rgba(255,255,255,.97)}
 [data-theme="light"] .auth-screen{background:#f8fafc}
 [data-theme="light"] .auth-right{background:#ffffff}

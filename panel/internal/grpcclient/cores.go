@@ -7,6 +7,7 @@ import (
 	"log"
 
 	"KorisPanel/panel/internal/dbstore"
+	"KorisPanel/panel/internal/knodepb"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -137,7 +138,8 @@ func (cm *CoreManager) AllCoreStatuses(ctx context.Context, nodeID int64) ([]Cor
 	return statuses, nil
 }
 
-// callEnableCore makes the actual EnableCore RPC call to a knode instance.
+// callEnableCore makes the actual EnableCore RPC call to a knode instance via
+// the generated knodepb proto client.
 //
 // Multi-panel compatibility (Requirement 14.2): If the RPC returns codes.AlreadyExists
 // (core already enabled by another panel instance), we treat this as success and refresh
@@ -152,17 +154,15 @@ func (cm *CoreManager) callEnableCore(ctx context.Context, nodeID int64, coreTyp
 		return fmt.Errorf("node %q is %s, cannot enable core", node.NodeName, node.Status)
 	}
 
-	// TODO: Replace with actual gRPC call when proto client is generated.
-	// The call would be:
-	//   client := knodepb.NewKnodeServiceClient(node.Conn)
-	//   _, err = client.EnableCore(ctx, &knodepb.EnableCoreRequest{
-	//       CoreType:    coreType,
-	//       ListenPort:  int32(listenPort),
-	//       ExtraConfig: extraConfig,
-	//   })
-	var rpcErr error // placeholder for actual RPC error
-	_ = node.Conn    // will be used with proto client
+	client := knodepb.NewKnodeServiceClient(node.Conn)
 
+	req := &knodepb.EnableCoreRequest{
+		Type:        coreType,
+		ListenPort:  int32(listenPort),
+		ExtraConfig: extraConfig,
+	}
+
+	_, rpcErr := client.EnableCore(ctx, req)
 	if rpcErr != nil {
 		if isConcurrentModification(rpcErr) {
 			// Core already enabled (likely by another panel instance).
@@ -179,7 +179,8 @@ func (cm *CoreManager) callEnableCore(ctx context.Context, nodeID int64, coreTyp
 	return nil
 }
 
-// callDisableCore makes the actual DisableCore RPC call to a knode instance.
+// callDisableCore makes the actual DisableCore RPC call to a knode instance via
+// the generated knodepb proto client.
 //
 // Multi-panel compatibility (Requirement 14.2): If the RPC returns codes.NotFound
 // (core already disabled by another panel instance), we treat this as success and refresh
@@ -194,15 +195,13 @@ func (cm *CoreManager) callDisableCore(ctx context.Context, nodeID int64, coreTy
 		return fmt.Errorf("node %q is %s, cannot disable core", node.NodeName, node.Status)
 	}
 
-	// TODO: Replace with actual gRPC call when proto client is generated.
-	// The call would be:
-	//   client := knodepb.NewKnodeServiceClient(node.Conn)
-	//   _, err = client.DisableCore(ctx, &knodepb.DisableCoreRequest{
-	//       CoreType: coreType,
-	//   })
-	var rpcErr error // placeholder for actual RPC error
-	_ = node.Conn    // will be used with proto client
+	client := knodepb.NewKnodeServiceClient(node.Conn)
 
+	req := &knodepb.DisableCoreRequest{
+		Type: coreType,
+	}
+
+	_, rpcErr := client.DisableCore(ctx, req)
 	if rpcErr != nil {
 		if isConcurrentModification(rpcErr) {
 			// Core already disabled (likely by another panel instance).
@@ -219,7 +218,8 @@ func (cm *CoreManager) callDisableCore(ctx context.Context, nodeID int64, coreTy
 	return nil
 }
 
-// callAllCoreStatuses makes the AllCoreStatuses RPC call to a knode instance.
+// callAllCoreStatuses makes the AllCoreStatuses RPC call to a knode instance via
+// the generated knodepb proto client.
 // This always fetches live state from knode, treating knode as the source of truth
 // (Requirement 14.1, 14.3). It never returns cached data.
 func (cm *CoreManager) callAllCoreStatuses(ctx context.Context, nodeID int64) ([]CoreStatus, error) {
@@ -232,26 +232,26 @@ func (cm *CoreManager) callAllCoreStatuses(ctx context.Context, nodeID int64) ([
 		return nil, fmt.Errorf("node %q is %s, cannot query core statuses", node.NodeName, node.Status)
 	}
 
-	// TODO: Replace with actual gRPC call when proto client is generated.
-	// The call would be:
-	//   client := knodepb.NewKnodeServiceClient(node.Conn)
-	//   resp, err := client.AllCoreStatuses(ctx, &knodepb.AllCoreStatusesRequest{})
-	//   if err != nil { return nil, err }
-	//   var statuses []CoreStatus
-	//   for _, cs := range resp.Cores {
-	//       statuses = append(statuses, CoreStatus{
-	//           Type:           cs.Type,
-	//           State:          cs.State,
-	//           ActiveSessions: int(cs.ActiveSessions),
-	//           PID:            int(cs.Pid),
-	//       })
-	//   }
-	//   return statuses, nil
-	_ = node.Conn // will be used with proto client
+	client := knodepb.NewKnodeServiceClient(node.Conn)
 
-	log.Printf("[knode] AllCoreStatuses: fetching live core state from node %q (id=%d)",
-		node.NodeName, nodeID)
-	return nil, nil
+	resp, err := client.AllCoreStatuses(ctx, &knodepb.AllCoreStatusesRequest{})
+	if err != nil {
+		return nil, err
+	}
+
+	var statuses []CoreStatus
+	for _, cs := range resp.GetCores() {
+		statuses = append(statuses, CoreStatus{
+			Type:           cs.GetType(),
+			State:          coreStateToString(cs.GetState()),
+			ActiveSessions: int(cs.GetActiveSessions()),
+			PID:            int(cs.GetPid()),
+		})
+	}
+
+	log.Printf("[knode] AllCoreStatuses: fetched %d core statuses from node %q (id=%d)",
+		len(statuses), node.NodeName, nodeID)
+	return statuses, nil
 }
 
 // handleConcurrentModification reconciles local core state with knode after detecting

@@ -266,7 +266,7 @@ func TestCheckOverdueTickets(t *testing.T) {
 
 			// Mock the UPDATE for each ticket that should be marked as alerted
 			for _, id := range tt.wantAlertedIDs {
-				mock.ExpectExec("UPDATE tickets SET sla_alerted_at = NOW\\(\\) WHERE id = \\?").
+				mock.ExpectExec("UPDATE tickets SET sla_alerted_at = NOW\\(\\) WHERE id = \\$1").
 					WithArgs(id).
 					WillReturnResult(sqlmock.NewResult(0, 1))
 			}
@@ -343,7 +343,7 @@ func TestCheckOverdueTickets_NotifyCalledWithSLABreachMessage(t *testing.T) {
 
 	mock.ExpectQuery("SELECT t.id, t.subject, t.priority, t.created_at").
 		WillReturnRows(ticketRows)
-	mock.ExpectExec("UPDATE tickets SET sla_alerted_at = NOW\\(\\) WHERE id = \\?").
+	mock.ExpectExec("UPDATE tickets SET sla_alerted_at = NOW\\(\\) WHERE id = \\$1").
 		WithArgs(int64(99)).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 

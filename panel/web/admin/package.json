@@ -1,5 +1,5 @@
 {
-  "name": "KorisPanel-admin",
+  "name": "admin",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,6 +9,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@koris/shared": "workspace:*",
     "@vueuse/core": "^11.3.0",
     "pinia": "^2.3.0",
     "sortablejs": "^1.15.7",
@@ -23,7 +24,7 @@
     "happy-dom": "^20.10.3",
     "typescript": "^5.7.3",
     "vite": "^5.4.19",
-    "vitest": "^4.1.9",
+    "vitest": "^3.2.6",
     "vue-tsc": "^2.2.10"
   },
   "engines": {

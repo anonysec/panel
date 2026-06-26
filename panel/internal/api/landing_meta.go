@@ -18,13 +18,15 @@ import (
 //   - If user has an active session, redirect to /dashboard/ or /portal/
 //   - If landing is disabled (landing_settings.enabled=0), redirect to login
 //   - If the SPA landing page exists, serve it with injected meta tags
-//   - Otherwise, fall back to the server-side rendered landing page (serveLandingPage)
+//   - Otherwise, fall back to the server-side rendered decoy landing page
 //
 // For all other paths (assets, SPA routes) it delegates to the normal spaHandler.
+// All responses are wrapped with StripIdentifyingHeaders to remove Server,
+// X-Powered-By, and any VPN-related X- headers.
 func (s *Server) landingMetaHandler() http.Handler {
 	fallback := spaHandler(s.Config.LandingWebDir, "/", s.LandingEmbedFS)
 
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Only handle the root path specially
 		if r.URL.Path != "/" {
 			fallback.ServeHTTP(w, r)
@@ -71,8 +73,8 @@ func (s *Server) landingMetaHandler() http.Handler {
 		// Read the raw index.html
 		rawHTML := s.readLandingIndexHTML()
 		if rawHTML == "" {
-			// No SPA landing page — fall back to server-side rendered landing
-			s.serveLandingPage(w, r)
+			// No SPA landing page — fall back to server-side rendered decoy landing
+			s.serveDecoyLandingPage(w, r)
 			return
 		}
 
@@ -93,6 +95,8 @@ func (s *Server) landingMetaHandler() http.Handler {
 		w.Header().Set("Cache-Control", "no-store")
 		http.ServeContent(w, r, "index.html", now, strings.NewReader(rendered))
 	})
+
+	return StripIdentifyingHeaders(inner)
 }
 
 // InvalidateLandingMetaCache clears the cached rendered landing HTML.

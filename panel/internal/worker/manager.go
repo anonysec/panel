@@ -2,7 +2,6 @@ package worker
 
 import (
 	"context"
-	"errors"
 	"sync"
 )
 
@@ -89,15 +88,4 @@ func (m *Manager) Status() []WorkerProcess {
 		}
 	}
 	return result
-}
-
-// ScaleWorkers adjusts the number of active workers to n.
-// If n is less than the current count, excess workers are gracefully stopped.
-// If n is greater, new workers are spawned.
-func (m *Manager) ScaleWorkers(n int) error {
-	// TODO: implement in task 3.8
-	if n < 1 {
-		return errors.New("worker count must be at least 1")
-	}
-	return nil
 }

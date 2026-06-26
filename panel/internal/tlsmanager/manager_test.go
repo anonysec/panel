@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -104,6 +105,56 @@ func TestNew_ManualCertFileNotFound(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected error for nonexistent cert file")
+	}
+	if !strings.Contains(err.Error(), "cert file not found") {
+		t.Errorf("expected cert file not found error, got: %v", err)
+	}
+}
+
+func TestNew_ManualKeyFileNotFound(t *testing.T) {
+	// Create a valid cert file but no key file
+	dir := t.TempDir()
+	certPath := filepath.Join(dir, "cert.pem")
+	if err := os.WriteFile(certPath, []byte("placeholder"), 0644); err != nil {
+		t.Fatalf("write cert: %v", err)
+	}
+
+	_, err := New(Config{
+		Mode: ModeManual,
+		Cert: certPath,
+		Key:  "/nonexistent/key.pem",
+	})
+	if err == nil {
+		t.Fatal("expected error for nonexistent key file")
+	}
+	if !strings.Contains(err.Error(), "key file not found") {
+		t.Errorf("expected key file not found error, got: %v", err)
+	}
+}
+
+func TestNew_ManualInvalidX509(t *testing.T) {
+	// Create cert and key files with invalid content
+	dir := t.TempDir()
+	certPath := filepath.Join(dir, "cert.pem")
+	keyPath := filepath.Join(dir, "key.pem")
+
+	if err := os.WriteFile(certPath, []byte("not a valid cert"), 0644); err != nil {
+		t.Fatalf("write cert: %v", err)
+	}
+	if err := os.WriteFile(keyPath, []byte("not a valid key"), 0600); err != nil {
+		t.Fatalf("write key: %v", err)
+	}
+
+	_, err := New(Config{
+		Mode: ModeManual,
+		Cert: certPath,
+		Key:  keyPath,
+	})
+	if err == nil {
+		t.Fatal("expected error for invalid X.509 cert/key pair")
+	}
+	if !strings.Contains(err.Error(), "invalid X.509") {
+		t.Errorf("expected invalid X.509 error, got: %v", err)
 	}
 }
 

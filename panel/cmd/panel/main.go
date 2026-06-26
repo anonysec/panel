@@ -30,7 +30,6 @@ import (
 	"KorisPanel/panel/internal/config"
 	"KorisPanel/panel/internal/db"
 	"KorisPanel/panel/internal/grpcclient"
-	"KorisPanel/panel/internal/nodeapi"
 	"KorisPanel/panel/internal/notify"
 	"KorisPanel/panel/internal/protocols"
 	"KorisPanel/panel/internal/ratelimit"
@@ -502,13 +501,53 @@ func isCLICommand(arg string) bool {
 	return commands[arg]
 }
 
-// startTLSListener starts HTTPS (and HTTP redirect) listeners based on config.
-// It supports two modes:
-//   - Autocert (Let's Encrypt): when PANEL_DOMAIN is set and no custom cert/key files exist.
-//     Creates an autocert.Manager, serves HTTPS on TLSAddr, and starts an HTTP->HTTPS
-//     redirect on :80.
-//   - Custom cert/key: when TLSCert and TLSKey files exist. Uses tls.LoadX509KeyPair
-//     and serves HTTPS on TLSAddr.
+// isLoopback reports whether the given address string (host:port or just IP)
+// refers to a loopback interface (127.0.0.0/8 or ::1).
+func isLoopback(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		// addr might not have a port; treat the whole string as host
+		host = addr
+	}
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+	return ip.IsLoopback()
+}
+
+// redirectToHTTPS is a middleware that redirects non-loopback HTTP requests
+// to their HTTPS equivalent with a 301 Moved Permanently status.
+// Requests from loopback addresses (127.0.0.1, ::1) are served normally
+// without redirect, allowing local tools and health checks to use HTTP.
+func redirectToHTTPS(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.TLS == nil && !isLoopback(r.RemoteAddr) {
+			host := r.Host
+			// Strip port from host if present for clean HTTPS URL
+			if idx := strings.LastIndex(host, ":"); idx != -1 {
+				host = host[:idx]
+			}
+			target := "https://" + host + r.URL.RequestURI()
+			http.Redirect(w, r, target, http.StatusMovedPermanently)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// startTLSListener starts HTTPS (and loopback HTTP) listeners based on config.
+// It supports three TLS modes via the TLS Manager:
+//   - Manual: user-provided cert/key files with validation at startup
+//   - ACME (Let's Encrypt): automatic cert provisioning, requires PANEL_TLS_DOMAIN
+//   - SelfSigned: auto-generated cert (365 days), logs a warning
+//
+// HTTP listener binds to 127.0.0.1:8080 (loopback only) with redirectToHTTPS
+// middleware for defense-in-depth. HTTPS listener binds to 0.0.0.0:443 with
+// minimum TLS 1.2.
 //
 // This function blocks (runs the HTTPS server). It should be called from a goroutine
 // or as the final blocking call in main.
@@ -523,10 +562,27 @@ func startTLSListener(handler http.Handler, cfg config.Config) {
 			"addr": cfg.TLSAddr,
 		})
 
-		// Start HTTP->HTTPS redirect on :80
-		go startHTTPRedirect(cfg.TLSAddr)
+		// Start loopback-only HTTP listener with redirect middleware
+		go startHTTPLoopback(handler, cfg.Addr)
 
-		if err := http.ListenAndServeTLS(cfg.TLSAddr, cfg.TLSCert, cfg.TLSKey, handler); err != nil {
+		// HTTPS listener on all interfaces with min TLS 1.2
+		tlsCfg := &tls.Config{MinVersion: tls.VersionTLS12}
+		tlsCfg.Certificates = make([]tls.Certificate, 1)
+		var err error
+		tlsCfg.Certificates[0], err = tls.LoadX509KeyPair(cfg.TLSCert, cfg.TLSKey)
+		if err != nil {
+			logger.Error("tls", "failed to load TLS certificate", map[string]any{"error": err.Error()})
+			return
+		}
+
+		httpsListener, err := tls.Listen("tcp", cfg.TLSAddr, tlsCfg)
+		if err != nil {
+			logger.Error("tls", "failed to bind HTTPS listener", map[string]any{"addr": cfg.TLSAddr, "error": err.Error()})
+			return
+		}
+		logger.Info("tls", "HTTPS listener started", map[string]any{"addr": cfg.TLSAddr})
+
+		if err := http.Serve(httpsListener, handler); err != nil {
 			logger.Error("tls", "HTTPS server failed (custom cert)", map[string]any{"error": err.Error()})
 		}
 		return
@@ -552,10 +608,13 @@ func startTLSListener(handler http.Handler, cfg config.Config) {
 		HostPolicy: autocert.HostWhitelist(domain),
 	}
 
+	tlsCfg := m.TLSConfig()
+	tlsCfg.MinVersion = tls.VersionTLS12
+
 	tlsSrv := &http.Server{
 		Addr:      cfg.TLSAddr,
 		Handler:   handler,
-		TLSConfig: m.TLSConfig(),
+		TLSConfig: tlsCfg,
 	}
 
 	logger.Info("tls", "starting HTTPS with Let's Encrypt autocert", map[string]any{
@@ -564,10 +623,9 @@ func startTLSListener(handler http.Handler, cfg config.Config) {
 		"cert_dir": certDir,
 	})
 
-	// Start HTTP challenge handler + redirect on :80
+	// Start HTTP challenge handler on :80 for ACME HTTP-01 challenges.
+	// This must listen on all interfaces for Let's Encrypt validation.
 	go func() {
-		// autocert.Manager.HTTPHandler handles ACME HTTP-01 challenges and
-		// redirects all other traffic to HTTPS.
 		httpSrv := &http.Server{
 			Addr:    ":80",
 			Handler: m.HTTPHandler(nil),
@@ -577,31 +635,40 @@ func startTLSListener(handler http.Handler, cfg config.Config) {
 		}
 	}()
 
+	// Start loopback-only HTTP listener for local access
+	go startHTTPLoopback(handler, cfg.Addr)
+
 	if err := tlsSrv.ListenAndServeTLS("", ""); err != nil {
 		logger.Error("tls", "HTTPS server failed (autocert)", map[string]any{"error": err.Error()})
 	}
 }
 
-// startHTTPRedirect starts an HTTP server on :80 that redirects all traffic to HTTPS.
-func startHTTPRedirect(tlsAddr string) {
-	redirectMux := http.NewServeMux()
-	redirectMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		target := "https://" + r.Host + r.URL.RequestURI()
-		if tlsAddr != ":443" {
-			host := r.Host
-			if idx := strings.Index(host, ":"); idx != -1 {
-				host = host[:idx]
-			}
-			target = "https://" + host + tlsAddr + r.URL.RequestURI()
-		}
-		http.Redirect(w, r, target, http.StatusMovedPermanently)
-	})
-	redirectMux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"ok":true,"service":"panel","tls":true}`))
-	})
-	if err := http.ListenAndServe(":80", redirectMux); err != nil {
-		logger.Error("tls", "HTTP redirect server error", map[string]any{"error": err.Error()})
+// startHTTPLoopback starts an HTTP server bound to loopback only (127.0.0.1)
+// with the redirectToHTTPS middleware applied. This ensures:
+// - Local tools and health checks can use HTTP without redirect
+// - Any non-loopback request (if it somehow reaches this listener) gets a 301 to HTTPS
+func startHTTPLoopback(handler http.Handler, addr string) {
+	// Ensure the HTTP listener binds to loopback only
+	httpAddr := addr
+	_, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		port = "8080"
+	}
+	// Force loopback binding regardless of configured address
+	httpAddr = "127.0.0.1:" + port
+
+	httpListener, err := net.Listen("tcp", httpAddr)
+	if err != nil {
+		logger.Error("http", "failed to bind HTTP loopback listener", map[string]any{"addr": httpAddr, "error": err.Error()})
+		return
+	}
+
+	logger.Info("http", "HTTP listener started (loopback only)", map[string]any{"addr": httpAddr})
+
+	// Apply redirectToHTTPS middleware as defense-in-depth
+	httpHandler := redirectToHTTPS(handler)
+	if err := http.Serve(httpListener, httpHandler); err != nil {
+		logger.Error("http", "HTTP loopback server error", map[string]any{"error": err.Error()})
 	}
 }
 
@@ -770,10 +837,6 @@ func main() {
 	srv.PortalEmbedFS = portalFS
 	srv.LandingEmbedFS = landingFS
 	srv.BackupService = backupService
-	srv.NodeMgr = nodeapi.NewNodeConnectionManager(database)
-	srv.NodeMgr.NotifyFn = func(msg string) {
-		srv.Notify.Send(msg)
-	}
 
 	// Wire gRPC subsystem into the API server if it initialized successfully.
 	if grpcSub != nil {
@@ -1081,14 +1144,9 @@ func main() {
 		// New built-in TLS mode: autocert or custom cert/key
 		logger.Info("tls", "PANEL_TLS_ENABLED=true — starting built-in TLS", map[string]any{"addr": cfg.TLSAddr})
 
-		// Only start HTTP fallback if it's on a different port than TLS
+		// Start loopback-only HTTP listener with redirect middleware
 		if cfg.Addr != cfg.TLSAddr {
-			go func() {
-				logger.Info("main", "HTTP listener (fallback/internal)", map[string]any{"addr": cfg.Addr})
-				if err := http.ListenAndServe(cfg.Addr, limiter.Middleware(handler)); err != nil {
-					logger.Error("main", "HTTP server failed", map[string]any{"error": err.Error()})
-				}
-			}()
+			go startHTTPLoopback(limiter.Middleware(handler), cfg.Addr)
 		}
 
 		// startTLSListener blocks — it handles autocert or custom cert mode
@@ -1101,52 +1159,41 @@ func main() {
 
 		if fileExists(tlsCert) && fileExists(tlsKey) && (!behindProxy || forceTLS) {
 			logger.Info("tls", "TLS enabled (legacy mode)", map[string]any{"cert": tlsCert, "key": tlsKey, "addr": cfg.TLSAddr})
-			logger.Info("tls", "HTTP redirect configured", map[string]any{"from": cfg.Addr, "to": cfg.TLSAddr})
+			logger.Info("tls", "HTTP loopback with redirect configured", map[string]any{"addr": "127.0.0.1:" + strings.TrimPrefix(cfg.Addr, ":")})
 
-			// Start HTTP server that redirects to HTTPS
-			go func() {
-				redirectMux := http.NewServeMux()
-				redirectMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-					target := "https://" + r.Host + r.URL.RequestURI()
-					if cfg.TLSAddr != ":443" {
-						host := r.Host
-						if idx := strings.Index(host, ":"); idx != -1 {
-							host = host[:idx]
-						}
-						target = "https://" + host + cfg.TLSAddr + r.URL.RequestURI()
-					}
-					http.Redirect(w, r, target, http.StatusMovedPermanently)
-				})
-				redirectMux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
-					w.Header().Set("Content-Type", "application/json")
-					w.Write([]byte(`{"ok":true,"service":"panel","tls":true}`))
-				})
-				if err := http.ListenAndServe(cfg.Addr, redirectMux); err != nil {
-					logger.Error("tls", "HTTP redirect server error", map[string]any{"error": err.Error()})
-				}
-			}()
+			// Start loopback-only HTTP server with redirect middleware
+			go startHTTPLoopback(limiter.Middleware(handler), cfg.Addr)
 
-			// Start HTTPS server — with fallback to HTTP if TLS fails
-			tlsErr := make(chan error, 1)
-			go func() {
-				err := http.ListenAndServeTLS(cfg.TLSAddr, tlsCert, tlsKey, limiter.Middleware(handler))
-				tlsErr <- err
-			}()
-
-			// Give TLS server a moment to start or fail
-			select {
-			case err := <-tlsErr:
-				// TLS failed to start — fall back to plain HTTP
-				logger.Error("tls", "TLS server failed", map[string]any{"error": err.Error()})
+			// Start HTTPS server on all interfaces with min TLS 1.2
+			tlsCfg := &tls.Config{MinVersion: tls.VersionTLS12}
+			tlsCfg.Certificates = make([]tls.Certificate, 1)
+			var certErr error
+			tlsCfg.Certificates[0], certErr = tls.LoadX509KeyPair(tlsCert, tlsKey)
+			if certErr != nil {
+				logger.Error("tls", "TLS server failed to load cert", map[string]any{"error": certErr.Error()})
 				logger.Warn("tls", "falling back to plain HTTP — fix your certificate and restart", map[string]any{"addr": cfg.Addr})
 				if httpErr := http.ListenAndServe(cfg.Addr, limiter.Middleware(handler)); httpErr != nil {
 					logger.Error("main", "HTTP server failed", map[string]any{"error": httpErr.Error()})
 					os.Exit(1)
 				}
-			case <-time.After(2 * time.Second):
-				// TLS started OK, block on redirect server (already running in goroutine)
-				logger.Info("tls", "HTTPS server running", map[string]any{"addr": cfg.TLSAddr})
-				select {} // block forever
+				return
+			}
+
+			httpsListener, listenErr := tls.Listen("tcp", cfg.TLSAddr, tlsCfg)
+			if listenErr != nil {
+				logger.Error("tls", "TLS server failed to bind", map[string]any{"addr": cfg.TLSAddr, "error": listenErr.Error()})
+				logger.Warn("tls", "falling back to plain HTTP — fix your certificate and restart", map[string]any{"addr": cfg.Addr})
+				if httpErr := http.ListenAndServe(cfg.Addr, limiter.Middleware(handler)); httpErr != nil {
+					logger.Error("main", "HTTP server failed", map[string]any{"error": httpErr.Error()})
+					os.Exit(1)
+				}
+				return
+			}
+
+			logger.Info("tls", "HTTPS server running", map[string]any{"addr": cfg.TLSAddr})
+			if err := http.Serve(httpsListener, limiter.Middleware(handler)); err != nil {
+				logger.Error("tls", "HTTPS server failed", map[string]any{"error": err.Error()})
+				os.Exit(1)
 			}
 		} else {
 			if fileExists(tlsCert) && fileExists(tlsKey) && behindProxy {

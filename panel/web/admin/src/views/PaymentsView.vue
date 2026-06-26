@@ -12,6 +12,8 @@ import KInput from '@koris/ui/KInput.vue'
 import KSelect from '@koris/ui/KSelect.vue'
 import KStatusPill from '@koris/ui/KStatusPill.vue'
 import KDrawer from '@koris/ui/KDrawer.vue'
+import TransactionAddDrawer from '@/components/TransactionAddDrawer.vue'
+import PaymentMethodAddDrawer from '@/components/PaymentMethodAddDrawer.vue'
 
 const { t } = useI18n()
 const store = usePaymentsStore()

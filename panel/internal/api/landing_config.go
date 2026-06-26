@@ -1,8 +1,9 @@
-﻿//go:build !lite
+//go:build !lite
 
 package api
 
 import (
+	"KorisPanel/panel/internal/landing"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -130,4 +131,28 @@ func (s *Server) setLandingConfig(w http.ResponseWriter, r *http.Request) {
 
 	// Invalidate the landing page meta tag cache so next request picks up new values
 	s.InvalidateLandingMetaCache()
+}
+
+// adminLandingBlocklistCheck handles POST /api/admin/landing-page/check-blocklist.
+// Accepts a JSON body with content fields and returns any blocklist matches found.
+func (s *Server) adminLandingBlocklistCheck(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	limitBody(w, r, maxJSONBody)
+
+	var req map[string]string
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "bad_json"})
+		return
+	}
+
+	matches := landing.ValidateFields(req)
+	writeJSON(w, map[string]any{
+		"ok":      true,
+		"matches": matches,
+		"clean":   len(matches) == 0,
+	})
 }

@@ -33,7 +33,8 @@ RUN npm install && npm run build
 
 # Build Go binary
 WORKDIR /build
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o /koris ./panel/cmd/panel
+ARG BUILD_TAGS=""
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" ${BUILD_TAGS:+-tags $BUILD_TAGS} -o /koris ./panel/cmd/panel
 
 # ─── Runtime Stage ────────────────────────────────────────────────────
 FROM alpine:3.20

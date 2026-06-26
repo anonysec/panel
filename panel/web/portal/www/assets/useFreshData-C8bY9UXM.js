@@ -1,1 +1,0 @@
-import{o,K as a,r as s}from"./vendor-qDoAYKeI.js";const r=3e4;function i(n){const t=s(0);async function e(){Date.now()-t.value>r&&(await n(),t.value=Date.now())}return o(e),a(e),{ensureFresh:e,lastFetchedAt:t}}export{i as u};

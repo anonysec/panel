@@ -75,7 +75,11 @@ func TestHealthChecker_CheckNodeOK(t *testing.T) {
 	alerter := &mockAlerter{}
 	hc := NewHealthChecker(pool, alerter, time.Minute)
 
-	// The stub returns HealthOK, so no alerts should be emitted
+	// Override callHealthRPC to return OK (simulates a healthy node)
+	hc.callHealthRPCFunc = func(ctx context.Context, nodeID int64) (HealthStatus, error) {
+		return HealthOK, nil
+	}
+
 	hc.checkNode(context.Background(), 1)
 
 	if len(alerter.getAlerts()) != 0 {
@@ -110,10 +114,15 @@ func TestHealthChecker_CheckAllSkipsOfflineNodes(t *testing.T) {
 	alerter := &mockAlerter{}
 	hc := NewHealthChecker(pool, alerter, time.Minute)
 
+	// Override callHealthRPC to return OK (simulates healthy nodes)
+	hc.callHealthRPCFunc = func(ctx context.Context, nodeID int64) (HealthStatus, error) {
+		return HealthOK, nil
+	}
+
 	// checkAll should only check node 2 (online), not node 1 (offline)
 	hc.checkAll(context.Background())
 
-	// With the stub returning OK, no alerts expected
+	// With OK response, no alerts expected
 	if len(alerter.getAlerts()) != 0 {
 		t.Errorf("expected no alerts, got %d", len(alerter.getAlerts()))
 	}

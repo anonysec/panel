@@ -387,7 +387,7 @@ func CheckHealth(db *sql.DB) {
 	}
 
 	for _, p := range proxies {
-		addr := fmt.Sprintf("%s:%d", p.NodeIP, p.Port)
+		addr := net.JoinHostPort(p.NodeIP, fmt.Sprintf("%d", p.Port))
 		conn, err := net.DialTimeout("tcp", addr, 5*time.Second)
 		now := time.Now().UTC()
 

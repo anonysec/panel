@@ -1,4 +1,4 @@
-﻿package api
+package api
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 )
 
 // handleCores handles GET /api/cores (list) and POST /api/cores (register).
@@ -182,8 +183,12 @@ func (s *Server) nodeCoresInstall(w http.ResponseWriter, r *http.Request, nodeID
 			"checksum_sha256": checksum,
 			"version":         in.Version,
 		})
-		if err := s.CoreMgr.EnableCore(r.Context(), nodeID, in.CoreName, in.Port, extraConfig); err != nil {
+		// Use 10s timeout for core enable RPC (R10.2)
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+		if err := s.CoreMgr.EnableCore(ctx, nodeID, in.CoreName, in.Port, extraConfig); err != nil {
 			log.Printf("[cores] EnableCore gRPC failed for node %d core %s: %v", nodeID, in.CoreName, err)
+			// Report error to admin UI, leave core in previous state (R10.3)
 			writeJSONCode(w, http.StatusBadGateway, map[string]any{"ok": false, "error": err.Error()})
 			return
 		}
@@ -243,8 +248,12 @@ func (s *Server) nodeCoresUpdate(w http.ResponseWriter, r *http.Request, nodeID 
 			"checksum_sha256": checksum,
 			"version":         in.Version,
 		})
-		if err := s.CoreMgr.EnableCore(r.Context(), nodeID, in.CoreName, in.Port, extraConfig); err != nil {
+		// Use 10s timeout for core enable RPC (R10.2)
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+		if err := s.CoreMgr.EnableCore(ctx, nodeID, in.CoreName, in.Port, extraConfig); err != nil {
 			log.Printf("[cores] EnableCore (update) gRPC failed for node %d core %s: %v", nodeID, in.CoreName, err)
+			// Report error to admin UI, leave core in previous state (R10.3)
 			writeJSONCode(w, http.StatusBadGateway, map[string]any{"ok": false, "error": err.Error()})
 			return
 		}
@@ -275,9 +284,12 @@ func (s *Server) nodeCoresRemove(w http.ResponseWriter, _ *http.Request, nodeID 
 
 	// Call DisableCore via gRPC
 	if s.CoreMgr != nil {
-		ctx := context.Background()
+		// Use 10s timeout for core disable RPC (R10.2)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
 		if err := s.CoreMgr.DisableCore(ctx, nodeID, coreName); err != nil {
 			log.Printf("[cores] DisableCore gRPC failed for node %d core %s: %v", nodeID, coreName, err)
+			// Report error to admin UI, leave core in previous state (R10.3)
 			writeJSONCode(w, http.StatusBadGateway, map[string]any{"ok": false, "error": err.Error()})
 			return
 		}

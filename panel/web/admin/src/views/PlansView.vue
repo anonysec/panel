@@ -9,11 +9,13 @@ import KFormField from '@koris/ui/KFormField.vue'
 import KInput from '@koris/ui/KInput.vue'
 import KSkeleton from '@koris/ui/KSkeleton.vue'
 import KEmptyState from '@koris/ui/KEmptyState.vue'
+import PlanAddDrawer from '@/components/PlanAddDrawer.vue'
 
 const { t } = useI18n()
 const store = usePlansStore()
 const { list: plansList } = storeToRefs(store)
 const showForm = ref(false)
+const showPlanDrawer = ref(false)
 const editingId = ref<number | null>(null)
 const saving = ref(false)
 
@@ -49,7 +51,7 @@ function resetForm() {
 
 function openCreate() {
   resetForm()
-  showForm.value = true
+  showPlanDrawer.value = true
 }
 
 function openEdit(plan: any) {
@@ -265,6 +267,9 @@ const { containerRef: plansContainerRef, isDragging: plansDragging } = useSortab
         </div>
       </div>
     </div>
+
+    <!-- Plan Add Drawer -->
+    <PlanAddDrawer :open="showPlanDrawer" @close="showPlanDrawer = false" />
   </div>
 </template>
 

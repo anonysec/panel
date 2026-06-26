@@ -3,10 +3,12 @@
 import (
 	"context"
 	"database/sql"
+	"io"
 	"log"
 	"time"
 
 	"KorisPanel/panel/internal/dbstore"
+	"KorisPanel/panel/internal/knodepb"
 )
 
 // MetricsEvent represents a streaming metrics payload from a knode instance.
@@ -46,16 +48,118 @@ func NewMetricsConsumer(store dbstore.Store, pool *connPool) *MetricsConsumer {
 	}
 }
 
-// StartStream opens a StreamMetrics subscription to the specified node.
-// This is a placeholder — the actual gRPC stream opening will be wired
-// when proto clients are generated. For now, it logs and returns.
+// MinMetricsInterval is the minimum allowed StreamMetrics interval (5 seconds).
+// Any configured interval below this floor is clamped to 5s.
+const MinMetricsInterval = 5 * time.Second
+
+// DefaultMetricsInterval is the default StreamMetrics reporting interval (10 seconds).
+const DefaultMetricsInterval = 10 * time.Second
+
+// StartStream opens a StreamMetrics subscription to the specified node via the
+// generated knodepb proto client. It requests metrics at the configured interval
+// (default 10s, minimum 5s), reads events from the server stream, and passes
+// each to ProcessEvent.
+// On stream error or context cancellation, it logs and triggers reconnection via the pool.
 func (mc *MetricsConsumer) StartStream(ctx context.Context, nodeID int64) {
-	log.Printf("[grpc-client] StartStream called for node %d (stub — waiting for proto client generation)", nodeID)
-	// TODO: When proto clients are generated, this will:
-	// 1. Open a server-streaming StreamMetrics RPC with 10s interval
-	// 2. Loop reading MetricsEvent messages
-	// 3. Call mc.ProcessEvent(nodeID, event) for each received message
-	// 4. On stream error, trigger reconnection via pool
+	mc.StartStreamWithInterval(ctx, nodeID, DefaultMetricsInterval)
+}
+
+// StartStreamWithInterval opens a StreamMetrics subscription with a custom interval.
+// The interval is clamped to a minimum of 5 seconds per requirement 10.5.
+func (mc *MetricsConsumer) StartStreamWithInterval(ctx context.Context, nodeID int64, interval time.Duration) {
+	// Enforce minimum interval of 5 seconds
+	if interval < MinMetricsInterval {
+		interval = MinMetricsInterval
+	}
+	mc.pool.mu.RLock()
+	entry, ok := mc.pool.connections[nodeID]
+	mc.pool.mu.RUnlock()
+	if !ok {
+		log.Printf("[grpc-client] StartStream: node %d not found in pool", nodeID)
+		return
+	}
+
+	conn := entry.conn
+	if conn.Conn == nil {
+		log.Printf("[grpc-client] StartStream: node %d has no active gRPC connection", nodeID)
+		return
+	}
+
+	client := knodepb.NewKnodeServiceClient(conn.Conn)
+
+	intervalSec := int32(interval.Seconds())
+	stream, err := client.StreamMetrics(ctx, &knodepb.StreamMetricsRequest{
+		IntervalSeconds: intervalSec,
+	})
+	if err != nil {
+		log.Printf("[grpc-client] StartStream: failed to open StreamMetrics for node %d: %v", nodeID, err)
+		return
+	}
+
+	log.Printf("[grpc-client] StreamMetrics opened for node %d (interval: %s)", nodeID, interval)
+
+	go func() {
+		for {
+			pbEvent, err := stream.Recv()
+			if err != nil {
+				if err == io.EOF {
+					log.Printf("[grpc-client] StreamMetrics EOF for node %d — stream ended by server", nodeID)
+				} else if ctx.Err() != nil {
+					log.Printf("[grpc-client] StreamMetrics cancelled for node %d", nodeID)
+					return
+				} else {
+					log.Printf("[grpc-client] StreamMetrics error for node %d: %v", nodeID, err)
+				}
+				// Trigger reconnection via the pool's status transition
+				mc.pool.SetStatus(nodeID, StatusOffline)
+				return
+			}
+
+			// Convert proto MetricsEvent to local MetricsEvent
+			event := metricsEventFromProto(pbEvent)
+			if processErr := mc.ProcessEvent(nodeID, event); processErr != nil {
+				log.Printf("[grpc-client] ProcessEvent error for node %d: %v", nodeID, processErr)
+			}
+		}
+	}()
+}
+
+// metricsEventFromProto converts a knodepb.MetricsEvent to the local MetricsEvent type.
+func metricsEventFromProto(pb *knodepb.MetricsEvent) MetricsEvent {
+	event := MetricsEvent{
+		CPUPercent:     pb.GetCpuPercent(),
+		RAMPercent:     pb.GetRamPercent(),
+		DiskPercent:    pb.GetDiskPercent(),
+		RxBPS:          pb.GetRxBps(),
+		TxBPS:          pb.GetTxBps(),
+		ActiveSessions: int(pb.GetActiveSessions()),
+		UptimeSeconds:  pb.GetUptimeSeconds(),
+	}
+
+	for _, core := range pb.GetPerCore() {
+		event.Cores = append(event.Cores, CoreStatus{
+			Type:           core.GetType(),
+			State:          coreStateToString(core.GetState()),
+			ActiveSessions: int(core.GetActiveSessions()),
+			PID:            int(core.GetPid()),
+		})
+	}
+
+	return event
+}
+
+// coreStateToString maps the proto CoreState enum to a string status for the local CoreStatus.
+func coreStateToString(state knodepb.CoreState) string {
+	switch state {
+	case knodepb.CoreState_CORE_STATE_RUNNING:
+		return "running"
+	case knodepb.CoreState_CORE_STATE_STOPPED:
+		return "stopped"
+	case knodepb.CoreState_CORE_STATE_CRASHED:
+		return "crashed"
+	default:
+		return "unknown"
+	}
 }
 
 // ProcessEvent handles a single MetricsEvent received from a knode stream.

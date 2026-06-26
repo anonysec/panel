@@ -129,10 +129,32 @@ func initGRPCSubsystem(ctx context.Context, database *sql.DB, cfg config.Config,
 	metricsConsumer := grpcclient.NewMetricsConsumerFromPool(store, pool)
 	log.Info("grpc-client", "metrics consumer ready")
 
+	// 6b. Start metrics streams for all connected nodes.
+	for _, rec := range nodes {
+		if pool.Status(rec.ID) == grpcclient.StatusOnline {
+			metricsConsumer.StartStreamWithInterval(ctx, rec.ID, cfg.GRPCMetricsInterval)
+		}
+	}
+
+	// 6c. Register OnStatusChange callback to start metrics stream on reconnection.
+	pool.OnStatusChange(func(nodeID int64, old, new grpcclient.NodeStatus) {
+		if new == grpcclient.StatusOnline && old != grpcclient.StatusOnline {
+			metricsConsumer.StartStreamWithInterval(ctx, nodeID, cfg.GRPCMetricsInterval)
+		}
+	})
+
 	// 7. Create UserSyncService and register reconnect-sync callback.
 	userSync := grpcclient.NewUserSyncService(pool, store)
-	grpcclient.RegisterReconnectSync(pool, userSync)
+	grpcclient.RegisterReconnectSync(pool, userSync, store)
 	log.Info("grpc-client", "user sync service ready (reconnect-sync callback registered)")
+
+	// 7b. Perform initial Health + AllCoreStatuses for nodes that connected successfully.
+	// This satisfies Requirement 10.4: knode reports capabilities within 30s of startup.
+	for _, rec := range nodes {
+		if pool.Status(rec.ID) == grpcclient.StatusOnline {
+			grpcclient.InitialNodeSync(ctx, pool, store, rec.ID)
+		}
+	}
 
 	// 8. Start the TrafficCollector.
 	quotaEnforcer := grpcclient.NewQuotaEnforcer(userSync, store)

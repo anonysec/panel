@@ -1,6 +1,7 @@
 package api
 
 import (
+	"KorisPanel/panel/internal/grpcclient"
 	"net/http"
 	"time"
 )
@@ -40,10 +41,15 @@ func (s *Server) internalNodes(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		n.LastSeen = lastSeen.UTC().Format(time.RFC3339)
-		// Populate health score from NodeConnectionManager
-		if s.NodeMgr != nil {
-			if conn, ok := s.NodeMgr.GetHealth(n.ID); ok {
-				n.HealthScore = conn.HealthScore
+		// Populate health score from gRPC pool status
+		if s.GRPCPool != nil {
+			switch s.GRPCPool.Status(n.ID) {
+			case grpcclient.StatusOnline:
+				n.HealthScore = 1.0
+			case grpcclient.StatusStale:
+				n.HealthScore = 0.5
+			default:
+				n.HealthScore = 0.0
 			}
 		}
 		nodes = append(nodes, n)
