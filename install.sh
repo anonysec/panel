@@ -439,24 +439,36 @@ install_knode_docker() {
     return
   }
 
-  # Prompt for port (like standalone knode installer)
+  # Prompt like standalone knode installer
   local knode_port
+  local knode_name="knode"
+  read -rp "$(echo -e "${CYAN}knode instance name [knode]: ${NC}")" knode_name </dev/tty
+  knode_name="${knode_name:-knode}"
   read -rp "$(echo -e "${CYAN}knode port [2083]: ${NC}")" knode_port </dev/tty
   knode_port="${knode_port:-2083}"
 
-  # Check if existing knode config has an API key (reinstall case)
+  # Check existing knode config
   local knode_api_key=""
+  local skip_knode_config=""
   if [[ -f /etc/knode/config.toml ]]; then
-    knode_api_key=$(grep -oP 'api_keys\s*=\s*\["\K[^"]+' /etc/knode/config.toml 2>/dev/null || true)
-  fi
-  if [[ -z "${knode_api_key}" ]]; then
-    knode_api_key="$(gen_secret 16)"
-  else
-    log "Reusing existing knode API key"
+    echo ""
+    echo -e "  ${CYAN}Existing knode configuration found.${NC}"
+    read -rp "$(echo -e "${CYAN}Keep current knode settings? [Y/n]: ${NC}")" keep_knode </dev/tty
+    if [[ ! "${keep_knode}" =~ ^[nN] ]]; then
+      knode_api_key=$(grep -oP 'api_keys\s*=\s*\["\K[^"]+' /etc/knode/config.toml 2>/dev/null || true)
+      knode_port=$(grep -oP 'listen_addr\s*=\s*"[^:]+:\K[0-9]+' /etc/knode/config.toml 2>/dev/null || echo "2083")
+      skip_knode_config="true"
+      log "Keeping existing knode configuration (port: ${knode_port})"
+    fi
   fi
 
-  mkdir -p /etc/knode
-  cat > /etc/knode/config.toml <<TOML
+  if [[ "${skip_knode_config}" != "true" ]]; then
+    if [[ -z "${knode_api_key}" ]]; then
+      knode_api_key="$(gen_secret 16)"
+    fi
+
+    mkdir -p /etc/knode
+    cat > /etc/knode/config.toml <<TOML
 [api]
 listen_addr = "0.0.0.0:${knode_port}"
 api_keys = ["${knode_api_key}"]
@@ -470,20 +482,9 @@ format = "json"
 gogc = 100
 mem_limit = "256MB"
 TOML
-
-  # Detect existing Let's Encrypt certs
-  local le_dir="/etc/letsencrypt/live"
-  if [[ -d "${le_dir}" ]]; then
-    local domain_dir
-    domain_dir=$(ls -1d "${le_dir}"/*/ 2>/dev/null | head -1)
-    if [[ -n "${domain_dir}" && -f "${domain_dir}fullchain.pem" && -f "${domain_dir}privkey.pem" ]]; then
-      log "Found existing Let's Encrypt certificate, configuring knode to use it"
-      cat >> /etc/knode/config.toml <<TOML2
-
-[tls]
-cert = "${domain_dir}fullchain.pem"
-key = "${domain_dir}privkey.pem"
-TOML2
+  else
+    if [[ -z "${knode_api_key}" ]]; then
+      knode_api_key="$(gen_secret 16)"
     fi
   fi
 
@@ -942,7 +943,37 @@ main() {
   [[ "$(id -u)" -eq 0 ]] || err "Must run as root"
   detect_os
   parse_args "$@"
-  prompt_config
+
+  # Detect existing installation and offer to keep config
+  if [[ -f "${CONFIG_DIR}/panel.env" && "${EDITION}" != "knode" ]]; then
+    echo ""
+    echo -e "  ${CYAN}Existing panel configuration found.${NC}"
+    read -rp "$(echo -e "${CYAN}Keep current settings? [Y/n]: ${NC}")" keep_config </dev/tty
+    if [[ ! "${keep_config}" =~ ^[nN] ]]; then
+      log "Keeping existing configuration"
+      source "${CONFIG_DIR}/panel.env"
+      DB_PASS="${POSTGRES_PASSWORD:-}"
+      DB_NAME="${POSTGRES_DB:-koris}"
+      DB_USER="${POSTGRES_USER:-koris}"
+      DOMAIN="${PANEL_DOMAIN:-}"
+      PANEL_PORT="${PANEL_PORT%%:*}"  # extract port from PANEL_ADDR if formatted as host:port
+      # Detect TLS mode from existing cert
+      if [[ -f "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" ]]; then
+        TLS_MODE="acme"
+      elif [[ -f "${PANEL_TLS_CERT:-}" ]]; then
+        TLS_MODE="manual"
+        CERT_PATH="${PANEL_TLS_CERT}"
+        KEY_PATH="${PANEL_TLS_KEY}"
+      else
+        TLS_MODE="selfsigned"
+      fi
+      SKIP_PROMPTS=true
+    fi
+  fi
+
+  if [[ "${SKIP_PROMPTS:-}" != "true" ]]; then
+    prompt_config
+  fi
 
   case "${INSTALL_MODE}" in
     docker) install_docker ;;
