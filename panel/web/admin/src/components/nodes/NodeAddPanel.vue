@@ -23,6 +23,22 @@ const { t } = useI18n()
 const nodesStore = useNodesStore()
 
 // ─── Form State (managed by useEntityForm) ──────────────────────────────────
+function validate(f: typeof form.value): string | null {
+  if (!f.address.trim()) return t('nodes.validation_address')
+  const p = Number(f.port)
+  if (!Number.isInteger(p) || p < 1 || p > 65535) return t('nodes.validation_port')
+  if (!f.api_key.trim()) return t('nodes.validation_api_key')
+  if (!f.ca_cert.trim()) return t('nodes.validation_cert')
+  // PEM format validation
+  const pem = f.ca_cert.trim()
+  if (!pem.startsWith('-----BEGIN') || !pem.includes('-----END')) {
+    return t('nodes.validation_pem_format') || 'CA certificate must be in PEM format'
+  }
+  // Name max 100 chars
+  if (f.name.length > 100) return 'Name must be 100 characters or fewer'
+  return null
+}
+
 const { form, submitting, validationError, submit, reset } = useEntityForm({
   apiEndpoint: '/api/admin/nodes',
   initialValues: {
@@ -32,21 +48,7 @@ const { form, submitting, validationError, submit, reset } = useEntityForm({
     api_key: '',
     ca_cert: '',
   },
-  validate(f) {
-    if (!f.address.trim()) return t('nodes.validation_address')
-    const p = Number(f.port)
-    if (!Number.isInteger(p) || p < 1 || p > 65535) return t('nodes.validation_port')
-    if (!f.api_key.trim()) return t('nodes.validation_api_key')
-    if (!f.ca_cert.trim()) return t('nodes.validation_cert')
-    // PEM format validation
-    const pem = f.ca_cert.trim()
-    if (!pem.startsWith('-----BEGIN') || !pem.includes('-----END')) {
-      return t('nodes.validation_pem_format') || 'CA certificate must be in PEM format'
-    }
-    // Name max 100 chars
-    if (f.name.length > 100) return 'Name must be 100 characters or fewer'
-    return null
-  },
+  validate,
   onSuccess() {
     emit('close')
     nodesStore.loadNodes()
@@ -59,19 +61,29 @@ const apiError = ref('')
 async function handleSubmit() {
   apiError.value = ''
 
-  // Client-side validation
-  const error = validationError.value
-  if (error) return
+  // Trim all string fields before validation
+  form.value.address = form.value.address.trim()
+  form.value.api_key = form.value.api_key.trim()
+  form.value.ca_cert = form.value.ca_cert.trim()
+  form.value.name = form.value.name.trim()
+
+  // Run validation
+  const error = validate(form.value)
+  if (error) {
+    validationError.value = error
+    return
+  }
+  validationError.value = ''
 
   // Build the actual NodeFormData payload for the store
   const payload: NodeFormData = {
-    name: form.value.name.trim() || form.value.address.trim(),
-    address: form.value.address.trim(),
+    name: form.value.name || form.value.address,
+    address: form.value.address,
     port: Number(form.value.port),
-    api_key: form.value.api_key.trim(),
+    api_key: form.value.api_key,
     client_cert_pem: '',
     client_key_pem: '',
-    ca_cert_pem: form.value.ca_cert.trim(),
+    ca_cert_pem: form.value.ca_cert,
   }
 
   submitting.value = true
@@ -128,7 +140,7 @@ function handleClose() {
 
       <KFormField name="node-api-key" :label="t('nodes.api_key')" required hint="Shown when knode is installed">
         <template #default="{ fieldId }">
-          <KInput :id="fieldId" v-model="form.api_key" type="password" placeholder="Paste from knode install output" />
+          <KInput :id="fieldId" v-model="form.api_key" type="password" autocomplete="off" placeholder="Paste from knode install output" />
         </template>
       </KFormField>
 

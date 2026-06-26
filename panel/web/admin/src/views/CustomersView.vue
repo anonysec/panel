@@ -1062,7 +1062,7 @@ onMounted(async () => {
       <form class="slide-form" @submit.prevent="handleResellerSubmit">
         <KFormField name="reseller-username" :label="t('resellers.username')" required>
           <template #default="{ fieldId }">
-            <KInput :id="fieldId" v-model="resellerForm.username" placeholder="reseller_name" :disabled="!!editingResellerId" />
+            <KInput :id="fieldId" v-model="resellerForm.username" autocomplete="off" placeholder="reseller_name" :disabled="!!editingResellerId" />
           </template>
         </KFormField>
         <KFormField name="reseller-password" :label="t('resellers.password')" :required="!editingResellerId">
@@ -1071,6 +1071,7 @@ onMounted(async () => {
               :id="fieldId"
               v-model="resellerForm.password"
               type="password"
+              autocomplete="new-password"
               :placeholder="editingResellerId ? t('resellers.password_unchanged') : t('resellers.password_placeholder')"
             />
           </template>

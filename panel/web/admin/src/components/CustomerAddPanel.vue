@@ -72,13 +72,13 @@ async function handleSubmit() {
     <form class="entity-form" @submit.prevent="handleSubmit">
       <KFormField name="user-username" :label="t('user.username')" required :error="validationError && !form.username ? validationError : ''">
         <template #default="{ fieldId }">
-          <KInput :id="fieldId" v-model="form.username" :placeholder="t('user.username')" />
+          <KInput :id="fieldId" v-model="form.username" autocomplete="off" :placeholder="t('user.username')" />
         </template>
       </KFormField>
 
       <KFormField name="user-password" :label="t('user.password')" required :error="validationError && !form.password ? validationError : ''">
         <template #default="{ fieldId }">
-          <KInput :id="fieldId" v-model="form.password" type="password" :placeholder="t('user.password')" />
+          <KInput :id="fieldId" v-model="form.password" type="password" autocomplete="new-password" :placeholder="t('user.password')" />
         </template>
       </KFormField>
 

@@ -87,7 +87,7 @@ func (s *Server) createPlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	res, err := s.DB.Exec(`INSERT INTO plans(name,data_gb,speed_mbps,duration_days,price,billing_type,price_per_gb,price_per_day,disconnect_on_zero,allow_passwordless,is_active,sort_order) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
-		in.Name, in.DataGB, in.SpeedMbps, in.DurationDays, in.Price, in.BillingType, in.PricePerGB, in.PricePerDay, boolInt(in.DisconnectOnZero), boolInt(in.AllowPasswordless), boolInt(in.IsActive), in.SortOrder)
+		in.Name, in.DataGB, in.SpeedMbps, in.DurationDays, in.Price, in.BillingType, in.PricePerGB, in.PricePerDay, in.DisconnectOnZero, in.AllowPasswordless, in.IsActive, in.SortOrder)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
@@ -138,7 +138,7 @@ func (s *Server) updatePlan(w http.ResponseWriter, r *http.Request, id int64) {
 		return
 	}
 	if _, err := s.DB.Exec(`UPDATE plans SET name=$1,data_gb=$2,speed_mbps=$3,duration_days=$4,price=$5,billing_type=$6,price_per_gb=$7,price_per_day=$8,disconnect_on_zero=$9,allow_passwordless=$10,is_active=$11,sort_order=$12 WHERE id=$13`,
-		in.Name, in.DataGB, in.SpeedMbps, in.DurationDays, in.Price, in.BillingType, in.PricePerGB, in.PricePerDay, boolInt(in.DisconnectOnZero), boolInt(in.AllowPasswordless), boolInt(in.IsActive), in.SortOrder, id); err != nil {
+		in.Name, in.DataGB, in.SpeedMbps, in.DurationDays, in.Price, in.BillingType, in.PricePerGB, in.PricePerDay, in.DisconnectOnZero, in.AllowPasswordless, in.IsActive, in.SortOrder, id); err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}

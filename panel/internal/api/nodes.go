@@ -122,7 +122,7 @@ func (s *Server) createKnodeNode(w http.ResponseWriter, r *http.Request) {
 
 	// Default port
 	if in.Port == 0 {
-		in.Port = 62050
+		in.Port = 2083
 	}
 
 	// Build NodeInput for registry
@@ -218,7 +218,7 @@ func (s *Server) updateKnodeNode(w http.ResponseWriter, r *http.Request, id int6
 	}
 
 	if in.Port == 0 {
-		in.Port = 62050
+		in.Port = 2083
 	}
 
 	input := &noderegistry.NodeInput{

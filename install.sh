@@ -416,13 +416,18 @@ install_knode_docker() {
     return
   }
 
+  # Prompt for port
+  local knode_port
+  read -rp "$(echo -e "${CYAN}knode port [2083]: ${NC}")" knode_port </dev/tty
+  knode_port="${knode_port:-2083}"
+
   # Generate knode config
-  local api_key="$(gen_secret 16)"
+  local knode_api_key="$(gen_secret 16)"
   mkdir -p /etc/knode
   cat > /etc/knode/config.toml <<TOML
 [api]
-listen_addr = "0.0.0.0:62050"
-api_keys = ["${api_key}"]
+listen_addr = "0.0.0.0:${knode_port}"
+api_keys = ["${knode_api_key}"]
 enable_rest = false
 
 [logging]
@@ -443,10 +448,32 @@ TOML
 
   sleep 2
   if docker ps --format '{{.Names}}' | grep -qx knode; then
-    log "knode is ${GREEN}running${NC} on port 62050"
+    log "knode is ${GREEN}running${NC} on port ${knode_port}"
   else
     warn "knode container may have failed. Check: docker logs knode"
+    return
   fi
+
+  # Show node connection details for the panel
+  local server_ip
+  server_ip=$(curl -fsS4 --max-time 3 https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}')
+
+  echo ""
+  echo -e "${GREEN}═══════════════════════════════════════${NC}"
+  echo -e "${YELLOW}  knode — Paste these in your panel to add this node:${NC}"
+  echo -e "${GREEN}═══════════════════════════════════════${NC}"
+  echo ""
+  echo -e "  ${CYAN}Address:${NC}  ${server_ip}"
+  echo -e "  ${CYAN}Port:${NC}     ${knode_port}"
+  echo ""
+  echo -e "  ${CYAN}API Key:${NC}"
+  echo -e "  ${GREEN}${knode_api_key}${NC}"
+  echo ""
+  echo -e "  ${CYAN}Certificate:${NC}"
+  cat "/etc/knode/certs/api/cert.pem" 2>/dev/null || echo "  (certificate not yet generated — check: docker logs knode)"
+  echo ""
+  echo -e "${GREEN}═══════════════════════════════════════${NC}"
+  echo ""
 }
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -533,7 +560,7 @@ SVC
     mkdir -p /etc/knode
     cat > /etc/knode/config.toml <<TOML
 [api]
-listen_addr = "0.0.0.0:62050"
+listen_addr = "0.0.0.0:2083"
 api_keys = ["${knode_api_key}"]
 enable_rest = false
 

@@ -47,12 +47,12 @@ func (s *Server) landingMetaHandler() http.Handler {
 			return
 		}
 
-		// Check landing_settings enabled flag
+		// Check landing_settings enabled flag — if disabled, serve decoy page (no redirect for anonymous visitors)
 		var enabled bool
 		err := s.DB.QueryRow(`SELECT enabled FROM landing_settings WHERE id=1`).Scan(&enabled)
 		if err != nil || !enabled {
-			// Landing disabled — redirect to login
-			http.Redirect(w, r, "/portal/", http.StatusFound)
+			// Landing SPA disabled — serve server-side decoy page instead
+			s.serveDecoyLandingPage(w, r)
 			return
 		}
 

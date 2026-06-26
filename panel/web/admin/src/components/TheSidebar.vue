@@ -117,17 +117,35 @@ function initSortable() {
     const categoryId = el.getAttribute('data-category-id')!
     const sortable = Sortable.create(el, {
       animation: 150,
-      group: { name: categoryId, pull: false, put: false },  // constrain to own category
+      group: 'sidebar-items',  // Allow cross-category drag
       ghostClass: 'sortable-ghost',
       chosenClass: 'sortable-chosen',
       dragClass: 'sortable-drag',
       onEnd(evt) {
         if (evt.oldIndex == null || evt.newIndex == null) return
-        const items = getItemsForCategory(categoryId)
-        const itemIds = items.map(i => i.route)
-        const moved = itemIds.splice(evt.oldIndex, 1)[0]
-        itemIds.splice(evt.newIndex, 0, moved)
-        sidebarStore.reorderItems(categoryId, itemIds)
+
+        const fromCategoryId = evt.from.getAttribute('data-category-id')!
+        const toCategoryId = evt.to.getAttribute('data-category-id')!
+
+        if (fromCategoryId === toCategoryId) {
+          // Same category reorder
+          const items = getItemsForCategory(fromCategoryId)
+          const itemIds = items.map(i => i.route)
+          const moved = itemIds.splice(evt.oldIndex, 1)[0]
+          itemIds.splice(evt.newIndex, 0, moved)
+          sidebarStore.reorderItems(fromCategoryId, itemIds)
+        } else {
+          // Cross-category move
+          const fromItems = getItemsForCategory(fromCategoryId)
+          const fromIds = fromItems.map(i => i.route)
+          const [movedId] = fromIds.splice(evt.oldIndex, 1)
+          sidebarStore.reorderItems(fromCategoryId, fromIds)
+
+          const toItems = getItemsForCategory(toCategoryId)
+          const toIds = toItems.map(i => i.route)
+          toIds.splice(evt.newIndex, 0, movedId)
+          sidebarStore.reorderItems(toCategoryId, toIds)
+        }
       },
     })
     itemSortables.push(sortable)
