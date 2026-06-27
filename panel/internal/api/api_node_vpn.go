@@ -35,7 +35,7 @@ func (s *Server) nodeVPNConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) getNodeVPNConfigs(w http.ResponseWriter, nodeID int64) {
-	rows, err := s.DB.Query(`SELECT id, node_id, protocol, enabled, port, COALESCE(network,''), extra_json FROM node_vpn_configs WHERE node_id=$1 ORDER BY FIELD(protocol,'openvpn','l2tp','ikev2','ssh','wireguard','cisco_ipsec')`, nodeID)
+	rows, err := s.DB.Query(`SELECT id, node_id, protocol, enabled, port, COALESCE(network,''), extra_json FROM node_vpn_configs WHERE node_id=$1 ORDER BY CASE protocol WHEN 'openvpn' THEN 1 WHEN 'l2tp' THEN 2 WHEN 'ikev2' THEN 3 WHEN 'ssh' THEN 4 WHEN 'wireguard' THEN 5 WHEN 'cisco_ipsec' THEN 6 ELSE 7 END`, nodeID)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
