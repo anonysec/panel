@@ -253,6 +253,11 @@ const navGroups = computed<NavGroup[]>(() => {
         label: t('nav.services'),
         icon: 'services',
       },
+      {
+        route: 'cores',
+        label: 'Cores',
+        icon: 'cores',
+      },
     )
   }
 
@@ -352,6 +357,9 @@ function isActive(route: string): boolean {
   if (route === 'nodes') {
     return ['nodes', 'node-detail', 'node-compare'].includes(props.currentRoute)
   }
+  if (route === 'cores') {
+    return props.currentRoute === 'cores'
+  }
   if (route === 'tickets') {
     return ['tickets', 'ticket-detail'].includes(props.currentRoute)
   }
@@ -437,6 +445,12 @@ function handleToggleTheme() {
               <rect x="3" y="14" width="18" height="6" rx="1" />
               <circle cx="7" cy="7" r="1" fill="currentColor" />
               <circle cx="7" cy="17" r="1" fill="currentColor" />
+            </svg>
+            <!-- Cores icon (shield with network) -->
+            <svg v-else-if="item.icon === 'cores'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+              <circle cx="12" cy="11" r="2" />
+              <path d="M12 9V6M12 13v3M10 11H7M14 11h3" />
             </svg>
             <!-- Plans icon -->
             <svg v-else-if="item.icon === 'plans'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
