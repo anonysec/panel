@@ -121,8 +121,17 @@ func (cm *CoreManager) DisableCore(ctx context.Context, nodeID int64, coreType s
 // AllCoreStatuses calls the AllCoreStatuses RPC on the target knode and returns
 // the current state of all cores. It also synchronizes the results to the local
 // node_services table. This is called during initial connection setup (Requirement 4.5).
-func (cm *CoreManager) AllCoreStatuses(ctx context.Context, nodeID int64) ([]CoreStatus, error) {
-	statuses, err := cm.callAllCoreStatuses(ctx, nodeID)
+func (cm *CoreManager) AllCoreStatuses(ctx context.Context, nodeID int64) (statuses []CoreStatus, err error) {
+	// Recover from panics caused by broken gRPC connections
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("[knode] AllCoreStatuses: recovered panic for node %d: %v", nodeID, r)
+			statuses = nil
+			err = fmt.Errorf("gRPC connection error (recovered panic): %v", r)
+		}
+	}()
+
+	statuses, err = cm.callAllCoreStatuses(ctx, nodeID)
 	if err != nil {
 		log.Printf("[knode] AllCoreStatuses failed for node %d: %v", nodeID, err)
 		return nil, err
