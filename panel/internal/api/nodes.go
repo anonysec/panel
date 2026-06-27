@@ -171,6 +171,9 @@ func (s *Server) createKnodeNode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Create default VPN protocol configs for the new node
+	s.insertDefaultVpnConfigs(id)
+
 	// Establish the persistent gRPC connection
 	nodeCfg, cfgErr := s.buildNodeConfigFromInput(id, in)
 	if cfgErr == nil {
@@ -432,4 +435,25 @@ func (s *Server) getNodeSyncFailuresCount(ctx context.Context, nodeID int64) int
 		return 0
 	}
 	return count
+}
+
+// insertDefaultVpnConfigs inserts default VPN protocol configurations for a newly created node.
+// All protocols start as disabled with standard ports and sensible default extra_json.
+func (s *Server) insertDefaultVpnConfigs(nodeID int64) {
+	defaults := []struct {
+		protocol string
+		port     int
+		network  string
+		extra    string
+	}{
+		{"openvpn", 1194, "10.8.0.0/20", `{"transport":"udp","cipher":"AES-256-GCM","tls_mode":"tls-crypt","dns1":"8.8.8.8","dns2":"8.8.4.4"}`},
+		{"l2tp", 1701, "10.9.0.0/20", `{"ipsec_mode":"ipsec","psk":"","auth_method":"CHAP","dns1":"8.8.8.8","dns2":"8.8.4.4"}`},
+		{"ikev2", 500, "10.10.0.0/20", `{"auth_type":"psk","psk":"","dns1":"8.8.8.8","dns2":"8.8.4.4"}`},
+		{"ssh", 2222, "", `{"listen_address":"0.0.0.0","key_type":"ed25519","max_sessions":10}`},
+		{"wireguard", 51820, "10.66.0.0/20", `{"dns_1":"1.1.1.1","dns_2":"8.8.8.8"}`},
+	}
+	for _, dc := range defaults {
+		_, _ = s.DB.Exec(`INSERT INTO node_vpn_configs(node_id, protocol, enabled, port, network, extra_json) VALUES($1, $2, 0, $3, $4, $5) ON CONFLICT (node_id, protocol) DO NOTHING`,
+			nodeID, dc.protocol, dc.port, dc.network, dc.extra)
+	}
 }
