@@ -331,3 +331,27 @@ func markNodeMetricsState(db *sql.DB, nodeID int64, state string) {
 		log.Printf("[grpc-client] Failed to update metrics_state for node %d: %v", nodeID, err)
 	}
 }
+
+// RegisterMetricsStateSync registers an OnStatusChange callback on the pool that
+// updates the node_status.metrics_state column in the database whenever a node
+// transitions between states. This ensures the database reflects the live state:
+//   - online: metrics_state = "streaming" (set by updateNodeStatus on each event)
+//   - stale:  metrics_state = "stale"
+//   - offline: metrics_state = "offline"
+//
+// Requirements: 7.3 (panel updates LastMetrics to prevent stale),
+// 7.4 (stream disconnect triggers offline state and reconnection).
+func RegisterMetricsStateSync(pool Pool, store dbstore.Store) {
+	db := store.DB()
+	pool.OnStatusChange(func(nodeID int64, old, new NodeStatus) {
+		switch new {
+		case StatusStale:
+			markNodeMetricsState(db, nodeID, "stale")
+		case StatusOffline:
+			markNodeMetricsState(db, nodeID, "offline")
+		case StatusOnline:
+			// When a node comes back online, metrics_state will be set to
+			// "streaming" by the next ProcessEvent call — no action needed here.
+		}
+	})
+}

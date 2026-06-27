@@ -1,24 +1,22 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import type { CoreInfo } from './types'
 import KButton from '@koris/ui/KButton.vue'
 import KInput from '@koris/ui/KInput.vue'
 import KStatusPill from '@koris/ui/KStatusPill.vue'
 
 const props = defineProps<{
+  core: CoreInfo
   nodeId: number
-  coreType: string
-  status: 'running' | 'stopped' | 'error'
-  port?: number
-  sessions?: number
-  pid?: number
 }>()
 
 const emit = defineEmits<{
   (e: 'enable', port: number): void
   (e: 'disable'): void
+  (e: 'restart', coreType: string): void
 }>()
 
-const enablePort = ref(1194)
+const enablePort = ref(props.core.port || 1194)
 
 const protocolIcons: Record<string, string> = {
   openvpn: '🔐',
@@ -40,8 +38,14 @@ const protocolNames: Record<string, string> = {
   xray: 'Xray',
 }
 
-const icon = computed(() => protocolIcons[props.coreType] || '📦')
-const displayName = computed(() => protocolNames[props.coreType] || props.coreType)
+const icon = computed(() => protocolIcons[props.core.type] || '📦')
+const displayName = computed(() => protocolNames[props.core.type] || props.core.type)
+
+/** Map core state to KStatusPill-compatible status string */
+const pillStatus = computed(() => {
+  if (props.core.state === 'crashed') return 'failed'
+  return props.core.state
+})
 
 const portValid = computed(() => {
   const p = Number(enablePort.value)
@@ -53,46 +57,59 @@ function handleEnable() {
     emit('enable', Number(enablePort.value))
   }
 }
+
+function handleRestart() {
+  emit('restart', props.core.type)
+}
 </script>
 
 <template>
-  <div class="core-card" :class="`core-card--${status}`">
+  <div
+    class="core-card"
+    :class="`core-card--${core.state}`"
+    role="region"
+    :aria-label="`${displayName} core, status ${core.state}`"
+  >
     <div class="core-card__header">
       <span class="core-card__icon" aria-hidden="true">{{ icon }}</span>
       <span class="core-card__name">{{ displayName }}</span>
-      <KStatusPill :status="status" size="sm" />
+      <KStatusPill :status="pillStatus" size="sm" />
     </div>
 
     <!-- Running state -->
-    <template v-if="status === 'running'">
+    <template v-if="core.state === 'running'">
       <div class="core-card__details">
-        <span v-if="port" class="core-card__detail">
-          Port: <code>{{ port }}</code>
+        <span class="core-card__detail">
+          Port: <code>{{ core.port }}</code>
         </span>
-        <span v-if="sessions != null" class="core-card__detail">
-          Sessions: <strong>{{ sessions }}</strong>
-        </span>
-        <span v-if="pid" class="core-card__detail">
-          PID: <code>{{ pid }}</code>
+        <span class="core-card__detail">
+          Sessions: <strong>{{ core.activeSessions }}</strong>
         </span>
       </div>
-      <KButton variant="danger" size="sm" @click="emit('disable')">
+      <KButton
+        variant="danger"
+        size="sm"
+        aria-label="Disable core"
+        @click="emit('disable')"
+      >
         Disable
       </KButton>
     </template>
 
     <!-- Stopped state -->
-    <template v-else-if="status === 'stopped'">
+    <template v-else-if="core.state === 'stopped'">
       <div class="core-card__enable-form">
         <KInput
           v-model="enablePort"
           type="number"
           placeholder="Port"
+          aria-label="Port number"
         />
         <KButton
           variant="primary"
           size="sm"
           :disabled="!portValid"
+          aria-label="Enable core"
           @click="handleEnable"
         >
           Enable
@@ -100,12 +117,32 @@ function handleEnable() {
       </div>
     </template>
 
-    <!-- Error state -->
+    <!-- Error / Crashed state -->
     <template v-else>
-      <p class="core-card__error-text">Core encountered an error</p>
-      <KButton variant="danger" size="sm" @click="emit('disable')">
-        Disable
-      </KButton>
+      <p v-if="core.lastError" class="core-card__error-text">
+        {{ core.lastError }}
+      </p>
+      <p v-else class="core-card__error-text">
+        Core encountered an error
+      </p>
+      <div class="core-card__actions">
+        <KButton
+          variant="primary"
+          size="sm"
+          aria-label="Restart core"
+          @click="handleRestart"
+        >
+          Restart
+        </KButton>
+        <KButton
+          variant="danger"
+          size="sm"
+          aria-label="Disable core"
+          @click="emit('disable')"
+        >
+          Disable
+        </KButton>
+      </div>
     </template>
   </div>
 </template>
@@ -129,7 +166,8 @@ function handleEnable() {
   border-left: 3px solid var(--color-muted);
 }
 
-.core-card--error {
+.core-card--crashed,
+.core-card--unknown {
   border-left: 3px solid var(--color-danger);
 }
 
@@ -180,5 +218,11 @@ function handleEnable() {
   margin: 0;
   font-size: var(--text-sm);
   color: var(--color-danger);
+  word-break: break-word;
+}
+
+.core-card__actions {
+  display: flex;
+  gap: var(--space-2);
 }
 </style>

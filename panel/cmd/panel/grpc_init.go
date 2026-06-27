@@ -129,6 +129,10 @@ func initGRPCSubsystem(ctx context.Context, database *sql.DB, cfg config.Config,
 	metricsConsumer := grpcclient.NewMetricsConsumerFromPool(store, pool)
 	log.Info("grpc-client", "metrics consumer ready")
 
+	// 6a. Register metrics_state database sync on status transitions.
+	// This ensures node_status.metrics_state reflects stale/offline when streams disconnect.
+	grpcclient.RegisterMetricsStateSync(pool, store)
+
 	// 6b. Start metrics streams for all connected nodes.
 	for _, rec := range nodes {
 		if pool.Status(rec.ID) == grpcclient.StatusOnline {

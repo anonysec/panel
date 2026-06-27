@@ -86,7 +86,7 @@ func TestTicketLifecycle_Create(t *testing.T) {
 				mock.ExpectExec("INSERT INTO tickets").
 					WithArgs(tt.customerID, tt.subject, expectCategory(tt.category), expectPriority(tt.priority)).
 					WillReturnResult(sqlmock.NewResult(42, 1))
-				mock.ExpectQuery("SELECT COALESCE\\(username, ''\\) FROM customers WHERE id = \\?").
+				mock.ExpectQuery(`SELECT COALESCE\(username, ''\) FROM customers WHERE id = \$1`).
 					WithArgs(tt.customerID).
 					WillReturnRows(sqlmock.NewRows([]string{"username"}).AddRow("testuser"))
 				mock.ExpectExec("INSERT INTO ticket_messages").
@@ -214,11 +214,11 @@ func TestTicketLifecycle_Reply(t *testing.T) {
 					if tt.senderType == "customer" {
 						expectedStatus = "open"
 					}
-					mock.ExpectExec("UPDATE tickets SET status = \\?, updated_at = NOW\\(\\) WHERE id = \\? AND status != 'closed'").
+					mock.ExpectExec(`UPDATE tickets SET status = \$1, updated_at = NOW\(\) WHERE id = \$2 AND status != 'closed'`).
 						WithArgs(expectedStatus, tt.ticketID).
 						WillReturnResult(sqlmock.NewResult(0, 1))
 				} else {
-					mock.ExpectExec("UPDATE tickets SET updated_at = NOW\\(\\) WHERE id = \\?").
+					mock.ExpectExec(`UPDATE tickets SET updated_at = NOW\(\) WHERE id = \$1`).
 						WithArgs(tt.ticketID).
 						WillReturnResult(sqlmock.NewResult(0, 1))
 				}
@@ -427,7 +427,7 @@ func TestTicketLifecycle_Rate(t *testing.T) {
 
 			// Only set up mock for valid rating range
 			if tt.rating >= 1 && tt.rating <= 5 {
-				mock.ExpectQuery("SELECT status FROM tickets WHERE id = \\?").
+				mock.ExpectQuery(`SELECT status FROM tickets WHERE id = \$1`).
 					WithArgs(tt.ticketID).
 					WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow(tt.status))
 
@@ -518,7 +518,7 @@ func TestAutoAssign(t *testing.T) {
 			ctx := context.Background()
 
 			// Step 1: Get customer_id for the ticket
-			mock.ExpectQuery("SELECT customer_id FROM tickets WHERE id = \\?").
+			mock.ExpectQuery(`SELECT customer_id FROM tickets WHERE id = \$1`).
 				WithArgs(tt.ticketID).
 				WillReturnRows(sqlmock.NewRows([]string{"customer_id"}).AddRow(tt.customerID))
 
@@ -528,7 +528,7 @@ func TestAutoAssign(t *testing.T) {
 					WithArgs(tt.customerID, tt.ticketID).
 					WillReturnRows(sqlmock.NewRows([]string{"assigned_to"}).AddRow(tt.prevAdmin))
 				// Step 3: Assign to previous handler
-				mock.ExpectExec("UPDATE tickets SET assigned_to = \\?, updated_at = NOW\\(\\) WHERE id = \\?").
+				mock.ExpectExec(`UPDATE tickets SET assigned_to = \$1, updated_at = NOW\(\) WHERE id = \$2`).
 					WithArgs(tt.prevAdmin, tt.ticketID).
 					WillReturnResult(sqlmock.NewResult(0, 1))
 			} else {
@@ -541,7 +541,7 @@ func TestAutoAssign(t *testing.T) {
 				if tt.roundRobin != "" {
 					mock.ExpectQuery("SELECT a.username FROM admins").
 						WillReturnRows(sqlmock.NewRows([]string{"username"}).AddRow(tt.roundRobin))
-					mock.ExpectExec("UPDATE tickets SET assigned_to = \\?, updated_at = NOW\\(\\) WHERE id = \\?").
+					mock.ExpectExec(`UPDATE tickets SET assigned_to = \$1, updated_at = NOW\(\) WHERE id = \$2`).
 						WithArgs(tt.roundRobin, tt.ticketID).
 						WillReturnResult(sqlmock.NewResult(0, 1))
 				} else {
@@ -595,7 +595,7 @@ func TestNotificationTriggers(t *testing.T) {
 		mock.ExpectExec("INSERT INTO tickets").
 			WithArgs(int64(1), "Test", "general", "medium").
 			WillReturnResult(sqlmock.NewResult(1, 1))
-		mock.ExpectQuery("SELECT COALESCE\\(username, ''\\) FROM customers WHERE id = \\?").
+		mock.ExpectQuery(`SELECT COALESCE\(username, ''\) FROM customers WHERE id = \$1`).
 			WithArgs(int64(1)).
 			WillReturnRows(sqlmock.NewRows([]string{"username"}).AddRow("customer1"))
 		mock.ExpectExec("INSERT INTO ticket_messages").
@@ -737,7 +737,7 @@ func TestTicketList(t *testing.T) {
 	now := time.Now()
 
 	// Count query
-	mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM tickets").
+	mock.ExpectQuery(`SELECT COUNT\(\*\) FROM tickets`).
 		WithArgs("open").
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(2))
 

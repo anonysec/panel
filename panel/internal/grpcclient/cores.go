@@ -293,6 +293,44 @@ func (cm *CoreManager) upsertCoreStatus(ctx context.Context, nodeID int64, coreT
 	return err
 }
 
+// RestartCore calls the Restart RPC on the target knode for a specific core.
+// This is used by the "Force Restart" panel action which bypasses the health
+// checker's auto-restart rate limit (Requirement 10.4).
+func (cm *CoreManager) RestartCore(ctx context.Context, nodeID int64, coreType string) error {
+	node, err := cm.pool.Get(nodeID)
+	if err != nil {
+		return fmt.Errorf("node not found in pool: %w", err)
+	}
+
+	if node.Status != StatusOnline {
+		return fmt.Errorf("node %q is %s, cannot restart core", node.NodeName, node.Status)
+	}
+
+	client := knodepb.NewKnodeServiceClient(node.Conn)
+
+	req := &knodepb.RestartRequest{
+		Core: coreType,
+	}
+
+	resp, err := client.Restart(ctx, req)
+	if err != nil {
+		log.Printf("[knode] RestartCore failed for core %q on node %d: %v", coreType, nodeID, err)
+		return err
+	}
+
+	if !resp.GetSuccess() {
+		return fmt.Errorf("restart failed: %s", resp.GetMessage())
+	}
+
+	// Update node_services to reflect running state after restart
+	if err := cm.upsertCoreStatus(ctx, nodeID, coreType, "running"); err != nil {
+		log.Printf("[knode] RestartCore: failed to update node_services for core %q on node %d: %v", coreType, nodeID, err)
+	}
+
+	log.Printf("[knode] RestartCore: restarted core %q on node %d", coreType, nodeID)
+	return nil
+}
+
 // SyncCoreStatuses is a convenience method that calls AllCoreStatuses and also
 // removes any stale entries from node_services that are no longer reported by the node.
 // This provides a full reconciliation during initial connection setup.

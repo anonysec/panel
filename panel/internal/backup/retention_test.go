@@ -50,9 +50,9 @@ func TestApplyRetention_DeletesOldestBeyondLimit(t *testing.T) {
 		WillReturnRows(rows)
 
 	// Expect DELETE for the 2 oldest backups (ids 2 and 1)
-	mock.ExpectExec(`DELETE FROM backups WHERE id=\?`).WithArgs(int64(2)).
+	mock.ExpectExec(`DELETE FROM backups WHERE id=\$1`).WithArgs(int64(2)).
 		WillReturnResult(sqlmock.NewResult(0, 1))
-	mock.ExpectExec(`DELETE FROM backups WHERE id=\?`).WithArgs(int64(1)).
+	mock.ExpectExec(`DELETE FROM backups WHERE id=\$1`).WithArgs(int64(1)).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	// Create service with RetentionCount=3

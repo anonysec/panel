@@ -274,3 +274,105 @@ func TestNodeStatusFromEvent(t *testing.T) {
 		t.Errorf("expected 2 cores, got %v", result["cores"])
 	}
 }
+
+func TestRegisterMetricsStateSync_StaleUpdatesDB(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("failed to create sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	store := &mockStore{db: db}
+	pool := &connPool{
+		connections: map[int64]*nodeEntry{
+			1: {
+				conn: &NodeConnection{
+					NodeID:   1,
+					NodeName: "test-node",
+					Status:   StatusOnline,
+				},
+			},
+		},
+	}
+
+	RegisterMetricsStateSync(pool, store)
+
+	// Expect the metrics_state update when node transitions to stale
+	mock.ExpectExec(`UPDATE node_status SET metrics_state`).
+		WithArgs("stale", int64(1)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	// Trigger the transition
+	pool.SetStatus(1, StatusStale)
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet sqlmock expectations: %v", err)
+	}
+}
+
+func TestRegisterMetricsStateSync_OfflineUpdatesDB(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("failed to create sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	store := &mockStore{db: db}
+	pool := &connPool{
+		connections: map[int64]*nodeEntry{
+			2: {
+				conn: &NodeConnection{
+					NodeID:   2,
+					NodeName: "test-node-2",
+					Status:   StatusStale,
+				},
+			},
+		},
+	}
+
+	RegisterMetricsStateSync(pool, store)
+
+	// Expect the metrics_state update when node transitions to offline
+	mock.ExpectExec(`UPDATE node_status SET metrics_state`).
+		WithArgs("offline", int64(2)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	// Trigger the transition
+	pool.SetStatus(2, StatusOffline)
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet sqlmock expectations: %v", err)
+	}
+}
+
+func TestRegisterMetricsStateSync_OnlineDoesNotUpdateDB(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("failed to create sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	store := &mockStore{db: db}
+	pool := &connPool{
+		connections: map[int64]*nodeEntry{
+			3: {
+				conn: &NodeConnection{
+					NodeID:   3,
+					NodeName: "test-node-3",
+					Status:   StatusOffline,
+				},
+			},
+		},
+	}
+
+	RegisterMetricsStateSync(pool, store)
+
+	// No database expectations — online transition should NOT write metrics_state
+
+	// Trigger the transition
+	pool.SetStatus(3, StatusOnline)
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet sqlmock expectations: %v", err)
+	}
+}

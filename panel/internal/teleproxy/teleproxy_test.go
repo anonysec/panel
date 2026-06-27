@@ -133,7 +133,7 @@ func TestRotateSecret(t *testing.T) {
 
 			svc := New(db)
 
-			mock.ExpectExec("UPDATE telegram_proxies SET secret = \\?, share_link = NULL, tg_link = NULL WHERE id = \\?").
+			mock.ExpectExec(`UPDATE telegram_proxies SET secret = \$1, share_link = NULL, tg_link = NULL WHERE id = \$2`).
 				WithArgs(sqlmock.AnyArg(), tt.proxyID).
 				WillReturnResult(sqlmock.NewResult(0, tt.rowsAff))
 

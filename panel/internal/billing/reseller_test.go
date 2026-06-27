@@ -22,11 +22,11 @@ func TestPurchaseResellerCredit_Success(t *testing.T) {
 	var notified []string
 	engine.SetNotify(func(msg string) { notified = append(notified, msg) })
 
-	mock.ExpectQuery("SELECT username FROM admins WHERE id = \\? AND role = 'reseller'").
+	mock.ExpectQuery(`SELECT username FROM admins WHERE id = \$1 AND role = 'reseller'`).
 		WithArgs(int64(1)).
 		WillReturnRows(sqlmock.NewRows([]string{"username"}).AddRow("reseller1"))
 
-	mock.ExpectExec("UPDATE admins SET credit = credit \\+ \\? WHERE id = \\?").
+	mock.ExpectExec(`UPDATE admins SET credit = credit \+ \$1 WHERE id = \$2`).
 		WithArgs(500.00, int64(1)).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
@@ -72,7 +72,7 @@ func TestPurchaseResellerCredit_ResellerNotFound(t *testing.T) {
 
 	engine := New(db)
 
-	mock.ExpectQuery("SELECT username FROM admins WHERE id = \\? AND role = 'reseller'").
+	mock.ExpectQuery(`SELECT username FROM admins WHERE id = \$1 AND role = 'reseller'`).
 		WithArgs(int64(99)).
 		WillReturnRows(sqlmock.NewRows([]string{"username"}))
 
@@ -98,22 +98,22 @@ func TestGetResellerMargin_Success(t *testing.T) {
 	from := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	to := time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC)
 
-	mock.ExpectQuery("SELECT username FROM admins WHERE id = \\? AND role = 'reseller'").
+	mock.ExpectQuery(`SELECT username FROM admins WHERE id = \$1 AND role = 'reseller'`).
 		WithArgs(int64(1)).
 		WillReturnRows(sqlmock.NewRows([]string{"username"}).AddRow("reseller1"))
 
 	// Total purchased (allocations)
-	mock.ExpectQuery("SELECT COALESCE\\(SUM\\(amount\\), 0\\) FROM reseller_transactions").
+	mock.ExpectQuery(`SELECT COALESCE\(SUM\(amount\), 0\) FROM reseller_transactions`).
 		WithArgs("reseller1", from, to).
 		WillReturnRows(sqlmock.NewRows([]string{"total"}).AddRow(1000.00))
 
 	// Total sold (deductions, stored as negative)
-	mock.ExpectQuery("SELECT COALESCE\\(-SUM\\(amount\\), 0\\) FROM reseller_transactions").
+	mock.ExpectQuery(`SELECT COALESCE\(-SUM\(amount\), 0\) FROM reseller_transactions`).
 		WithArgs("reseller1", from, to).
 		WillReturnRows(sqlmock.NewRows([]string{"total"}).AddRow(1500.00))
 
 	// Active customer count
-	mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM customers").
+	mock.ExpectQuery(`SELECT COUNT\(\*\) FROM customers`).
 		WithArgs("reseller1").
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(10))
 
@@ -157,7 +157,7 @@ func TestGetResellerMargin_ResellerNotFound(t *testing.T) {
 
 	engine := New(db)
 
-	mock.ExpectQuery("SELECT username FROM admins WHERE id = \\? AND role = 'reseller'").
+	mock.ExpectQuery(`SELECT username FROM admins WHERE id = \$1 AND role = 'reseller'`).
 		WithArgs(int64(99)).
 		WillReturnRows(sqlmock.NewRows([]string{"username"}))
 
@@ -183,19 +183,19 @@ func TestGetResellerMargin_ZeroSold(t *testing.T) {
 	from := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	to := time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC)
 
-	mock.ExpectQuery("SELECT username FROM admins WHERE id = \\? AND role = 'reseller'").
+	mock.ExpectQuery(`SELECT username FROM admins WHERE id = \$1 AND role = 'reseller'`).
 		WithArgs(int64(1)).
 		WillReturnRows(sqlmock.NewRows([]string{"username"}).AddRow("reseller1"))
 
-	mock.ExpectQuery("SELECT COALESCE\\(SUM\\(amount\\), 0\\) FROM reseller_transactions").
+	mock.ExpectQuery(`SELECT COALESCE\(SUM\(amount\), 0\) FROM reseller_transactions`).
 		WithArgs("reseller1", from, to).
 		WillReturnRows(sqlmock.NewRows([]string{"total"}).AddRow(500.00))
 
-	mock.ExpectQuery("SELECT COALESCE\\(-SUM\\(amount\\), 0\\) FROM reseller_transactions").
+	mock.ExpectQuery(`SELECT COALESCE\(-SUM\(amount\), 0\) FROM reseller_transactions`).
 		WithArgs("reseller1", from, to).
 		WillReturnRows(sqlmock.NewRows([]string{"total"}).AddRow(0.00))
 
-	mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM customers").
+	mock.ExpectQuery(`SELECT COUNT\(\*\) FROM customers`).
 		WithArgs("reseller1").
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
 
@@ -225,27 +225,27 @@ func TestResellerCreateSubscription_Success(t *testing.T) {
 	engine.SetNotify(func(msg string) { notified = append(notified, msg) })
 
 	// Fetch reseller
-	mock.ExpectQuery("SELECT username, COALESCE\\(credit, 0\\) FROM admins WHERE id = \\? AND role = 'reseller'").
+	mock.ExpectQuery(`SELECT username, COALESCE\(credit, 0\) FROM admins WHERE id = \$1 AND role = 'reseller'`).
 		WithArgs(int64(1)).
 		WillReturnRows(sqlmock.NewRows([]string{"username", "credit"}).AddRow("reseller1", 500.00))
 
 	// Verify customer belongs to reseller
-	mock.ExpectQuery("SELECT username FROM customers WHERE id = \\? AND created_by = \\? AND deleted_at IS NULL").
+	mock.ExpectQuery(`SELECT username FROM customers WHERE id = \$1 AND created_by = \$2 AND deleted_at IS NULL`).
 		WithArgs(int64(10), "reseller1").
 		WillReturnRows(sqlmock.NewRows([]string{"username"}).AddRow("customer1"))
 
 	// Check plan is allowed
-	mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM reseller_allowed_plans WHERE reseller_id = \\? AND plan_id = \\?").
+	mock.ExpectQuery(`SELECT COUNT\(\*\) FROM reseller_allowed_plans WHERE reseller_id = \$1 AND plan_id = \$2`).
 		WithArgs(int64(1), int64(5)).
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
 
 	// Fetch plan details
-	mock.ExpectQuery("SELECT name, price, data_gb, duration_days FROM plans WHERE id = \\? AND is_active = 1").
+	mock.ExpectQuery(`SELECT name, price, data_gb, duration_days FROM plans WHERE id = \$1 AND is_active = TRUE`).
 		WithArgs(int64(5)).
 		WillReturnRows(sqlmock.NewRows([]string{"name", "price", "data_gb", "duration_days"}).AddRow("Basic VPN", 100.00, 50.0, 30))
 
 	// Deduct credit
-	mock.ExpectExec("UPDATE admins SET credit = credit - \\? WHERE id = \\?").
+	mock.ExpectExec(`UPDATE admins SET credit = credit - \$`).
 		WithArgs(100.00, int64(1)).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
@@ -255,7 +255,7 @@ func TestResellerCreateSubscription_Success(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	// Assign plan to customer
-	mock.ExpectExec("UPDATE customers SET plan_id = \\?, data_limit_gb = \\?, status = 'active' WHERE id = \\?").
+	mock.ExpectExec(`UPDATE customers SET plan_id = \$`).
 		WithArgs(int64(5), 50.0, int64(10)).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
@@ -282,19 +282,19 @@ func TestResellerCreateSubscription_InsufficientCredit(t *testing.T) {
 
 	engine := New(db)
 
-	mock.ExpectQuery("SELECT username, COALESCE\\(credit, 0\\) FROM admins WHERE id = \\? AND role = 'reseller'").
+	mock.ExpectQuery(`SELECT username, COALESCE\(credit, 0\) FROM admins WHERE id = \$1 AND role = 'reseller'`).
 		WithArgs(int64(1)).
 		WillReturnRows(sqlmock.NewRows([]string{"username", "credit"}).AddRow("reseller1", 50.00))
 
-	mock.ExpectQuery("SELECT username FROM customers WHERE id = \\? AND created_by = \\? AND deleted_at IS NULL").
+	mock.ExpectQuery(`SELECT username FROM customers WHERE id = \$1 AND created_by = \$2 AND deleted_at IS NULL`).
 		WithArgs(int64(10), "reseller1").
 		WillReturnRows(sqlmock.NewRows([]string{"username"}).AddRow("customer1"))
 
-	mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM reseller_allowed_plans WHERE reseller_id = \\? AND plan_id = \\?").
+	mock.ExpectQuery(`SELECT COUNT\(\*\) FROM reseller_allowed_plans WHERE reseller_id = \$1 AND plan_id = \$2`).
 		WithArgs(int64(1), int64(5)).
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
 
-	mock.ExpectQuery("SELECT name, price, data_gb, duration_days FROM plans WHERE id = \\? AND is_active = 1").
+	mock.ExpectQuery(`SELECT name, price, data_gb, duration_days FROM plans WHERE id = \$1 AND is_active = TRUE`).
 		WithArgs(int64(5)).
 		WillReturnRows(sqlmock.NewRows([]string{"name", "price", "data_gb", "duration_days"}).AddRow("Premium VPN", 200.00, 100.0, 30))
 
@@ -317,16 +317,16 @@ func TestResellerCreateSubscription_PlanNotAllowed(t *testing.T) {
 
 	engine := New(db)
 
-	mock.ExpectQuery("SELECT username, COALESCE\\(credit, 0\\) FROM admins WHERE id = \\? AND role = 'reseller'").
+	mock.ExpectQuery(`SELECT username, COALESCE\(credit, 0\) FROM admins WHERE id = \$1 AND role = 'reseller'`).
 		WithArgs(int64(1)).
 		WillReturnRows(sqlmock.NewRows([]string{"username", "credit"}).AddRow("reseller1", 500.00))
 
-	mock.ExpectQuery("SELECT username FROM customers WHERE id = \\? AND created_by = \\? AND deleted_at IS NULL").
+	mock.ExpectQuery(`SELECT username FROM customers WHERE id = \$1 AND created_by = \$2 AND deleted_at IS NULL`).
 		WithArgs(int64(10), "reseller1").
 		WillReturnRows(sqlmock.NewRows([]string{"username"}).AddRow("customer1"))
 
 	// Plan not allowed
-	mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM reseller_allowed_plans WHERE reseller_id = \\? AND plan_id = \\?").
+	mock.ExpectQuery(`SELECT COUNT\(\*\) FROM reseller_allowed_plans WHERE reseller_id = \$1 AND plan_id = \$2`).
 		WithArgs(int64(1), int64(99)).
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
 
@@ -349,12 +349,12 @@ func TestResellerCreateSubscription_CustomerNotOwned(t *testing.T) {
 
 	engine := New(db)
 
-	mock.ExpectQuery("SELECT username, COALESCE\\(credit, 0\\) FROM admins WHERE id = \\? AND role = 'reseller'").
+	mock.ExpectQuery(`SELECT username, COALESCE\(credit, 0\) FROM admins WHERE id = \$1 AND role = 'reseller'`).
 		WithArgs(int64(1)).
 		WillReturnRows(sqlmock.NewRows([]string{"username", "credit"}).AddRow("reseller1", 500.00))
 
 	// Customer not found (not owned by this reseller)
-	mock.ExpectQuery("SELECT username FROM customers WHERE id = \\? AND created_by = \\? AND deleted_at IS NULL").
+	mock.ExpectQuery(`SELECT username FROM customers WHERE id = \$1 AND created_by = \$2 AND deleted_at IS NULL`).
 		WithArgs(int64(99), "reseller1").
 		WillReturnRows(sqlmock.NewRows([]string{"username"}))
 
@@ -379,25 +379,25 @@ func TestResellerCreateSubscription_FreePlan(t *testing.T) {
 	var notified []string
 	engine.SetNotify(func(msg string) { notified = append(notified, msg) })
 
-	mock.ExpectQuery("SELECT username, COALESCE\\(credit, 0\\) FROM admins WHERE id = \\? AND role = 'reseller'").
+	mock.ExpectQuery(`SELECT username, COALESCE\(credit, 0\) FROM admins WHERE id = \$1 AND role = 'reseller'`).
 		WithArgs(int64(1)).
 		WillReturnRows(sqlmock.NewRows([]string{"username", "credit"}).AddRow("reseller1", 0.00))
 
-	mock.ExpectQuery("SELECT username FROM customers WHERE id = \\? AND created_by = \\? AND deleted_at IS NULL").
+	mock.ExpectQuery(`SELECT username FROM customers WHERE id = \$1 AND created_by = \$2 AND deleted_at IS NULL`).
 		WithArgs(int64(10), "reseller1").
 		WillReturnRows(sqlmock.NewRows([]string{"username"}).AddRow("customer1"))
 
-	mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM reseller_allowed_plans WHERE reseller_id = \\? AND plan_id = \\?").
+	mock.ExpectQuery(`SELECT COUNT\(\*\) FROM reseller_allowed_plans WHERE reseller_id = \$1 AND plan_id = \$2`).
 		WithArgs(int64(1), int64(2)).
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
 
 	// Free plan (price=0)
-	mock.ExpectQuery("SELECT name, price, data_gb, duration_days FROM plans WHERE id = \\? AND is_active = 1").
+	mock.ExpectQuery(`SELECT name, price, data_gb, duration_days FROM plans WHERE id = \$1 AND is_active = TRUE`).
 		WithArgs(int64(2)).
 		WillReturnRows(sqlmock.NewRows([]string{"name", "price", "data_gb", "duration_days"}).AddRow("Trial", 0.00, 5.0, 7))
 
 	// No credit deduction for free plan — jump straight to plan assignment
-	mock.ExpectExec("UPDATE customers SET plan_id = \\?, data_limit_gb = \\?, status = 'active' WHERE id = \\?").
+	mock.ExpectExec(`UPDATE customers SET plan_id = \$`).
 		WithArgs(int64(2), 5.0, int64(10)).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
@@ -435,7 +435,7 @@ func TestGetResellerMargin_DBError(t *testing.T) {
 
 	engine := New(db)
 
-	mock.ExpectQuery("SELECT username FROM admins WHERE id = \\? AND role = 'reseller'").
+	mock.ExpectQuery(`SELECT username FROM admins WHERE id = \$1 AND role = 'reseller'`).
 		WithArgs(int64(1)).
 		WillReturnError(fmt.Errorf("connection lost"))
 

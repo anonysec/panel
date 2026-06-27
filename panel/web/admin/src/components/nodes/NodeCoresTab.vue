@@ -2,7 +2,8 @@
 import { ref, onMounted } from 'vue'
 import { useNodesStore, type CoreStatus } from '@/stores/nodes'
 import { useToast } from '@koris/composables/useToast'
-import CoreCard from './CoreCard.vue'
+import type { CoreInfo } from './types'
+import CoresTab from './CoresTab.vue'
 import KSkeleton from '@koris/ui/KSkeleton.vue'
 
 const props = defineProps<{
@@ -12,15 +13,27 @@ const props = defineProps<{
 const nodesStore = useNodesStore()
 const toast = useToast()
 
-const cores = ref<CoreStatus[]>([])
+const cores = ref<CoreInfo[]>([])
 const loading = ref(false)
+
+/** Map store CoreStatus to the component CoreInfo interface. */
+function toCoreInfo(c: CoreStatus): CoreInfo {
+  return {
+    type: c.coreType,
+    state: c.status === 'error' ? 'crashed' : c.status === 'running' ? 'running' : 'stopped',
+    port: c.port ?? 0,
+    activeSessions: c.sessions ?? 0,
+  }
+}
 
 async function loadCores() {
   loading.value = true
   const apiCores = await nodesStore.listCores(props.nodeId)
   // Only show cores actually returned by the API (installed/configured on the node)
-  // Filter out cores with status 'unknown' as those are not actually configured
-  cores.value = apiCores.filter((c) => c.status !== 'unknown')
+  // Filter out cores with unrecognized status (e.g. not yet configured)
+  cores.value = apiCores
+    .filter((c) => ['running', 'stopped', 'error'].includes(c.status))
+    .map(toCoreInfo)
   loading.value = false
 }
 
@@ -44,6 +57,17 @@ async function handleDisable(coreType: string) {
   }
 }
 
+async function handleRestart(coreType: string) {
+  // Force restart bypasses auto-restart limit
+  const ok = await nodesStore.enableCore(props.nodeId, coreType, 0)
+  if (ok) {
+    toast.success(`${coreType} restarting`)
+    await loadCores()
+  } else {
+    toast.error(`Failed to restart ${coreType}`)
+  }
+}
+
 onMounted(loadCores)
 </script>
 
@@ -53,20 +77,14 @@ onMounted(loadCores)
 
     <KSkeleton v-if="loading" />
 
-    <div v-else class="node-cores-tab__grid">
-      <CoreCard
-        v-for="core in cores"
-        :key="core.coreType"
-        :node-id="props.nodeId"
-        :core-type="core.coreType"
-        :status="core.status"
-        :port="core.port"
-        :sessions="core.sessions"
-        :pid="core.pid"
-        @enable="(port) => handleEnable(core.coreType, port)"
-        @disable="handleDisable(core.coreType)"
-      />
-    </div>
+    <CoresTab
+      v-else
+      :node-id="props.nodeId"
+      :cores="cores"
+      @enable="handleEnable"
+      @disable="handleDisable"
+      @restart="handleRestart"
+    />
   </div>
 </template>
 
@@ -82,11 +100,5 @@ onMounted(loadCores)
   font-size: var(--text-base);
   font-weight: var(--font-semibold);
   color: var(--color-text);
-}
-
-.node-cores-tab__grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: var(--space-3);
 }
 </style>

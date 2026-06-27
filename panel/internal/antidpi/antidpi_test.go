@@ -248,7 +248,7 @@ func TestDeleteConfig(t *testing.T) {
 
 			svc := New(db)
 
-			mock.ExpectExec("DELETE FROM anti_dpi_configs WHERE node_id = \\?").
+			mock.ExpectExec("DELETE FROM anti_dpi_configs WHERE node_id = \\$1").
 				WithArgs(tt.nodeID).
 				WillReturnResult(sqlmock.NewResult(0, tt.rowsAff))
 

@@ -69,12 +69,12 @@ func TestTryBecomeLeader_Success(t *testing.T) {
 	cm, mock := setupMock(t)
 	ctx := context.Background()
 
-	// GET_LOCK returns 1 = acquired
-	mock.ExpectQuery(`SELECT GET_LOCK\(\?, 0\)`).
+	// pg_try_advisory_lock returns true = acquired
+	mock.ExpectQuery(`SELECT pg_try_advisory_lock\(hashtext\(\$1\)\)`).
 		WithArgs(LockName).
-		WillReturnRows(sqlmock.NewRows([]string{"GET_LOCK"}).AddRow(1))
+		WillReturnRows(sqlmock.NewRows([]string{"pg_try_advisory_lock"}).AddRow(true))
 
-	// updateRole INSERT ON DUPLICATE KEY
+	// updateRole INSERT ON CONFLICT
 	mock.ExpectExec(`INSERT INTO cluster_nodes`).
 		WithArgs("test-node-1", "leader").
 		WillReturnResult(sqlmock.NewResult(0, 1))
@@ -99,12 +99,12 @@ func TestTryBecomeLeader_Failure(t *testing.T) {
 	cm, mock := setupMock(t)
 	ctx := context.Background()
 
-	// GET_LOCK returns 0 = not acquired (another node holds it)
-	mock.ExpectQuery(`SELECT GET_LOCK\(\?, 0\)`).
+	// pg_try_advisory_lock returns false = not acquired
+	mock.ExpectQuery(`SELECT pg_try_advisory_lock\(hashtext\(\$1\)\)`).
 		WithArgs(LockName).
-		WillReturnRows(sqlmock.NewRows([]string{"GET_LOCK"}).AddRow(0))
+		WillReturnRows(sqlmock.NewRows([]string{"pg_try_advisory_lock"}).AddRow(false))
 
-	// updateRole INSERT ON DUPLICATE KEY (role=follower)
+	// updateRole INSERT ON CONFLICT (role=follower)
 	mock.ExpectExec(`INSERT INTO cluster_nodes`).
 		WithArgs("test-node-1", "follower").
 		WillReturnResult(sqlmock.NewResult(0, 1))
@@ -152,17 +152,17 @@ func TestTryBecomeLeader_OnlyOneCanBeLeader(t *testing.T) {
 	ctx := context.Background()
 
 	// Node 1 acquires successfully
-	mock1.ExpectQuery(`SELECT GET_LOCK\(\?, 0\)`).
+	mock1.ExpectQuery(`SELECT pg_try_advisory_lock\(hashtext\(\$1\)\)`).
 		WithArgs(LockName).
-		WillReturnRows(sqlmock.NewRows([]string{"GET_LOCK"}).AddRow(1))
+		WillReturnRows(sqlmock.NewRows([]string{"pg_try_advisory_lock"}).AddRow(true))
 	mock1.ExpectExec(`INSERT INTO cluster_nodes`).
 		WithArgs("node-1", "leader").
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	// Node 2 fails (lock held by node 1)
-	mock2.ExpectQuery(`SELECT GET_LOCK\(\?, 0\)`).
+	mock2.ExpectQuery(`SELECT pg_try_advisory_lock\(hashtext\(\$1\)\)`).
 		WithArgs(LockName).
-		WillReturnRows(sqlmock.NewRows([]string{"GET_LOCK"}).AddRow(0))
+		WillReturnRows(sqlmock.NewRows([]string{"pg_try_advisory_lock"}).AddRow(false))
 	mock2.ExpectExec(`INSERT INTO cluster_nodes`).
 		WithArgs("node-2", "follower").
 		WillReturnResult(sqlmock.NewResult(0, 1))
@@ -202,9 +202,9 @@ func TestReleaseLeadership(t *testing.T) {
 	ctx := context.Background()
 
 	// First acquire leadership
-	mock.ExpectQuery(`SELECT GET_LOCK\(\?, 0\)`).
+	mock.ExpectQuery(`SELECT pg_try_advisory_lock\(hashtext\(\$1\)\)`).
 		WithArgs(LockName).
-		WillReturnRows(sqlmock.NewRows([]string{"GET_LOCK"}).AddRow(1))
+		WillReturnRows(sqlmock.NewRows([]string{"pg_try_advisory_lock"}).AddRow(true))
 	mock.ExpectExec(`INSERT INTO cluster_nodes`).
 		WithArgs("test-node-1", "leader").
 		WillReturnResult(sqlmock.NewResult(0, 1))
@@ -215,7 +215,7 @@ func TestReleaseLeadership(t *testing.T) {
 	}
 
 	// Now release
-	mock.ExpectExec(`SELECT RELEASE_LOCK\(\?\)`).
+	mock.ExpectExec(`SELECT pg_advisory_unlock\(hashtext\(\$1\)\)`).
 		WithArgs(LockName).
 		WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec(`INSERT INTO cluster_nodes`).
@@ -259,9 +259,9 @@ func TestHeartbeat_AsLeader(t *testing.T) {
 	ctx := context.Background()
 
 	// Acquire leadership first
-	mock.ExpectQuery(`SELECT GET_LOCK\(\?, 0\)`).
+	mock.ExpectQuery(`SELECT pg_try_advisory_lock\(hashtext\(\$1\)\)`).
 		WithArgs(LockName).
-		WillReturnRows(sqlmock.NewRows([]string{"GET_LOCK"}).AddRow(1))
+		WillReturnRows(sqlmock.NewRows([]string{"pg_try_advisory_lock"}).AddRow(true))
 	mock.ExpectExec(`INSERT INTO cluster_nodes`).
 		WithArgs("test-node-1", "leader").
 		WillReturnResult(sqlmock.NewResult(0, 1))
@@ -321,9 +321,9 @@ func TestIsLeader_StateChanges(t *testing.T) {
 	}
 
 	// Acquire leadership
-	mock.ExpectQuery(`SELECT GET_LOCK\(\?, 0\)`).
+	mock.ExpectQuery(`SELECT pg_try_advisory_lock\(hashtext\(\$1\)\)`).
 		WithArgs(LockName).
-		WillReturnRows(sqlmock.NewRows([]string{"GET_LOCK"}).AddRow(1))
+		WillReturnRows(sqlmock.NewRows([]string{"pg_try_advisory_lock"}).AddRow(true))
 	mock.ExpectExec(`INSERT INTO cluster_nodes`).
 		WithArgs("test-node-1", "leader").
 		WillReturnResult(sqlmock.NewResult(0, 1))
@@ -334,7 +334,7 @@ func TestIsLeader_StateChanges(t *testing.T) {
 	}
 
 	// Release leadership
-	mock.ExpectExec(`SELECT RELEASE_LOCK\(\?\)`).
+	mock.ExpectExec(`SELECT pg_advisory_unlock\(hashtext\(\$1\)\)`).
 		WithArgs(LockName).
 		WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec(`INSERT INTO cluster_nodes`).
@@ -347,9 +347,9 @@ func TestIsLeader_StateChanges(t *testing.T) {
 	}
 
 	// Re-acquire
-	mock.ExpectQuery(`SELECT GET_LOCK\(\?, 0\)`).
+	mock.ExpectQuery(`SELECT pg_try_advisory_lock\(hashtext\(\$1\)\)`).
 		WithArgs(LockName).
-		WillReturnRows(sqlmock.NewRows([]string{"GET_LOCK"}).AddRow(1))
+		WillReturnRows(sqlmock.NewRows([]string{"pg_try_advisory_lock"}).AddRow(true))
 	mock.ExpectExec(`INSERT INTO cluster_nodes`).
 		WithArgs("test-node-1", "leader").
 		WillReturnResult(sqlmock.NewResult(0, 1))
@@ -373,15 +373,15 @@ func TestRunLeaderElection_CancelStops(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	// Initial TryBecomeLeader
-	mock.ExpectQuery(`SELECT GET_LOCK\(\?, 0\)`).
+	mock.ExpectQuery(`SELECT pg_try_advisory_lock\(hashtext\(\$1\)\)`).
 		WithArgs(LockName).
-		WillReturnRows(sqlmock.NewRows([]string{"GET_LOCK"}).AddRow(1))
+		WillReturnRows(sqlmock.NewRows([]string{"pg_try_advisory_lock"}).AddRow(true))
 	mock.ExpectExec(`INSERT INTO cluster_nodes`).
 		WithArgs("test-node-1", "leader").
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	// ReleaseLeadership on shutdown
-	mock.ExpectExec(`SELECT RELEASE_LOCK\(\?\)`).
+	mock.ExpectExec(`SELECT pg_advisory_unlock\(hashtext\(\$1\)\)`).
 		WithArgs(LockName).
 		WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec(`INSERT INTO cluster_nodes`).
@@ -424,9 +424,9 @@ func TestSingleNode_NoTable_IsLeader(t *testing.T) {
 	ctx := context.Background()
 
 	// Advisory lock still works (no table needed)
-	mock.ExpectQuery(`SELECT GET_LOCK\(\?, 0\)`).
+	mock.ExpectQuery(`SELECT pg_try_advisory_lock\(hashtext\(\$1\)\)`).
 		WithArgs(LockName).
-		WillReturnRows(sqlmock.NewRows([]string{"GET_LOCK"}).AddRow(1))
+		WillReturnRows(sqlmock.NewRows([]string{"pg_try_advisory_lock"}).AddRow(true))
 
 	acquired, err := cm.TryBecomeLeader(ctx)
 	if err != nil {

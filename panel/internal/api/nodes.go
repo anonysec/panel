@@ -31,10 +31,15 @@ func (s *Server) handleKnodeNodes(w http.ResponseWriter, r *http.Request) {
 
 // handleKnodeNodeByID routes requests for a specific knode node.
 //
-// GET    /api/admin/knode/nodes/{id}      — get node detail
-// PUT    /api/admin/knode/nodes/{id}      — update node (reconnect with new creds)
-// DELETE /api/admin/knode/nodes/{id}      — delete node (disconnect, remove record)
-// POST   /api/admin/knode/nodes/{id}/test — test connection without saving
+// GET    /api/admin/knode/nodes/{id}                          — get node detail
+// PUT    /api/admin/knode/nodes/{id}                          — update node (reconnect with new creds)
+// DELETE /api/admin/knode/nodes/{id}                          — delete node (disconnect, remove record)
+// POST   /api/admin/knode/nodes/{id}/test                     — test connection without saving
+// GET    /api/admin/knode/nodes/{id}/cores                    — list all cores with status
+// POST   /api/admin/knode/nodes/{id}/cores/{type}/enable      — enable a core
+// POST   /api/admin/knode/nodes/{id}/cores/{type}/disable     — disable a core
+// POST   /api/admin/knode/nodes/{id}/cores/{type}/restart     — force restart a core
+// GET    /api/admin/knode/nodes/{id}/cores/{type}/config      — get core config
 func (s *Server) handleKnodeNodeByID(w http.ResponseWriter, r *http.Request) {
 	id, action, ok := pathID(r.URL.Path, "/api/admin/knode/nodes/")
 	if !ok {
@@ -51,6 +56,12 @@ func (s *Server) handleKnodeNodeByID(w http.ResponseWriter, r *http.Request) {
 		s.deleteKnodeNode(w, r, id)
 	case action == "test" && r.Method == http.MethodPost:
 		s.testKnodeNode(w, r, id)
+	case action == "cores":
+		s.dispatchKnodeCores(w, r, id)
+	case action == "domain" && r.Method == http.MethodGet:
+		s.getKnodeNodeDomain(w, r, id)
+	case action == "domain" && r.Method == http.MethodPut:
+		s.setKnodeNodeDomain(w, r, id)
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
