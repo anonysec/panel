@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useApi } from '@koris/composables/useApi'
 import { useToast } from '@koris/composables/useToast'
+import { useConfirm } from '@koris/composables/useConfirm'
+import { useI18n } from '@koris/composables/useI18n'
 import KSkeleton from '@koris/ui/KSkeleton.vue'
 import KStatusPill from '@koris/ui/KStatusPill.vue'
 import KButton from '@koris/ui/KButton.vue'
@@ -9,9 +11,12 @@ import KInput from '@koris/ui/KInput.vue'
 import KSelect from '@koris/ui/KSelect.vue'
 import KFormField from '@koris/ui/KFormField.vue'
 import KSlideOver from '@koris/ui/KSlideOver.vue'
+import KEmptyState from '@koris/ui/KEmptyState.vue'
 
-const { get, post } = useApi()
+const { get, post, del } = useApi()
 const toast = useToast()
+const { confirm } = useConfirm()
+const { t } = useI18n()
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Types
@@ -37,7 +42,7 @@ interface NodeWithConfig {
   node: Node
   config: VpnConfig
   loading: boolean
-  hovered: boolean
+  expanded: boolean
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -45,12 +50,25 @@ interface NodeWithConfig {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const protocols = [
-  { key: 'openvpn', name: 'OpenVPN', icon: '🔐', defaultPort: 1194 },
-  { key: 'wireguard', name: 'WireGuard', icon: '🛡️', defaultPort: 51820 },
-  { key: 'l2tp', name: 'L2TP/IPsec', icon: '🔗', defaultPort: 1701 },
-  { key: 'ikev2', name: 'IKEv2', icon: '🔑', defaultPort: 500 },
-  { key: 'ssh', name: 'SSH Tunnel', icon: '💻', defaultPort: 2222 },
+  { key: 'openvpn', name: 'OpenVPN', icon: '🔐', defaultPort: 1194, defaultNetwork: '10.8.0.0/20' },
+  { key: 'wireguard', name: 'WireGuard', icon: '🛡️', defaultPort: 51820, defaultNetwork: '10.66.0.0/20' },
+  { key: 'l2tp', name: 'L2TP/IPsec', icon: '🔗', defaultPort: 1701, defaultNetwork: '10.9.0.0/20' },
+  { key: 'ikev2', name: 'IKEv2', icon: '🔑', defaultPort: 500, defaultNetwork: '10.10.0.0/20' },
+  { key: 'ssh', name: 'SSH Tunnel', icon: '💻', defaultPort: 2222, defaultNetwork: '' },
 ] as const
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// DNS Presets
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const dnsPresets = [
+  { label: 'Google', value: '8.8.8.8', secondary: '8.8.4.4' },
+  { label: 'Cloudflare', value: '1.1.1.1', secondary: '1.0.0.1' },
+  { label: 'Quad9', value: '9.9.9.9', secondary: '149.112.112.112' },
+  { label: 'OpenDNS', value: '208.67.222.222', secondary: '208.67.220.220' },
+  { label: 'AdGuard', value: '94.140.14.14', secondary: '94.140.15.15' },
+  { label: 'Shecan', value: '178.22.122.100', secondary: '185.51.200.2' },
+]
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // State
@@ -65,8 +83,16 @@ const panelNodeId = ref<number | null>(null)
 const panelProtocol = ref<string>('')
 const panelSaving = ref(false)
 
-// Protocol settings form (reactive object for v-model binding)
+// DNS dropdown visibility
+const showDnsDropdown = ref(false)
+
+// Protocol settings form
 const panelForm = reactive<Record<string, any>>({})
+
+// Edit node state
+const editNodeOpen = ref(false)
+const editNodeForm = reactive({ id: 0, name: '', address: '' })
+const editNodeSaving = ref(false)
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Protocol settings schemas
@@ -75,81 +101,66 @@ const panelForm = reactive<Record<string, any>>({})
 interface FieldDef {
   key: string
   label: string
-  type: 'number' | 'text' | 'password' | 'select'
+  type: 'number' | 'text' | 'password' | 'select' | 'toggle' | 'dns'
   default?: any
   options?: { label: string; value: string }[]
   showIf?: (form: Record<string, any>) => boolean
+  tooltip?: string
 }
 
 const protocolFields: Record<string, FieldDef[]> = {
   openvpn: [
-    { key: 'port', label: 'Port', type: 'number', default: 1194 },
-    { key: 'transport', label: 'Transport', type: 'select', default: 'udp', options: [
+    { key: 'port', label: 'services.port', type: 'number', default: 1194 },
+    { key: 'transport', label: 'services.transport', type: 'select', default: 'udp', options: [
       { label: 'UDP', value: 'udp' }, { label: 'TCP', value: 'tcp' },
     ]},
-    { key: 'cipher', label: 'Cipher', type: 'select', default: 'AES-256-GCM', options: [
+    { key: 'cipher', label: 'services.cipher', type: 'select', default: 'AES-256-GCM', options: [
       { label: 'AES-256-GCM', value: 'AES-256-GCM' },
       { label: 'AES-128-GCM', value: 'AES-128-GCM' },
       { label: 'CHACHA20-POLY1305', value: 'CHACHA20-POLY1305' },
     ]},
-    { key: 'tls_mode', label: 'TLS Mode', type: 'select', default: 'tls-crypt', options: [
-      { label: 'tls-crypt', value: 'tls-crypt' },
-      { label: 'tls-auth', value: 'tls-auth' },
-      { label: 'None', value: 'none' },
+    { key: 'tls_mode', label: 'services.tls_mode', type: 'select', default: 'tls-crypt', options: [
+      { label: 'tls-crypt (most secure)', value: 'tls-crypt' },
+      { label: 'tls-auth (compatible)', value: 'tls-auth' },
+      { label: 'None (no protection)', value: 'none' },
     ]},
-    { key: 'topology', label: 'Topology', type: 'select', default: 'subnet', options: [
-      { label: 'subnet', value: 'subnet' },
-      { label: 'net30', value: 'net30' },
-      { label: 'p2p', value: 'p2p' },
-    ]},
-    { key: 'dns1', label: 'DNS 1', type: 'text', default: '8.8.8.8' },
-    { key: 'dns2', label: 'DNS 2', type: 'text', default: '8.8.4.4' },
-    { key: 'network', label: 'Network (CIDR)', type: 'text', default: '10.8.0.0/20' },
-    { key: 'mtu', label: 'MTU', type: 'number', default: 1500 },
-    { key: 'fragment', label: 'Fragment', type: 'number', default: '' },
-    { key: 'push_routes', label: 'Push Routes', type: 'text', default: '' },
+    { key: 'dns', label: 'services.dns_label', type: 'dns', default: '8.8.8.8' },
+    { key: 'mtu', label: 'services.mtu', type: 'number', default: 1500 },
   ],
   wireguard: [
-    { key: 'port', label: 'Port', type: 'number', default: 51820 },
-    { key: 'network', label: 'Network (CIDR)', type: 'text', default: '10.66.0.0/20' },
-    { key: 'dns1', label: 'DNS 1', type: 'text', default: '1.1.1.1' },
-    { key: 'dns2', label: 'DNS 2', type: 'text', default: '8.8.8.8' },
-    { key: 'mtu', label: 'MTU', type: 'number', default: 1420 },
+    { key: 'port', label: 'services.port', type: 'number', default: 51820 },
+    { key: 'dns', label: 'services.dns_label', type: 'dns', default: '1.1.1.1' },
+    { key: 'gaming_optimize', label: 'services.gaming_optimize', type: 'toggle', default: false,
+      tooltip: 'services.gaming_desc' },
   ],
   l2tp: [
-    { key: 'port', label: 'Port', type: 'number', default: 1701 },
-    { key: 'ipsec_mode', label: 'IPsec Mode', type: 'select', default: 'ipsec', options: [
-      { label: 'IPsec', value: 'ipsec' }, { label: 'Plain', value: 'plain' },
-    ]},
-    { key: 'psk', label: 'PSK', type: 'password', default: '' },
-    { key: 'auth_method', label: 'Auth Method', type: 'select', default: 'MS-CHAPv2', options: [
-      { label: 'CHAP', value: 'CHAP' },
-      { label: 'PAP', value: 'PAP' },
-      { label: 'MS-CHAPv2', value: 'MS-CHAPv2' },
-    ]},
-    { key: 'dns1', label: 'DNS 1', type: 'text', default: '8.8.8.8' },
-    { key: 'dns2', label: 'DNS 2', type: 'text', default: '8.8.4.4' },
-    { key: 'network', label: 'Network (CIDR)', type: 'text', default: '10.9.0.0/20' },
+    { key: 'port', label: 'services.port', type: 'number', default: 1701 },
+    { key: 'psk', label: 'services.psk', type: 'password', default: '' },
+    { key: 'dns', label: 'services.dns_label', type: 'dns', default: '8.8.8.8' },
+    { key: 'simple_mode', label: 'services.simple_mode', type: 'toggle', default: true },
+    { key: 'auth_method', label: 'nodes.auth_method', type: 'select', default: 'MS-CHAPv2',
+      showIf: (f) => !f.simple_mode, options: [
+        { label: 'CHAP', value: 'CHAP' },
+        { label: 'PAP', value: 'PAP' },
+        { label: 'MS-CHAPv2', value: 'MS-CHAPv2' },
+      ]},
+    { key: 'dpd_interval', label: 'nodes.dpd_interval', type: 'number', default: 30,
+      showIf: (f) => !f.simple_mode },
+    { key: 'dpd_timeout', label: 'nodes.dpd_timeout', type: 'number', default: 120,
+      showIf: (f) => !f.simple_mode },
   ],
   ikev2: [
-    { key: 'port', label: 'Port', type: 'number', default: 500 },
-    { key: 'auth_type', label: 'Auth Type', type: 'select', default: 'PSK', options: [
-      { label: 'PSK', value: 'PSK' }, { label: 'Certificate', value: 'Certificate' },
-    ]},
-    { key: 'psk', label: 'PSK', type: 'password', default: '', showIf: (f) => f.auth_type === 'PSK' },
-    { key: 'dns1', label: 'DNS 1', type: 'text', default: '8.8.8.8' },
-    { key: 'dns2', label: 'DNS 2', type: 'text', default: '8.8.4.4' },
-    { key: 'network', label: 'Network (CIDR)', type: 'text', default: '10.10.0.0/20' },
-    { key: 'domain', label: 'Domain', type: 'text', default: '' },
+    { key: 'port', label: 'services.port', type: 'number', default: 500 },
+    { key: 'psk', label: 'services.psk', type: 'password', default: '' },
+    { key: 'dns', label: 'services.dns_label', type: 'dns', default: '8.8.8.8' },
+    { key: 'domain', label: 'services.domain', type: 'text', default: '' },
   ],
   ssh: [
-    { key: 'port', label: 'Port', type: 'number', default: 2222 },
-    { key: 'listen_address', label: 'Listen Address', type: 'text', default: '0.0.0.0' },
-    { key: 'max_sessions', label: 'Max Sessions', type: 'number', default: 10 },
-    { key: 'key_type', label: 'Key Type', type: 'select', default: 'ed25519', options: [
+    { key: 'port', label: 'services.port', type: 'number', default: 2222 },
+    { key: 'max_sessions', label: 'services.max_sessions', type: 'number', default: 10 },
+    { key: 'key_type', label: 'services.key_type', type: 'select', default: 'ed25519', options: [
       { label: 'ed25519', value: 'ed25519' }, { label: 'RSA', value: 'rsa' },
     ]},
-    { key: 'idle_timeout', label: 'Idle Timeout (s)', type: 'number', default: 0 },
   ],
 }
 
@@ -167,6 +178,14 @@ const currentFields = computed<FieldDef[]>(() => {
   return protocolFields[panelProtocol.value] || []
 })
 
+function enabledCount(config: VpnConfig): number {
+  return protocols.filter(p => config[p.key]?.enabled).length
+}
+
+function isNodeOnline(node: Node): boolean {
+  return node.status !== 'offline'
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Data fetching
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -178,13 +197,13 @@ onMounted(async () => {
 async function fetchNodes() {
   loading.value = true
   try {
-    const res = await get('/api/admin/knode/nodes')
+    const res = await get<{ nodes: Node[] }>('/api/admin/knode/nodes')
     const nodeList: Node[] = res.nodes || []
     nodes.value = nodeList.map(node => ({
       node,
       config: {},
       loading: true,
-      hovered: false,
+      expanded: false,
     }))
     await Promise.allSettled(
       nodes.value.map((entry, idx) => fetchVpnConfig(entry.node.id, idx))
@@ -198,7 +217,7 @@ async function fetchNodes() {
 
 async function fetchVpnConfig(nodeId: number, idx: number) {
   try {
-    const res = await get(`/api/nodes/vpn-config/${nodeId}`)
+    const res = await get<{ configs: any[] }>(`/api/nodes/vpn-config/${nodeId}`)
     const configMap: VpnConfig = {}
     const configs = res.configs || []
     for (const c of configs) {
@@ -218,21 +237,22 @@ async function fetchVpnConfig(nodeId: number, idx: number) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Toggle protocol
+// Toggle protocol (FIX: includes port in payload)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 async function toggleProtocol(nodeId: number, idx: number, protocolKey: string, event: Event) {
   event.stopPropagation()
   const entry = nodes.value[idx]
   const current = entry.config[protocolKey]
+  const proto = protocols.find(p => p.key === protocolKey)!
   const newEnabled = !(current?.enabled ?? false)
 
+  // Optimistic update
   if (!entry.config[protocolKey]) {
-    const proto = protocols.find(p => p.key === protocolKey)
     entry.config[protocolKey] = {
       enabled: newEnabled,
-      port: proto?.defaultPort || 0,
-      network: '',
+      port: proto.defaultPort,
+      network: proto.defaultNetwork,
     }
   } else {
     entry.config[protocolKey].enabled = newEnabled
@@ -242,21 +262,82 @@ async function toggleProtocol(nodeId: number, idx: number, protocolKey: string, 
     await post(`/api/nodes/vpn-config/${nodeId}`, {
       protocol: protocolKey,
       enabled: newEnabled,
+      port: current?.port || proto.defaultPort,
+      network: current?.network || proto.defaultNetwork,
     })
-    toast.success(`${protocolKey} ${newEnabled ? 'enabled' : 'disabled'}`)
+    toast.success(
+      t(newEnabled ? 'services.enabled' : 'services.disabled')
+        .replace('{proto}', proto.name)
+    )
   } catch {
+    // Rollback
     entry.config[protocolKey].enabled = !newEnabled
   }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Side panel
+// Node actions: Edit & Delete
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function openEditNode(node: Node) {
+  editNodeForm.id = node.id
+  editNodeForm.name = node.name
+  editNodeForm.address = node.address
+  editNodeOpen.value = true
+}
+
+async function saveEditNode() {
+  editNodeSaving.value = true
+  try {
+    await post(`/api/admin/knode/nodes/${editNodeForm.id}`, {
+      name: editNodeForm.name,
+      address: editNodeForm.address,
+    })
+    toast.success(t('nodes.edit_success'))
+    const idx = nodes.value.findIndex(n => n.node.id === editNodeForm.id)
+    if (idx >= 0) {
+      nodes.value[idx].node.name = editNodeForm.name
+      nodes.value[idx].node.address = editNodeForm.address
+    }
+    editNodeOpen.value = false
+  } catch {
+    // handled by useApi
+  } finally {
+    editNodeSaving.value = false
+  }
+}
+
+async function deleteNode(node: Node) {
+  const confirmed = await confirm({
+    title: t('nodes.confirm_delete_title'),
+    message: t('services.confirm_delete').replace('{name}', node.name),
+    variant: 'danger',
+    confirmText: t('services.delete_node'),
+  })
+  if (!confirmed) return
+
+  try {
+    await del(`/api/admin/knode/nodes/${node.id}`)
+    toast.success(t('services.deleted').replace('{name}', node.name))
+    nodes.value = nodes.value.filter(n => n.node.id !== node.id)
+  } catch {
+    // handled by useApi
+  }
+}
+
+function toggleExpand(idx: number) {
+  nodes.value[idx].expanded = !nodes.value[idx].expanded
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Side panel: Protocol settings
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function openProtocolPanel(nodeId: number, protocolKey: string) {
   panelNodeId.value = nodeId
   panelProtocol.value = protocolKey
   panelOpen.value = true
+  showDnsDropdown.value = false
 
   // Populate form from existing config
   const entry = nodes.value.find(n => n.node.id === nodeId)
@@ -279,6 +360,23 @@ function openProtocolPanel(nodeId: number, protocolKey: string) {
 
 function closePanel() {
   panelOpen.value = false
+  showDnsDropdown.value = false
+}
+
+function selectDns(dns: string) {
+  panelForm.dns = dns
+  showDnsDropdown.value = false
+}
+
+function generatePsk() {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+  let result = ''
+  const arr = new Uint8Array(32)
+  crypto.getRandomValues(arr)
+  for (let i = 0; i < 32; i++) {
+    result += chars[arr[i] % chars.length]
+  }
+  panelForm.psk = result
 }
 
 async function saveProtocolSettings() {
@@ -301,6 +399,12 @@ async function saveProtocolSettings() {
     }
   }
 
+  // Apply gaming optimize settings for wireguard
+  if (panelProtocol.value === 'wireguard' && panelForm.gaming_optimize) {
+    extra_json.persistent_keepalive = 15
+    extra_json.mtu = 1280
+  }
+
   try {
     await post(`/api/nodes/vpn-config/${panelNodeId.value}`, {
       protocol: panelProtocol.value,
@@ -309,16 +413,13 @@ async function saveProtocolSettings() {
       network,
       extra_json,
     })
-    toast.success('Settings saved')
+    toast.success(t('services.settings_saved'))
 
     // Update local state
     const idx = nodes.value.findIndex(n => n.node.id === panelNodeId.value)
     if (idx >= 0) {
       nodes.value[idx].config[panelProtocol.value] = {
-        enabled: true,
-        port,
-        network,
-        extra_json,
+        enabled: true, port, network, extra_json,
       }
     }
     closePanel()
@@ -328,96 +429,103 @@ async function saveProtocolSettings() {
     panelSaving.value = false
   }
 }
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Helpers
-// ═══════════════════════════════════════════════════════════════════════════════
-
-function getProtoConfig(config: VpnConfig, key: string): ProtocolConfig | null {
-  return config[key] || null
-}
-
-function coreCountSummary(config: VpnConfig): string {
-  const enabled = protocols.filter(p => config[p.key]?.enabled).length
-  return `${enabled}/${protocols.length} protocols`
-}
-
-function isNodeOnline(node: Node): boolean {
-  return node.status !== 'offline'
-}
 </script>
 
 <template>
   <div class="page services-view">
     <header class="page-header">
-      <h1>Services</h1>
-      <p class="subtitle">Manage VPN protocols across all nodes</p>
+      <div>
+        <h1>{{ t('services.title') }}</h1>
+        <p class="subtitle">{{ t('services.subtitle') }}</p>
+      </div>
     </header>
 
     <!-- Loading state -->
     <div v-if="loading" class="loading-grid">
-      <KSkeleton v-for="i in 3" :key="i" height="72px" />
+      <KSkeleton v-for="i in 3" :key="i" height="64px" />
     </div>
 
     <!-- Empty state -->
-    <div v-else-if="nodes.length === 0" class="empty-state">
-      <p>No nodes found. Add nodes to manage VPN protocols.</p>
-    </div>
+    <KEmptyState
+      v-else-if="nodes.length === 0"
+      icon="🖥️"
+      :title="t('services.no_nodes')"
+      :description="t('services.no_nodes_desc')"
+      :action-text="t('services.add_node')"
+      @action="$router.push('/dashboard/services')"
+    />
 
-    <!-- Node list -->
-    <div v-else class="nodes-list">
+    <!-- Node table -->
+    <div v-else class="nodes-table">
+      <!-- Table header -->
+      <div class="table-header">
+        <span class="col-name">{{ t('nodes.node_name') }}</span>
+        <span class="col-address">{{ t('nodes.address') }}</span>
+        <span class="col-status">Status</span>
+        <span class="col-protocols">Protocols</span>
+        <span class="col-actions">Actions</span>
+      </div>
+
+      <!-- Table rows -->
       <div
         v-for="(entry, idx) in nodes"
         :key="entry.node.id"
-        class="node-row"
-        :class="{ expanded: entry.hovered }"
-        @mouseenter="entry.hovered = true"
-        @mouseleave="entry.hovered = false"
+        class="node-row-wrap"
+        :class="{ expanded: entry.expanded }"
       >
-        <!-- Node summary row -->
-        <div class="node-summary">
-          <div class="node-info">
+        <div class="node-row" @click="toggleExpand(idx)">
+          <span class="col-name">
             <span class="node-name">{{ entry.node.name }}</span>
-            <span class="node-ip">{{ entry.node.address }}</span>
-          </div>
-          <div class="node-meta">
+          </span>
+          <span class="col-address">
+            <code class="node-ip">{{ entry.node.address }}</code>
+          </span>
+          <span class="col-status">
             <KStatusPill
               :status="isNodeOnline(entry.node) ? 'active' : 'inactive'"
               :label="isNodeOnline(entry.node) ? 'Online' : 'Offline'"
             />
-            <span class="core-count">{{ coreCountSummary(entry.config) }}</span>
-          </div>
+          </span>
+          <span class="col-protocols">
+            <span class="proto-count">
+              {{ t('services.protocols_enabled').replace('{count}', String(enabledCount(entry.config))) }}
+            </span>
+          </span>
+          <span class="col-actions" @click.stop>
+            <button class="action-btn" :title="t('services.edit_node')" @click="openEditNode(entry.node)">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M11.13 1.87a1.25 1.25 0 0 1 1.77 0l1.23 1.23a1.25 1.25 0 0 1 0 1.77l-8.5 8.5-3.25.75.75-3.25 8.5-8.5z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <button class="action-btn action-btn--danger" :title="t('services.delete_node')" @click="deleteNode(entry.node)">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 4h12M5.33 4V2.67a1.33 1.33 0 0 1 1.34-1.34h2.66a1.33 1.33 0 0 1 1.34 1.34V4m2 0v9.33a1.33 1.33 0 0 1-1.34 1.34H4.67a1.33 1.33 0 0 1-1.34-1.34V4h9.34z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </span>
         </div>
 
-        <!-- Expandable protocol cards area -->
+        <!-- Expanded protocol cards -->
         <Transition name="expand">
-          <div v-if="entry.hovered" class="protocols-area">
+          <div v-if="entry.expanded" class="protocols-area">
             <div v-if="entry.loading" class="protocol-cards">
-              <KSkeleton v-for="i in 5" :key="i" height="56px" />
+              <KSkeleton v-for="i in 5" :key="i" height="52px" />
             </div>
             <div v-else class="protocol-cards">
               <div
                 v-for="proto in protocols"
                 :key="proto.key"
                 class="protocol-card"
-                :class="{ enabled: getProtoConfig(entry.config, proto.key)?.enabled }"
+                :class="{ enabled: entry.config[proto.key]?.enabled }"
                 @click="openProtocolPanel(entry.node.id, proto.key)"
               >
-                <span class="proto-icon">{{ proto.icon }}</span>
-                <div class="proto-details">
+                <div class="card-left">
+                  <span class="proto-icon">{{ proto.icon }}</span>
                   <span class="proto-name">{{ proto.name }}</span>
-                  <span class="proto-port">
-                    :{{ getProtoConfig(entry.config, proto.key)?.port || proto.defaultPort }}
-                  </span>
                 </div>
-                <KStatusPill
-                  :status="getProtoConfig(entry.config, proto.key)?.enabled ? 'active' : 'inactive'"
-                  :label="getProtoConfig(entry.config, proto.key)?.enabled ? 'Enabled' : 'Disabled'"
-                />
+                <span class="proto-port">
+                  :{{ entry.config[proto.key]?.port || proto.defaultPort }}
+                </span>
                 <button
                   class="toggle-btn"
-                  :class="{ active: getProtoConfig(entry.config, proto.key)?.enabled }"
-                  :title="getProtoConfig(entry.config, proto.key)?.enabled ? 'Disable' : 'Enable'"
+                  :class="{ active: entry.config[proto.key]?.enabled }"
+                  :title="entry.config[proto.key]?.enabled ? 'Disable' : 'Enable'"
                   @click="toggleProtocol(entry.node.id, idx, proto.key, $event)"
                 >
                   <span class="toggle-track">
@@ -435,35 +543,123 @@ function isNodeOnline(node: Node): boolean {
     <KSlideOver
       :open="panelOpen"
       :title="panelTitle"
-      width="400px"
+      width="420px"
       @close="closePanel"
     >
       <div class="panel-body">
         <template v-for="field in currentFields" :key="field.key">
-          <KFormField
+          <div
             v-if="!field.showIf || field.showIf(panelForm)"
-            :label="field.label"
-            :name="field.key"
+            class="panel-field"
           >
-            <KSelect
-              v-if="field.type === 'select'"
-              v-model="panelForm[field.key]"
-              :options="field.options || []"
-            />
-            <KInput
-              v-else
-              v-model="panelForm[field.key]"
-              :type="field.type"
-              :placeholder="String(field.default || '')"
-            />
-          </KFormField>
+            <KFormField :label="t(field.label)" :name="field.key">
+              <!-- Select -->
+              <KSelect
+                v-if="field.type === 'select'"
+                v-model="panelForm[field.key]"
+                :options="field.options || []"
+              />
+
+              <!-- Toggle -->
+              <div v-else-if="field.type === 'toggle'" class="toggle-field">
+                <button
+                  class="toggle-btn"
+                  :class="{ active: panelForm[field.key] }"
+                  @click="panelForm[field.key] = !panelForm[field.key]"
+                >
+                  <span class="toggle-track">
+                    <span class="toggle-thumb" />
+                  </span>
+                </button>
+                <span v-if="field.tooltip" class="field-hint">{{ t(field.tooltip) }}</span>
+              </div>
+
+              <!-- DNS field with dropdown -->
+              <div v-else-if="field.type === 'dns'" class="dns-field">
+                <div class="dns-input-wrap">
+                  <KInput
+                    v-model="panelForm[field.key]"
+                    type="text"
+                    placeholder="8.8.8.8"
+                  />
+                  <button
+                    class="dns-dropdown-btn"
+                    type="button"
+                    @click.stop="showDnsDropdown = !showDnsDropdown"
+                  >
+                    ▾
+                  </button>
+                </div>
+                <Transition name="fade">
+                  <div v-if="showDnsDropdown" class="dns-dropdown">
+                    <button
+                      v-for="dns in dnsPresets"
+                      :key="dns.value"
+                      class="dns-option"
+                      @click="selectDns(dns.value)"
+                    >
+                      <span class="dns-label">{{ dns.label }}</span>
+                      <span class="dns-value">{{ dns.value }}</span>
+                    </button>
+                  </div>
+                </Transition>
+              </div>
+
+              <!-- Password with generate button -->
+              <div v-else-if="field.type === 'password'" class="password-field">
+                <KInput
+                  v-model="panelForm[field.key]"
+                  type="password"
+                  :placeholder="t(field.label)"
+                />
+                <KButton size="sm" variant="ghost" @click="generatePsk">
+                  {{ t('services.auto_generate') }}
+                </KButton>
+              </div>
+
+              <!-- Default: number/text input -->
+              <KInput
+                v-else
+                v-model="panelForm[field.key]"
+                :type="field.type"
+                :placeholder="String(field.default || '')"
+              />
+            </KFormField>
+          </div>
         </template>
       </div>
 
       <template #footer>
         <div class="panel-footer">
           <KButton variant="ghost" @click="closePanel">Cancel</KButton>
-          <KButton :loading="panelSaving" @click="saveProtocolSettings">Save</KButton>
+          <KButton :loading="panelSaving" @click="saveProtocolSettings">
+            {{ t('nodes.save_config') }}
+          </KButton>
+        </div>
+      </template>
+    </KSlideOver>
+
+    <!-- Edit node slide-over -->
+    <KSlideOver
+      :open="editNodeOpen"
+      :title="t('nodes.edit_node')"
+      width="380px"
+      @close="editNodeOpen = false"
+    >
+      <div class="panel-body">
+        <KFormField :label="t('nodes.node_name')" name="name">
+          <KInput v-model="editNodeForm.name" type="text" />
+        </KFormField>
+        <KFormField :label="t('nodes.address')" name="address">
+          <KInput v-model="editNodeForm.address" type="text" />
+        </KFormField>
+      </div>
+      <template #footer>
+        <div class="panel-footer">
+          <KButton variant="ghost" @click="editNodeOpen = false">Cancel</KButton>
+          <KButton :loading="editNodeSaving" @click="saveEditNode">
+            {{ t('nodes.save_config') }}
+          </KButton>
         </div>
       </template>
     </KSlideOver>
@@ -477,6 +673,9 @@ function isNodeOnline(node: Node): boolean {
 }
 
 .page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   margin-bottom: var(--space-6, 24px);
 }
 
@@ -497,46 +696,50 @@ function isNodeOnline(node: Node): boolean {
   gap: var(--space-3, 12px);
 }
 
-.empty-state {
-  text-align: center;
-  padding: var(--space-10, 60px) var(--space-4, 16px);
-  color: var(--color-muted, #8b98a5);
-}
-
 /* ═══════════════════════════════════════════════════════════════════
-   Node list
+   Node table
    ═══════════════════════════════════════════════════════════════════ */
 
-.nodes-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3, 12px);
-}
-
-.node-row {
-  background: var(--color-surface, #161b22);
+.nodes-table {
   border: 1px solid var(--color-border, #28333f);
   border-radius: var(--radius-lg, 12px);
   overflow: hidden;
-  transition: box-shadow 0.2s ease;
+}
+
+.table-header {
+  display: grid;
+  grid-template-columns: 1.5fr 1.5fr 0.8fr 1.2fr 0.8fr;
+  gap: var(--space-3, 12px);
+  padding: var(--space-3, 12px) var(--space-5, 20px);
+  background: var(--color-surface-2, #1e2630);
+  border-bottom: 1px solid var(--color-border, #28333f);
+  font-size: var(--text-xs, 11px);
+  font-weight: var(--font-semibold, 600);
+  color: var(--color-muted, #8b98a5);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.node-row-wrap {
+  border-bottom: 1px solid var(--color-border, #28333f);
+}
+
+.node-row-wrap:last-child {
+  border-bottom: none;
+}
+
+.node-row {
+  display: grid;
+  grid-template-columns: 1.5fr 1.5fr 0.8fr 1.2fr 0.8fr;
+  gap: var(--space-3, 12px);
+  padding: var(--space-4, 16px) var(--space-5, 20px);
+  align-items: center;
+  cursor: pointer;
+  transition: background 0.15s;
 }
 
 .node-row:hover {
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
-}
-
-.node-summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-4, 16px) var(--space-5, 20px);
-  cursor: default;
-}
-
-.node-info {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-3, 12px);
+  background: var(--color-surface-2, #1e2630);
 }
 
 .node-name {
@@ -549,34 +752,62 @@ function isNodeOnline(node: Node): boolean {
   font-size: var(--text-sm, 13px);
   color: var(--color-muted, #8b98a5);
   font-family: var(--font-mono, monospace);
+  background: none;
+  padding: 0;
 }
 
-.node-meta {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4, 16px);
-}
-
-.core-count {
+.proto-count {
   font-size: var(--text-sm, 13px);
   color: var(--color-muted, #8b98a5);
 }
 
+/* Action buttons */
+.col-actions {
+  display: flex;
+  gap: var(--space-2, 8px);
+  align-items: center;
+}
+
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--color-border, #28333f);
+  border-radius: var(--radius-md, 8px);
+  background: transparent;
+  color: var(--color-muted, #8b98a5);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.action-btn:hover {
+  border-color: var(--color-primary, #2563eb);
+  color: var(--color-primary, #2563eb);
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.action-btn--danger:hover {
+  border-color: var(--color-danger, #ef4444);
+  color: var(--color-danger, #ef4444);
+  background: rgba(239, 68, 68, 0.08);
+}
+
 /* ═══════════════════════════════════════════════════════════════════
-   Expandable protocols area
+   Protocol cards (expanded area)
    ═══════════════════════════════════════════════════════════════════ */
 
 .protocols-area {
-  padding: 0 var(--space-5, 20px) var(--space-4, 16px);
+  padding: var(--space-4, 16px) var(--space-5, 20px);
   background: var(--color-surface-2, #1e2630);
   border-top: 1px solid var(--color-border, #28333f);
 }
 
 .protocol-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  display: flex;
   gap: var(--space-3, 12px);
-  padding-top: var(--space-4, 16px);
+  flex-wrap: wrap;
 }
 
 .protocol-card {
@@ -586,41 +817,48 @@ function isNodeOnline(node: Node): boolean {
   padding: var(--space-3, 12px) var(--space-4, 16px);
   background: var(--color-surface, #161b22);
   border: 1px solid var(--color-border, #28333f);
+  border-left: 3px solid var(--color-border, #28333f);
   border-radius: var(--radius-md, 8px);
   cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+  min-width: 180px;
+  flex: 1;
 }
 
 .protocol-card:hover {
   border-color: var(--color-primary, #2563eb);
   background: rgba(37, 99, 235, 0.04);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .protocol-card.enabled {
-  border-color: var(--color-success, #22c55e);
+  border-left-color: var(--color-success, #22c55e);
+}
+
+.card-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
 }
 
 .proto-icon {
-  font-size: 20px;
+  font-size: 18px;
   flex-shrink: 0;
-}
-
-.proto-details {
-  flex: 1;
-  min-width: 0;
 }
 
 .proto-name {
   font-size: var(--text-sm, 13px);
   font-weight: var(--font-semibold, 600);
   color: var(--color-text, #e6edf3);
-  display: block;
+  white-space: nowrap;
 }
 
 .proto-port {
   font-size: var(--text-xs, 11px);
   color: var(--color-muted, #8b98a5);
   font-family: var(--font-mono, monospace);
+  margin-left: auto;
+  margin-right: var(--space-2, 8px);
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -665,24 +903,109 @@ function isNodeOnline(node: Node): boolean {
   transform: translateX(16px);
 }
 
-/* ═══════════════════════════════════════════════════════════════════
-   Expand transition
-   ═══════════════════════════════════════════════════════════════════ */
-
-.expand-enter-active,
-.expand-leave-active {
-  transition: all 300ms ease;
-  overflow: hidden;
-  max-height: 300px;
-  opacity: 1;
+.toggle-field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3, 12px);
 }
 
-.expand-enter-from,
-.expand-leave-to {
-  max-height: 0;
-  opacity: 0;
-  padding-top: 0;
-  padding-bottom: 0;
+.field-hint {
+  font-size: var(--text-xs, 11px);
+  color: var(--color-muted, #8b98a5);
+  line-height: 1.4;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   DNS field
+   ═══════════════════════════════════════════════════════════════════ */
+
+.dns-field {
+  position: relative;
+}
+
+.dns-input-wrap {
+  display: flex;
+  align-items: stretch;
+}
+
+.dns-input-wrap :deep(input) {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.dns-dropdown-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  border: 1px solid var(--color-border, #28333f);
+  border-left: none;
+  border-radius: 0 var(--radius-md, 8px) var(--radius-md, 8px) 0;
+  background: var(--color-surface-2, #1e2630);
+  color: var(--color-muted, #8b98a5);
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.15s;
+}
+
+.dns-dropdown-btn:hover {
+  background: var(--color-surface, #161b22);
+  color: var(--color-text, #e6edf3);
+}
+
+.dns-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--color-surface, #161b22);
+  border: 1px solid var(--color-border, #28333f);
+  border-radius: var(--radius-md, 8px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  z-index: 50;
+  overflow: hidden;
+}
+
+.dns-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  border: none;
+  background: transparent;
+  color: var(--color-text, #e6edf3);
+  cursor: pointer;
+  font-size: var(--text-sm, 13px);
+  transition: background 0.1s;
+}
+
+.dns-option:hover {
+  background: var(--color-surface-2, #1e2630);
+}
+
+.dns-label {
+  font-weight: var(--font-medium, 500);
+}
+
+.dns-value {
+  font-family: var(--font-mono, monospace);
+  font-size: var(--text-xs, 11px);
+  color: var(--color-muted, #8b98a5);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Password field
+   ═══════════════════════════════════════════════════════════════════ */
+
+.password-field {
+  display: flex;
+  gap: var(--space-2, 8px);
+  align-items: flex-start;
+}
+
+.password-field :deep(.k-input) {
+  flex: 1;
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -696,9 +1019,76 @@ function isNodeOnline(node: Node): boolean {
   padding: var(--space-4, 16px);
 }
 
+.panel-field {
+  /* wrapper for conditional fields */
+}
+
 .panel-footer {
   display: flex;
   justify-content: flex-end;
   gap: var(--space-3, 12px);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Transitions
+   ═══════════════════════════════════════════════════════════════════ */
+
+.expand-enter-active,
+.expand-leave-active {
+  transition: all 250ms ease;
+  overflow: hidden;
+  max-height: 300px;
+  opacity: 1;
+}
+
+.expand-enter-from,
+.expand-leave-to {
+  max-height: 0;
+  opacity: 0;
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 150ms;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Mobile responsive
+   ═══════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+  .services-view {
+    padding: var(--space-4, 16px);
+  }
+
+  .table-header {
+    display: none;
+  }
+
+  .node-row {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-2, 8px);
+    padding: var(--space-4, 16px);
+  }
+
+  .node-row .col-actions {
+    align-self: flex-end;
+    margin-top: var(--space-1, 4px);
+  }
+
+  .protocol-cards {
+    flex-direction: column;
+  }
+
+  .protocol-card {
+    min-width: unset;
+  }
 }
 </style>
