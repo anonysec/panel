@@ -343,6 +343,26 @@ export const useNodesStore = defineStore('nodes', () => {
     }
   }
 
+  // ─── Node Tasks ────────────────────────────────────────────────────────────
+
+  /**
+   * Create a node task (e.g., restart_service).
+   * POST /api/admin/knode/nodes/{id}/tasks → { ok }
+   */
+  async function createNodeTask(data: { node_id: number; action: string; payload?: any }): Promise<boolean> {
+    try {
+      // Map to the appropriate core action
+      if (data.action === 'restart_service' && data.payload?.protocol) {
+        await post<{ ok: boolean }>(`/api/admin/knode/nodes/${data.node_id}/cores/${data.payload.protocol}/restart`, {})
+      } else {
+        await post<{ ok: boolean }>(`/api/admin/knode/nodes/${data.node_id}/tasks`, data)
+      }
+      return true
+    } catch {
+      return false
+    }
+  }
+
   // ─── Sessions ─────────────────────────────────────────────────────────────
 
   /**
@@ -545,6 +565,9 @@ export const useNodesStore = defineStore('nodes', () => {
     vpnConfigs,
     loadNodeVpnConfigs,
     saveNodeVpnConfig,
+
+    // Node Tasks
+    createNodeTask,
 
     // Sessions
     listSessions,
