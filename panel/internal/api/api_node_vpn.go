@@ -135,36 +135,40 @@ func (s *Server) upsertNodeVPNConfig(w http.ResponseWriter, r *http.Request, nod
 	if svcName, ok := serviceMap[in.Protocol]; ok {
 		if in.Enabled {
 			if s.CoreMgr != nil {
-				// Use gRPC EnableCore for the protocol with 10s timeout (R10.2)
+				// Try gRPC EnableCore — non-fatal if node is unreachable
 				extraConfig, _ := json.Marshal(map[string]any{
 					"port":    in.Port,
 					"network": strings.TrimSpace(in.Network),
 					"service": svcName,
 				})
-				ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
-				defer cancel()
-				if err := s.CoreMgr.EnableCore(ctx, nodeID, in.Protocol, in.Port, extraConfig); err != nil {
-					log.Printf("[knode] EnableCore gRPC failed for node %d protocol %s: %v", nodeID, in.Protocol, err)
-					// Report error to admin UI, leave core in previous state (R10.3)
-					writeJSONCode(w, http.StatusBadGateway, map[string]any{"ok": false, "error": err.Error()})
-					return
-				}
-			} else {
-				log.Printf("[knode] gRPC pool not configured, cannot enable core %s on node %d", in.Protocol, nodeID)
+				func() {
+					defer func() {
+						if r := recover(); r != nil {
+							log.Printf("[knode] EnableCore panicked for node %d protocol %s: %v", nodeID, in.Protocol, r)
+						}
+					}()
+					ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+					defer cancel()
+					if err := s.CoreMgr.EnableCore(ctx, nodeID, in.Protocol, in.Port, extraConfig); err != nil {
+						log.Printf("[knode] EnableCore gRPC failed for node %d protocol %s: %v (config saved to DB)", nodeID, in.Protocol, err)
+					}
+				}()
 			}
 		} else {
 			if s.CoreMgr != nil {
-				// Use gRPC DisableCore for the protocol with 10s timeout (R10.2)
-				ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
-				defer cancel()
-				if err := s.CoreMgr.DisableCore(ctx, nodeID, in.Protocol); err != nil {
-					log.Printf("[knode] DisableCore gRPC failed for node %d protocol %s: %v", nodeID, in.Protocol, err)
-					// Report error to admin UI, leave core in previous state (R10.3)
-					writeJSONCode(w, http.StatusBadGateway, map[string]any{"ok": false, "error": err.Error()})
-					return
-				}
-			} else {
-				log.Printf("[knode] gRPC pool not configured, cannot disable core %s on node %d", in.Protocol, nodeID)
+				// Try gRPC DisableCore — non-fatal if node is unreachable
+				func() {
+					defer func() {
+						if r := recover(); r != nil {
+							log.Printf("[knode] DisableCore panicked for node %d protocol %s: %v", nodeID, in.Protocol, r)
+						}
+					}()
+					ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+					defer cancel()
+					if err := s.CoreMgr.DisableCore(ctx, nodeID, in.Protocol); err != nil {
+						log.Printf("[knode] DisableCore gRPC failed for node %d protocol %s: %v (config saved to DB)", nodeID, in.Protocol, err)
+					}
+				}()
 			}
 		}
 	}

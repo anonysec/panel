@@ -91,7 +91,7 @@ const panelForm = reactive<Record<string, any>>({})
 
 // Edit node state
 const editNodeOpen = ref(false)
-const editNodeForm = reactive({ id: 0, name: '', address: '', port: 2083, api_key: '', client_cert: '', client_key: '', ca_cert: '' })
+const editNodeForm = reactive({ id: 0, name: '', address: '', port: 2083, api_key: '', cert_pem: '' })
 const editNodeSaving = ref(false)
 
 // ═══════════════════════════════════════════════════════════════════════════════
