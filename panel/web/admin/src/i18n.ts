@@ -425,6 +425,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'services.psk': 'Pre-Shared Key',
     'services.domain': 'Domain',
     'services.max_sessions': 'Max Sessions',
+    'services.max_connections': 'Max Connections',
     'services.key_type': 'Key Type',
     // Resellers
     'resellers.title': 'Resellers',

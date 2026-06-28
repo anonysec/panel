@@ -13,7 +13,7 @@ import KFormField from '@koris/ui/KFormField.vue'
 import KSlideOver from '@koris/ui/KSlideOver.vue'
 import KEmptyState from '@koris/ui/KEmptyState.vue'
 
-const { get, post, del } = useApi()
+const { get, post, put, del } = useApi()
 const toast = useToast()
 const { confirm } = useConfirm()
 const { t } = useI18n()
@@ -91,7 +91,7 @@ const panelForm = reactive<Record<string, any>>({})
 
 // Edit node state
 const editNodeOpen = ref(false)
-const editNodeForm = reactive({ id: 0, name: '', address: '' })
+const editNodeForm = reactive({ id: 0, name: '', address: '', port: 2083, api_key: '', client_cert: '', client_key: '', ca_cert: '' })
 const editNodeSaving = ref(false)
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -135,7 +135,7 @@ const protocolFields: Record<string, FieldDef[]> = {
   ],
   l2tp: [
     { key: 'port', label: 'services.port', type: 'number', default: 1701 },
-    { key: 'psk', label: 'services.psk', type: 'password', default: '' },
+    { key: 'psk', label: 'services.psk', type: 'text', default: '' },
     { key: 'dns', label: 'services.dns_label', type: 'dns', default: '8.8.8.8' },
     { key: 'simple_mode', label: 'services.simple_mode', type: 'toggle', default: true },
     { key: 'auth_method', label: 'nodes.auth_method', type: 'select', default: 'MS-CHAPv2',
@@ -151,15 +151,20 @@ const protocolFields: Record<string, FieldDef[]> = {
   ],
   ikev2: [
     { key: 'port', label: 'services.port', type: 'number', default: 500 },
-    { key: 'psk', label: 'services.psk', type: 'password', default: '' },
+    { key: 'psk', label: 'services.psk', type: 'text', default: '' },
     { key: 'dns', label: 'services.dns_label', type: 'dns', default: '8.8.8.8' },
+    { key: 'domain', label: 'services.domain', type: 'text', default: '' },
+    { key: 'cert_source', label: 'services.tls_mode', type: 'select', default: 'letsencrypt', options: [
+      { label: "Let's Encrypt (auto)", value: 'letsencrypt' },
+      { label: 'Custom Certificate', value: 'custom' },
+    ]},
     { key: 'domain', label: 'services.domain', type: 'text', default: '' },
   ],
   ssh: [
     { key: 'port', label: 'services.port', type: 'number', default: 2222 },
-    { key: 'max_sessions', label: 'services.max_sessions', type: 'number', default: 10 },
+    { key: 'max_sessions', label: 'services.max_connections', type: 'number', default: 10 },
     { key: 'key_type', label: 'services.key_type', type: 'select', default: 'ed25519', options: [
-      { label: 'ed25519', value: 'ed25519' }, { label: 'RSA', value: 'rsa' },
+      { label: 'ed25519 (recommended)', value: 'ed25519' }, { label: 'RSA', value: 'rsa' },
     ]},
   ],
 }
@@ -283,15 +288,25 @@ function openEditNode(node: Node) {
   editNodeForm.id = node.id
   editNodeForm.name = node.name
   editNodeForm.address = node.address
+  editNodeForm.port = 2083
+  editNodeForm.api_key = ''
+  editNodeForm.client_cert = ''
+  editNodeForm.client_key = ''
+  editNodeForm.ca_cert = ''
   editNodeOpen.value = true
 }
 
 async function saveEditNode() {
   editNodeSaving.value = true
   try {
-    await post(`/api/admin/knode/nodes/${editNodeForm.id}`, {
+    await put(`/api/admin/knode/nodes/${editNodeForm.id}`, {
       name: editNodeForm.name,
       address: editNodeForm.address,
+      port: editNodeForm.port,
+      ...(editNodeForm.api_key && { api_key: editNodeForm.api_key }),
+      ...(editNodeForm.client_cert && { client_cert_pem: editNodeForm.client_cert }),
+      ...(editNodeForm.client_key && { client_key_pem: editNodeForm.client_key }),
+      ...(editNodeForm.ca_cert && { ca_cert_pem: editNodeForm.ca_cert }),
     })
     toast.success(t('nodes.edit_success'))
     const idx = nodes.value.findIndex(n => n.node.id === editNodeForm.id)
@@ -519,9 +534,6 @@ async function saveProtocolSettings() {
                   <span class="proto-icon">{{ proto.icon }}</span>
                   <span class="proto-name">{{ proto.name }}</span>
                 </div>
-                <span class="proto-port">
-                  :{{ entry.config[proto.key]?.port || proto.defaultPort }}
-                </span>
                 <button
                   class="toggle-btn"
                   :class="{ active: entry.config[proto.key]?.enabled }"
@@ -605,11 +617,12 @@ async function saveProtocolSettings() {
                 </Transition>
               </div>
 
-              <!-- Password with generate button -->
-              <div v-else-if="field.type === 'password'" class="password-field">
+              <!-- Password with generate button (PSK) -->
+              <div v-else-if="field.type === 'password' || (field.key === 'psk')" class="password-field">
                 <KInput
                   v-model="panelForm[field.key]"
-                  type="password"
+                  type="text"
+                  autocomplete="off"
                   :placeholder="t(field.label)"
                 />
                 <KButton size="sm" variant="ghost" @click="generatePsk">
@@ -643,16 +656,33 @@ async function saveProtocolSettings() {
     <KSlideOver
       :open="editNodeOpen"
       :title="t('nodes.edit_node')"
-      width="380px"
+      width="420px"
       @close="editNodeOpen = false"
     >
       <div class="panel-body">
-        <KFormField :label="t('nodes.node_name')" name="name">
-          <KInput v-model="editNodeForm.name" type="text" />
-        </KFormField>
-        <KFormField :label="t('nodes.address')" name="address">
-          <KInput v-model="editNodeForm.address" type="text" />
-        </KFormField>
+        <form autocomplete="off" @submit.prevent>
+          <KFormField :label="t('nodes.node_name')" name="edit-name">
+            <KInput v-model="editNodeForm.name" type="text" autocomplete="off" />
+          </KFormField>
+          <KFormField :label="t('nodes.address')" name="edit-address">
+            <KInput v-model="editNodeForm.address" type="text" autocomplete="off" />
+          </KFormField>
+          <KFormField label="Port" name="edit-port">
+            <KInput v-model="editNodeForm.port" type="number" autocomplete="off" />
+          </KFormField>
+          <KFormField label="API Key" name="edit-apikey">
+            <KInput v-model="editNodeForm.api_key" type="text" placeholder="Leave empty to keep current" autocomplete="off" />
+          </KFormField>
+          <KFormField label="Client Certificate (PEM)" name="edit-cert">
+            <textarea v-model="editNodeForm.client_cert" class="pem-textarea" placeholder="Leave empty to keep current" autocomplete="off" spellcheck="false" />
+          </KFormField>
+          <KFormField label="Client Key (PEM)" name="edit-key">
+            <textarea v-model="editNodeForm.client_key" class="pem-textarea" placeholder="Leave empty to keep current" autocomplete="off" spellcheck="false" />
+          </KFormField>
+          <KFormField label="CA Certificate (PEM)" name="edit-ca">
+            <textarea v-model="editNodeForm.ca_cert" class="pem-textarea" placeholder="Leave empty to keep current" autocomplete="off" spellcheck="false" />
+          </KFormField>
+        </form>
       </div>
       <template #footer>
         <div class="panel-footer">
@@ -704,6 +734,7 @@ async function saveProtocolSettings() {
   border: 1px solid var(--color-border, #28333f);
   border-radius: var(--radius-lg, 12px);
   overflow: hidden;
+  width: 100%;
 }
 
 .table-header {
@@ -1027,6 +1058,25 @@ async function saveProtocolSettings() {
   display: flex;
   justify-content: flex-end;
   gap: var(--space-3, 12px);
+}
+
+/* PEM textarea for certs */
+.pem-textarea {
+  width: 100%;
+  min-height: 80px;
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  background: var(--color-surface-2, #1e2630);
+  border: 1px solid var(--color-border, #28333f);
+  border-radius: var(--radius-md, 8px);
+  color: var(--color-text, #e6edf3);
+  font-family: var(--font-mono, monospace);
+  font-size: var(--text-xs, 11px);
+  resize: vertical;
+}
+
+.pem-textarea:focus {
+  outline: none;
+  border-color: var(--color-primary, #2563eb);
 }
 
 /* ═══════════════════════════════════════════════════════════════════

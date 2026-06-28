@@ -92,10 +92,6 @@ func (s *Server) upsertNodeVPNConfig(w http.ResponseWriter, r *http.Request, nod
 		return
 	}
 
-	enabledInt := 0
-	if in.Enabled {
-		enabledInt = 1
-	}
 	extraStr := ""
 	if len(in.Extra) > 0 {
 		extraStr = string(in.Extra)
@@ -118,7 +114,7 @@ func (s *Server) upsertNodeVPNConfig(w http.ResponseWriter, r *http.Request, nod
 	_, err := s.DB.Exec(`INSERT INTO node_vpn_configs(node_id, protocol, enabled, port, network, extra_json)
 		VALUES($1, $2, $3, $4, $5, $6)
 		ON CONFLICT (node_id, protocol) DO UPDATE SET enabled=EXCLUDED.enabled, port=EXCLUDED.port, network=EXCLUDED.network, extra_json=EXCLUDED.extra_json`,
-		nodeID, in.Protocol, enabledInt, in.Port, strings.TrimSpace(in.Network), nullString(extraStr))
+		nodeID, in.Protocol, in.Enabled, in.Port, strings.TrimSpace(in.Network), nullString(extraStr))
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
