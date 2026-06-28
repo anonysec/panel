@@ -50,7 +50,7 @@
       <KFormField name="expiry" :label="t('customer.expiry_date')">
         <template #default="{ fieldId }">
           <div class="profile-fields__expiry">
-            <!-- Date input with calendar icon -->
+            <!-- Date input with calendar icon + inline expiry info -->
             <div class="profile-fields__date-wrapper">
               <input
                 ref="dateInputRef"
@@ -70,9 +70,15 @@
                   <path d="M5 1v2M11 1v2M1.5 6h13M2.5 3h11a1 1 0 011 1v10a1 1 0 01-1 1h-11a1 1 0 01-1-1V4a1 1 0 011-1z" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
               </button>
+              <!-- "Expires in X days" inline beside the date input -->
+              <span v-if="expiresInDays !== null" class="profile-fields__expiry-inline">
+                <span v-if="expiresInDays > 0">{{ expiresInDays }}d</span>
+                <span v-else-if="expiresInDays === 0" class="profile-fields__expiry-inline--warning">today</span>
+                <span v-else class="profile-fields__expiry-inline--expired">-{{ Math.abs(expiresInDays) }}d</span>
+              </span>
             </div>
 
-            <!-- Quick-set chips (always visible, minimal style) -->
+            <!-- Quick-set chips (always visible, compact, one row) -->
             <div class="profile-fields__quick-chips">
               <button
                 v-for="chip in expiryChips"
@@ -84,37 +90,9 @@
                 {{ chip }}
               </button>
             </div>
-
-            <!-- "Expires in X days" display -->
-            <p v-if="expiresInDays !== null" class="profile-fields__expiry-info">
-              <span v-if="expiresInDays > 0">
-                Expires in {{ expiresInDays }} day{{ expiresInDays === 1 ? '' : 's' }}
-              </span>
-              <span v-else-if="expiresInDays === 0" class="profile-fields__expiry-info--warning">
-                Expires today
-              </span>
-              <span v-else class="profile-fields__expiry-info--expired">
-                Expired {{ Math.abs(expiresInDays) }} day{{ Math.abs(expiresInDays) === 1 ? '' : 's' }} ago
-              </span>
-            </p>
           </div>
         </template>
       </KFormField>
-    </div>
-
-    <!-- Billing Toggle -->
-    <div class="profile-fields__toggle-field">
-      <button
-        type="button"
-        class="profile-fields__toggle-switch"
-        :class="{ 'profile-fields__toggle-switch--on': modelValue.billing_enabled }"
-        role="switch"
-        :aria-checked="String(modelValue.billing_enabled)"
-        @click="updateField('billing_enabled', !modelValue.billing_enabled)"
-      >
-        <span class="profile-fields__toggle-switch-knob" />
-      </button>
-      <span class="profile-fields__toggle-text">Enable Billing</span>
     </div>
 
     <!-- Note -->
@@ -366,11 +344,14 @@ function setProtocolOption(protocol: string, value: string) {
 .profile-fields__expiry {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2, 8px);
+  gap: var(--space-1, 4px);
 }
 
 .profile-fields__date-wrapper {
   position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
 }
 
 .profile-fields__date-input {
@@ -429,88 +410,47 @@ function setProtocolOption(protocol: string, value: string) {
   color: var(--color-primary, #2563eb);
 }
 
-/* Quick-set chips — minimal, no bg/border */
+/* Quick-set chips — compact, one row, no wrap */
 .profile-fields__quick-chips {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1, 4px);
+  flex-wrap: nowrap;
+  gap: 2px;
 }
 
 .profile-fields__chip {
-  padding: 2px 8px;
+  padding: 1px 6px;
   border: none;
   background: transparent;
   color: var(--color-primary, #2563eb);
-  font-size: var(--text-sm, 13px);
+  font-size: 11px;
   font-family: var(--font-family);
   font-weight: 500;
   cursor: pointer;
   border-radius: var(--radius-sm, 4px);
   transition: background 100ms ease;
+  white-space: nowrap;
 }
 
 .profile-fields__chip:hover {
   background: rgba(37, 99, 235, 0.1);
 }
 
-.profile-fields__expiry-info {
-  margin: 0;
-  font-size: var(--text-xs, 12px);
+/* Inline expiry info — beside date input */
+.profile-fields__expiry-inline {
+  font-size: 11px;
   color: var(--color-muted, #6b7280);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
-.profile-fields__expiry-info--warning {
+.profile-fields__expiry-inline--warning {
   color: var(--color-warning, #d97706);
   font-weight: 500;
 }
 
-.profile-fields__expiry-info--expired {
+.profile-fields__expiry-inline--expired {
   color: var(--color-danger, #dc2626);
   font-weight: 500;
-}
-
-/* ─── Billing Toggle ─────────────────────────────────────────────────────── */
-.profile-fields__toggle-field {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2, 8px);
-}
-
-.profile-fields__toggle-switch {
-  position: relative;
-  width: 36px;
-  height: 20px;
-  border: none;
-  border-radius: 10px;
-  background: var(--color-border, #28333f);
-  cursor: pointer;
-  padding: 0;
-  transition: background 150ms ease;
-}
-
-.profile-fields__toggle-switch--on {
-  background: var(--color-primary, #2563eb);
-}
-
-.profile-fields__toggle-switch-knob {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: #fff;
-  transition: transform 150ms ease;
-}
-
-.profile-fields__toggle-switch--on .profile-fields__toggle-switch-knob {
-  transform: translateX(16px);
-}
-
-.profile-fields__toggle-text {
-  font-size: var(--text-sm, 13px);
-  font-weight: 500;
-  color: var(--color-text, #e6edf3);
 }
 
 /* ─── Proxy Settings — Styled Cards (no checkboxes) ───────────────────────── */

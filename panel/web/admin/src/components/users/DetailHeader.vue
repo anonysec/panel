@@ -9,13 +9,21 @@
       <KUsageBar :used="usedBytes" :limit="limitBytes" size="sm" />
     </div>
 
-    <div v-if="billingEnabled" class="detail-header__wallet">
-      <span class="detail-header__balance">{{ formattedBalance }}</span>
+    <div class="detail-header__wallet">
+      <span v-if="billingEnabled" class="detail-header__balance">{{ formattedBalance }}</span>
       <div class="detail-header__wallet-actions">
-        <KButton variant="ghost" size="sm" @click="$emit('top-up')">
+        <button
+          type="button"
+          class="detail-header__billing-card"
+          :class="{ 'detail-header__billing-card--active': billingEnabled }"
+          @click="$emit('update:billing-enabled', !billingEnabled)"
+        >
+          Billing
+        </button>
+        <KButton v-if="billingEnabled" variant="ghost" size="sm" @click="$emit('top-up')">
           Top Up
         </KButton>
-        <KButton variant="ghost" size="sm" @click="$emit('deduct')">
+        <KButton v-if="billingEnabled" variant="ghost" size="sm" @click="$emit('deduct')">
           Deduct
         </KButton>
       </div>
@@ -48,6 +56,7 @@ const props = withDefaults(defineProps<DetailHeaderProps>(), {
 defineEmits<{
   'top-up': []
   'deduct': []
+  'update:billing-enabled': [value: boolean]
 }>()
 
 const formattedBalance = computed(() =>
@@ -98,6 +107,35 @@ const formattedBalance = computed(() =>
 
 .detail-header__wallet-actions {
   display: flex;
+  align-items: center;
   gap: var(--space-1, 4px);
+}
+
+/* Billing toggle card — styled like proxy protocol cards */
+.detail-header__billing-card {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border: 1px solid var(--color-border, #28333f);
+  border-radius: var(--radius-md, 6px);
+  background: var(--color-surface, #0b1120);
+  cursor: pointer;
+  font-size: 12px;
+  font-family: var(--font-family);
+  font-weight: 500;
+  color: var(--color-muted, #8b98a5);
+  transition: border-color 100ms ease, background 100ms ease, color 100ms ease;
+  user-select: none;
+}
+
+.detail-header__billing-card:hover {
+  border-color: var(--color-primary, #2563eb);
+  color: var(--color-text, #e6edf3);
+}
+
+.detail-header__billing-card--active {
+  border-color: var(--color-primary, #2563eb);
+  background: rgba(37, 99, 235, 0.08);
+  color: var(--color-primary, #2563eb);
 }
 </style>

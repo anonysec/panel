@@ -251,6 +251,10 @@ function handleDeduct(): void {
   }
 }
 
+function handleBillingToggle(value: boolean): void {
+  profileFormData.value = { ...profileFormData.value, billing_enabled: value }
+}
+
 function onSpeedLimitUpdate(_value: number): void {
   // Local update - saved on Modify click
 }
@@ -337,6 +341,7 @@ onUnmounted(() => {
             :billing-enabled="profileFormData.billing_enabled"
             @top-up="handleTopUp"
             @deduct="handleDeduct"
+            @update:billing-enabled="handleBillingToggle"
           />
 
           <!-- ProfileFields -->
