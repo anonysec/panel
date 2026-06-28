@@ -26,8 +26,21 @@
       </KFormField>
     </div>
 
-    <!-- Row 2: Data Limit + Expiry Date side by side -->
+    <!-- Row 2: Plan + Data Limit -->
     <div class="profile-fields__row">
+      <!-- Plan -->
+      <KFormField name="plan" :label="t('user.plan')">
+        <template #default="{ fieldId }">
+          <KSelect
+            :id="fieldId"
+            :model-value="modelValue.plan_id"
+            :options="planOptions"
+            placeholder="Select plan"
+            @update:model-value="updateField('plan_id', $event)"
+          />
+        </template>
+      </KFormField>
+
       <!-- Data Limit (GB only, decimals supported) -->
       <KFormField name="data-limit" :label="t('customer.data_limit')">
         <template #default="{ fieldId }">
@@ -45,58 +58,50 @@
           </div>
         </template>
       </KFormField>
+    </div>
 
-      <!-- Expiry Date -->
-      <KFormField name="expiry">
-        <template #label>
-          <span class="profile-fields__expiry-label">
-            {{ t('customer.expiry_date') }}
-            <span v-if="expiresInDays !== null" class="profile-fields__expiry-badge">
-              <span v-if="expiresInDays > 0">{{ expiresInDays }}d</span>
-              <span v-else-if="expiresInDays === 0" class="profile-fields__expiry-badge--warning">today</span>
-              <span v-else class="profile-fields__expiry-badge--expired">-{{ Math.abs(expiresInDays) }}d</span>
-            </span>
-          </span>
-        </template>
-        <template #default="{ fieldId }">
-          <div class="profile-fields__expiry">
-            <!-- Date input with calendar icon + inline expiry info -->
-            <div class="profile-fields__date-wrapper">
-              <input
-                ref="dateInputRef"
-                :id="fieldId"
-                type="date"
-                class="profile-fields__date-input"
-                :value="expiryDateValue"
-                @input="onDateInput"
-              />
-              <button
-                type="button"
-                class="profile-fields__calendar-icon"
-                aria-label="Open calendar"
-                @click="openDatePicker"
-              >
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                  <path d="M5 1v2M11 1v2M1.5 6h13M2.5 3h11a1 1 0 011 1v10a1 1 0 01-1 1h-11a1 1 0 01-1-1V4a1 1 0 011-1z" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-              </button>
-            </div>
-
-            <!-- Quick-set chips (always visible, compact, one row) -->
-            <div class="profile-fields__quick-chips">
-              <button
-                v-for="chip in expiryChips"
-                :key="chip"
-                type="button"
-                class="profile-fields__chip"
-                @click="applyChip(chip)"
-              >
-                {{ chip }}
-              </button>
-            </div>
-          </div>
-        </template>
-      </KFormField>
+    <!-- Expiry Date (own row with badge in label) -->
+    <div class="profile-fields__field-wrapper">
+      <label class="profile-fields__custom-label">
+        {{ t('customer.expiry_date') }}
+        <span v-if="expiresInDays !== null" class="profile-fields__expiry-badge">
+          <span v-if="expiresInDays > 0">{{ expiresInDays }}d</span>
+          <span v-else-if="expiresInDays === 0" class="profile-fields__expiry-badge--warning">today</span>
+          <span v-else class="profile-fields__expiry-badge--expired">-{{ Math.abs(expiresInDays) }}d</span>
+        </span>
+      </label>
+      <div class="profile-fields__expiry">
+        <div class="profile-fields__date-wrapper">
+          <input
+            ref="dateInputRef"
+            type="date"
+            class="profile-fields__date-input"
+            :value="expiryDateValue"
+            @input="onDateInput"
+          />
+          <button
+            type="button"
+            class="profile-fields__calendar-icon"
+            aria-label="Open calendar"
+            @click="openDatePicker"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M5 1v2M11 1v2M1.5 6h13M2.5 3h11a1 1 0 011 1v10a1 1 0 01-1 1h-11a1 1 0 01-1-1V4a1 1 0 011-1z" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+        </div>
+        <div class="profile-fields__quick-chips">
+          <button
+            v-for="chip in expiryChips"
+            :key="chip"
+            type="button"
+            class="profile-fields__chip"
+            @click="applyChip(chip)"
+          >
+            {{ chip }}
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- Note -->
@@ -154,6 +159,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useI18n } from '@koris/composables/useI18n'
+import { usePlansStore } from '@/stores/plans'
 import KFormField from '@koris/ui/KFormField.vue'
 import KInput from '@koris/ui/KInput.vue'
 import KSelect from '@koris/ui/KSelect.vue'
@@ -161,6 +167,7 @@ import KTextarea from '@koris/ui/KTextarea.vue'
 import { computeExpiryDate, type ExpiryOffset } from '@/utils/computeExpiryDate'
 
 const { t } = useI18n()
+const plansStore = usePlansStore()
 
 // ─── Date input ref for calendar icon click ─────────────────────────────────
 const dateInputRef = ref<HTMLInputElement | null>(null)
@@ -175,6 +182,7 @@ function openDatePicker() {
 export interface ProfileFormData {
   username: string
   status: string
+  plan_id: string
   data_limit: string
   expiry_date: string
   note: string
@@ -200,6 +208,14 @@ const statusOptions = [
   { label: t('customer.status_expired'), value: 'expired' },
   { label: t('customer.status_limited'), value: 'limited' },
 ]
+
+// ─── Plan Options ───────────────────────────────────────────────────────────
+const planOptions = computed(() => {
+  return plansStore.activePlans.map((p: any) => ({
+    value: String(p.id),
+    label: `${p.name} (${p.data_gb}GB / ${p.duration_days}d)`,
+  }))
+})
 
 // ─── Expiry Chips ───────────────────────────────────────────────────────────
 const expiryChips: ExpiryOffset[] = ['+7d', '+1m', '+2m', '+3m', '+6m', '+1y']
@@ -351,6 +367,22 @@ function setProtocolOption(protocol: string, value: string) {
   color: var(--color-muted, #8b98a5);
   white-space: nowrap;
   padding-right: var(--space-1, 4px);
+}
+
+/* ─── Custom label for expiry (since KFormField doesn't support #label slot) */
+.profile-fields__field-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.profile-fields__custom-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text, #e6edf3);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 /* ─── Expiry Section ──────────────────────────────────────────────────────── */

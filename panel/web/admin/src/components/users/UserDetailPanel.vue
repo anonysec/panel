@@ -81,6 +81,7 @@ const showTransactionsModal = ref(false)
 const profileFormData = ref<ProfileFormData>({
   username: '',
   status: 'active',
+  plan_id: '',
   data_limit: '',
   expiry_date: '',
   note: '',
@@ -108,6 +109,7 @@ function syncFormFromCustomer() {
   profileFormData.value = {
     username: customer.value.username,
     status: customer.value.status,
+    plan_id: customer.value.plan_id ? String(customer.value.plan_id) : '',
     data_limit: dataLimit,
     expiry_date: expirationCheck?.value ?? '',
     note: customer.value.notes ?? '',
@@ -222,10 +224,8 @@ function handleModify(): void {
     status: profileFormData.value.status,
     note: profileFormData.value.note,
     expiry_date: profileFormData.value.expiry_date || null,
-    billing_enabled: profileFormData.value.billing_enabled,
     data_limit_gb: profileFormData.value.data_limit ? Number(profileFormData.value.data_limit) : 0,
-    allowed_protocols: profileFormData.value.allowed_protocols,
-    protocol_options: profileFormData.value.protocol_options,
+    plan_id: profileFormData.value.plan_id ? Number(profileFormData.value.plan_id) : undefined,
   }
   patch(`/api/customers/${props.userId}`, payload)
     .then(() => {

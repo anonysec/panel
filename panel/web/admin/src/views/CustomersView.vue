@@ -302,6 +302,7 @@ const userForm = ref({
 const newUserProfileData = ref<ProfileFormData>({
   username: '',
   status: 'active',
+  plan_id: '',
   data_limit: '',
   expiry_date: '',
   note: '',
@@ -538,6 +539,7 @@ function openNewUserSlideOver() {
   newUserProfileData.value = {
     username: '',
     status: 'active',
+    plan_id: defaultPlanId,
     data_limit: '',
     expiry_date: '',
     note: '',
