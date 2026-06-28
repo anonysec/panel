@@ -305,16 +305,19 @@ function formatDuration(seconds: number): string {
       <div class="chart-panel chart-panel--donut">
         <h4 class="panel-title">{{ t('dashboard.user_status') }}</h4>
         <KChart
-          v-if="customers.list.length > 0"
+          v-if="!customers.loading && customers.list.length > 0"
           type="donut"
           :data="userStatusData"
           :height="200"
           :animate="true"
           :interactive="true"
         />
+        <div v-else-if="!customers.loading && customers.list.length === 0" class="empty-donut">
+          <p class="text-muted">{{ t('empty.no_users') }}</p>
+        </div>
         <KSkeleton v-else variant="rect" :width="'100%'" :height="200" />
         <!-- Status Legend -->
-        <div v-if="customers.list.length > 0" class="donut-legend">
+        <div v-if="!customers.loading && customers.list.length > 0" class="donut-legend">
           <div
             v-for="(item, i) in userStatusData"
             :key="item.label"

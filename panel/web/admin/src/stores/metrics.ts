@@ -55,7 +55,7 @@ interface MetricsHistoryResponse {
 /**
  * Real-time metrics store — receives node metrics via WebSocket and manages alerts.
  *
- * Connects to the existing /api/ws/realtime endpoint which now emits
+ * Connects to the existing /api/realtime endpoint which now emits
  * `node_metrics` and `node_status_change` message types.
  *
  * Requirements: 11.1, 11.2, 11.3, 11.4, 11.5, 12.1, 12.2, 12.3
@@ -68,8 +68,8 @@ export const useMetricsStore = defineStore('metrics', () => {
 
   // ─── WebSocket ────────────────────────────────────────────────────────────
   const wsUrl = typeof window !== 'undefined'
-    ? `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api/ws/realtime`
-    : 'ws://localhost/api/ws/realtime'
+    ? `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api/realtime`
+    : 'ws://localhost/api/realtime'
 
   const { connected, connect, disconnect } = useWebSocket({
     url: wsUrl,

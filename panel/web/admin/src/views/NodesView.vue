@@ -70,7 +70,7 @@ const PROTOCOL_DEFAULTS: Record<string, any> = {
   openvpn: {
     port: 1194, network: '10.8.0.0/20', enabled: true, mtu: 1500, max_clients: 0, enable_logs: true, conn_limit: 0,
     extra_json: {
-      transport: 'udp', cipher: 'AES-256-GCM', tls_mode: 'tls-crypt', dns1: '8.8.8.8', dns2: '8.8.4.4',
+      transport: 'udp', cipher: 'AES-256-GCM', tls_mode: 'tls-crypt', auth_mode: 'userpass', backup_domain: '', dns1: '8.8.8.8', dns2: '8.8.4.4',
       comp_lzo: false, push_routes: '', fragment: 0, mssfix: 0, keepalive: '10 120', topology: 'subnet', verb: 3, custom_directives: '',
     },
   },
@@ -614,6 +614,16 @@ onMounted(() => {
                           <KFormField :name="`${proto}-transport`" :label="t('nodes.transport')" :hint="t('nodes.hint_transport')">
                             <template #default="{ fieldId }">
                               <KSelect :id="fieldId" v-model="configForm.extra_json.transport" :options="[{ label: 'UDP', value: 'udp' }, { label: 'TCP', value: 'tcp' }]" />
+                            </template>
+                          </KFormField>
+                          <KFormField :name="`${proto}-auth-mode`" label="Auth Mode" hint="userpass = FreeRADIUS, certificate = passwordless TLS">
+                            <template #default="{ fieldId }">
+                              <KSelect :id="fieldId" v-model="configForm.extra_json.auth_mode" :options="[{ label: 'Username/Password', value: 'userpass' }, { label: 'Certificate (passwordless)', value: 'certificate' }]" />
+                            </template>
+                          </KFormField>
+                          <KFormField :name="`${proto}-backup-domain`" label="Backup Domain" hint="Failover domain if main IP is blocked">
+                            <template #default="{ fieldId }">
+                              <KInput :id="fieldId" v-model="configForm.extra_json.backup_domain" placeholder="e.g. backup.vpn.example.com" />
                             </template>
                           </KFormField>
                           <KFormField :name="`${proto}-topology`" :label="t('nodes.topology')">

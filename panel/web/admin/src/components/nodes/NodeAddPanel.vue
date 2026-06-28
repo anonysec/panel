@@ -22,8 +22,119 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const nodesStore = useNodesStore()
 
+// ─── Paste All-in-One ───────────────────────────────────────────────────────
+const showPasteMode = ref(false)
+const pasteCode = ref('')
+const pasteError = ref('')
+
+/**
+ * Parses the knode install output to extract address, port, api_key, and certificate.
+ * Supports formats like:
+ *   Address:  185.1.2.3
+ *   Port:     2083
+ *   API Key:  kn_abc123...
+ *   Certificate:
+ *   -----BEGIN CERTIFICATE-----
+ *   ...
+ *   -----END CERTIFICATE-----
+ *
+ * Also supports compact one-line format: ip:port:apikey:cert_base64
+ */
+function parsePasteCode(text: string): { address: string; port: number; api_key: string; ca_cert: string } | null {
+  const lines = text.trim().split('\n')
+
+  // Try key:value format (knode install output)
+  let address = ''
+  let port = 2083
+  let apiKey = ''
+  let certLines: string[] = []
+  let inCert = false
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim()
+
+    if (inCert) {
+      certLines.push(lines[i].trimEnd())
+      if (line.includes('-----END')) {
+        inCert = false
+      }
+      continue
+    }
+
+    // Match "Address:" or "IP:" patterns
+    const addrMatch = line.match(/^(?:address|ip|host|server)\s*[:=]\s*(.+)$/i)
+    if (addrMatch) {
+      address = addrMatch[1].trim()
+      continue
+    }
+
+    // Match "Port:" pattern
+    const portMatch = line.match(/^port\s*[:=]\s*(\d+)/i)
+    if (portMatch) {
+      port = parseInt(portMatch[1], 10)
+      continue
+    }
+
+    // Match "API Key:" or "Token:" or "api_key:" patterns
+    const keyMatch = line.match(/^(?:api[_\s]?key|token|key)\s*[:=]\s*(.+)$/i)
+    if (keyMatch) {
+      apiKey = keyMatch[1].trim()
+      continue
+    }
+
+    // Match "Certificate:" or "Cert:" header
+    const certHeaderMatch = line.match(/^(?:certificate|cert|ca[_\s]?cert)\s*[:=]?\s*$/i)
+    if (certHeaderMatch) {
+      inCert = true
+      continue
+    }
+
+    // Detect PEM start directly
+    if (line.startsWith('-----BEGIN')) {
+      inCert = true
+      certLines.push(lines[i].trimEnd())
+      continue
+    }
+  }
+
+  const caCert = certLines.join('\n').trim()
+
+  if (address && apiKey) {
+    return { address, port, api_key: apiKey, ca_cert: caCert }
+  }
+
+  return null
+}
+
+function applyPasteCode() {
+  pasteError.value = ''
+  const parsed = parsePasteCode(pasteCode.value)
+  if (!parsed) {
+    pasteError.value = 'Could not parse the pasted text. Expected format:\nAddress: <ip>\nPort: <port>\nAPI Key: <key>\nCertificate:\n-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----'
+    return
+  }
+
+  form.value.address = parsed.address
+  form.value.port = parsed.port
+  form.value.api_key = parsed.api_key
+  if (parsed.ca_cert) {
+    form.value.ca_cert = parsed.ca_cert
+  }
+
+  showPasteMode.value = false
+  pasteCode.value = ''
+}
+
 // ─── Form State (managed by useEntityForm) ──────────────────────────────────
-function validate(f: typeof form.value): string | null {
+interface NodeFormValues {
+  name: string
+  address: string
+  port: number
+  api_key: string
+  ca_cert: string
+}
+
+function validate(f: NodeFormValues): string | null {
   if (!f.address.trim()) return t('nodes.validation_address')
   const p = Number(f.port)
   if (!Number.isInteger(p) || p < 1 || p > 65535) return t('nodes.validation_port')
@@ -120,6 +231,35 @@ function handleClose() {
         {{ validationError }}
       </KAlert>
 
+      <!-- Paste All-in-One Section -->
+      <div class="paste-section">
+        <KButton
+          type="button"
+          variant="ghost"
+          size="sm"
+          @click="showPasteMode = !showPasteMode"
+        >
+          {{ showPasteMode ? 'Manual Entry' : '📋 Paste Install Output' }}
+        </KButton>
+
+        <div v-if="showPasteMode" class="paste-area">
+          <p class="paste-hint">
+            Paste the output from knode installation. The fields will be auto-filled.
+          </p>
+          <KTextarea
+            v-model="pasteCode"
+            :rows="10"
+            placeholder="Address:  185.1.2.3&#10;Port:     2083&#10;&#10;API Key:&#10;kn_abc123...&#10;&#10;Certificate:&#10;-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"
+          />
+          <KAlert v-if="pasteError" variant="error" closable @close="pasteError = ''">
+            {{ pasteError }}
+          </KAlert>
+          <KButton type="button" variant="primary" size="sm" @click="applyPasteCode">
+            Apply
+          </KButton>
+        </div>
+      </div>
+
       <KFormField name="node-name" :label="t('nodes.node_name')" hint="Optional — defaults to address">
         <template #default="{ fieldId }">
           <KInput :id="fieldId" v-model="form.name" placeholder="e.g. de-1, us-west" />
@@ -186,5 +326,28 @@ function handleClose() {
   gap: var(--space-2);
   padding-top: var(--space-3);
   border-top: 1px solid var(--color-border);
+}
+
+/* Paste All-in-One */
+.paste-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  background: var(--color-surface-2, rgba(0,0,0,0.05));
+  border-radius: var(--radius-md);
+  border: 1px dashed var(--color-border);
+}
+
+.paste-area {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.paste-hint {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--color-muted);
 }
 </style>

@@ -364,7 +364,10 @@ func (s *Server) wireguardPeerConfig(w http.ResponseWriter, r *http.Request, id 
 	_ = s.DB.QueryRow(`SELECT COALESCE(public_ip,''), COALESCE(domain,'') FROM nodes WHERE id=$1`, peer.NodeID).Scan(&nodeIP, &nodeDomain)
 	_ = s.DB.QueryRow(`SELECT port FROM node_vpn_configs WHERE node_id=$1 AND protocol='wireguard'`, peer.NodeID).Scan(&wgPort)
 
-	if nodeDomain != "" {
+	// Prefer backup_domain from extra_json (failover domain), then node domain, then IP
+	if backupDomain, ok := extra["backup_domain"].(string); ok && backupDomain != "" {
+		serverEndpoint = fmt.Sprintf("%s:%d", backupDomain, wgPort)
+	} else if nodeDomain != "" {
 		serverEndpoint = fmt.Sprintf("%s:%d", nodeDomain, wgPort)
 	} else if nodeIP != "" {
 		serverEndpoint = fmt.Sprintf("%s:%d", nodeIP, wgPort)

@@ -12,6 +12,7 @@ import KSelect from '@koris/ui/KSelect.vue'
 import KFormField from '@koris/ui/KFormField.vue'
 import KSlideOver from '@koris/ui/KSlideOver.vue'
 import KEmptyState from '@koris/ui/KEmptyState.vue'
+import NodeAddPanel from '@/components/nodes/NodeAddPanel.vue'
 
 const { get, post, put, del } = useApi()
 const toast = useToast()
@@ -78,6 +79,9 @@ const dnsPresets = [
 const nodes = ref<NodeWithConfig[]>([])
 const loading = ref(true)
 
+// Add node slide state
+const showAddNodeSlide = ref(false)
+
 // Side panel state
 const panelOpen = ref(false)
 const panelNodeId = ref<number | null>(null)
@@ -115,6 +119,10 @@ const protocolFields: Record<string, FieldDef[]> = {
     { key: 'transport', label: 'services.transport', type: 'select', default: 'udp', options: [
       { label: 'UDP', value: 'udp' }, { label: 'TCP', value: 'tcp' },
     ]},
+    { key: 'auth_mode', label: 'Auth Mode', type: 'select', default: 'userpass', options: [
+      { label: 'Username/Password', value: 'userpass' },
+      { label: 'Certificate (passwordless)', value: 'certificate' },
+    ]},
     { key: 'cipher', label: 'services.cipher', type: 'select', default: 'AES-256-GCM', options: [
       { label: 'AES-256-GCM', value: 'AES-256-GCM' },
       { label: 'AES-128-GCM', value: 'AES-128-GCM' },
@@ -125,11 +133,13 @@ const protocolFields: Record<string, FieldDef[]> = {
       { label: 'tls-auth (compatible)', value: 'tls-auth' },
       { label: 'None (no protection)', value: 'none' },
     ]},
+    { key: 'backup_domain', label: 'Backup Domain', type: 'text', default: '' },
     { key: 'dns', label: 'services.dns_label', type: 'dns', default: '8.8.8.8' },
     { key: 'mtu', label: 'services.mtu', type: 'number', default: 1500 },
   ],
   wireguard: [
     { key: 'port', label: 'services.port', type: 'number', default: 51820 },
+    { key: 'backup_domain', label: 'Backup Domain', type: 'text', default: '' },
     { key: 'dns', label: 'services.dns_label', type: 'dns', default: '1.1.1.1' },
     { key: 'gaming_optimize', label: 'services.gaming_optimize', type: 'toggle', default: false,
       tooltip: 'services.gaming_desc' },
@@ -137,6 +147,7 @@ const protocolFields: Record<string, FieldDef[]> = {
   l2tp: [
     { key: 'port', label: 'services.port', type: 'number', default: 1701 },
     { key: 'psk', label: 'services.psk', type: 'text', default: '' },
+    { key: 'backup_domain', label: 'Backup Domain', type: 'text', default: '' },
     { key: 'dns', label: 'services.dns_label', type: 'dns', default: '8.8.8.8' },
     { key: 'simple_mode', label: 'services.simple_mode', type: 'toggle', default: true },
     { key: 'auth_method', label: 'nodes.auth_method', type: 'select', default: 'MS-CHAPv2',
@@ -153,6 +164,7 @@ const protocolFields: Record<string, FieldDef[]> = {
   ikev2: [
     { key: 'port', label: 'services.port', type: 'number', default: 500 },
     { key: 'psk', label: 'services.psk', type: 'text', default: '' },
+    { key: 'backup_domain', label: 'Backup Domain', type: 'text', default: '' },
     { key: 'dns', label: 'services.dns_label', type: 'dns', default: '8.8.8.8' },
     { key: 'domain', label: 'services.domain', type: 'text', default: '' },
     { key: 'cert_source', label: 'services.tls_mode', type: 'select', default: 'letsencrypt', options: [
@@ -199,6 +211,11 @@ function isNodeOnline(node: Node): boolean {
 onMounted(async () => {
   await fetchNodes()
 })
+
+function onNodeCreated(_nodeId: number) {
+  showAddNodeSlide.value = false
+  fetchNodes()
+}
 
 async function fetchNodes() {
   loading.value = true
@@ -450,10 +467,17 @@ async function saveProtocolSettings() {
         <h1>{{ t('services.title') }}</h1>
         <p class="subtitle">{{ t('services.subtitle') }}</p>
       </div>
-      <KButton variant="primary" @click="$router.push({ name: 'node-detail', params: { id: 'new' } })">
+      <KButton variant="primary" @click="showAddNodeSlide = true">
         + {{ t('services.add_node') }}
       </KButton>
     </header>
+
+    <!-- Add Node Slide-Over Panel -->
+    <NodeAddPanel
+      :open="showAddNodeSlide"
+      @close="showAddNodeSlide = false"
+      @created="onNodeCreated"
+    />
 
     <!-- Loading state -->
     <div v-if="loading" class="loading-grid">
@@ -677,7 +701,7 @@ async function saveProtocolSettings() {
           <KFormField label="API Key" name="edit-apikey">
             <KInput v-model="editNodeForm.api_key" type="text" placeholder="Leave empty to keep current" autocomplete="off" />
           </KFormField>
-          <KFormField label="CA Certificate (PEM)" name="edit-ca">
+          <KFormField label="Certificate" name="edit-ca">
             <textarea v-model="editNodeForm.ca_cert" class="pem-textarea" placeholder="Leave empty to keep current" autocomplete="off" spellcheck="false" />
           </KFormField>
         </form>
@@ -697,7 +721,6 @@ async function saveProtocolSettings() {
 <style scoped>
 .services-view {
   padding: var(--space-6, 24px);
-  max-width: 1200px;
 }
 
 .page-header {
