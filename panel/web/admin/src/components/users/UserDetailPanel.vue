@@ -18,6 +18,7 @@ import { ref, watch, computed, onMounted, onUnmounted } from 'vue'
 import { useApi } from '@koris/composables/useApi'
 import KButton from '@koris/ui/KButton.vue'
 import KThreeDotMenu from '@koris/ui/KThreeDotMenu.vue'
+import KModal from '@koris/ui/KModal.vue'
 import DetailHeader from './DetailHeader.vue'
 import ProfileFields from './ProfileFields.vue'
 import AdvancedSettings from './AdvancedSettings.vue'
@@ -43,7 +44,7 @@ const emit = defineEmits<{
 }>()
 
 // ─── API & State ────────────────────────────────────────────────────────────
-const { get } = useApi({ showErrorToast: false })
+const { get, post } = useApi({ showErrorToast: false })
 
 const customer = ref<CustomerDetail | null>(null)
 const loading = ref(false)
@@ -72,6 +73,10 @@ const menuItems: MenuItem[] = [
   { key: 'reset-usage', label: 'Reset Usage', icon: '🔄' },
 ]
 
+// ─── Modal state for Connected Clients / Transactions ───────────────────────
+const showClientsModal = ref(false)
+const showTransactionsModal = ref(false)
+
 // ─── Derived form data for ProfileFields ────────────────────────────────────
 const profileFormData = computed<ProfileFormData>({
   get() {
@@ -80,7 +85,6 @@ const profileFormData = computed<ProfileFormData>({
         username: '',
         status: 'active',
         data_limit: '',
-        data_limit_unit: 'GB',
         expiry_date: '',
         note: '',
         allowed_protocols: [],
@@ -96,28 +100,16 @@ const profileFormData = computed<ProfileFormData>({
       ?.filter((r) => r.attribute === 'Allowed-Protocol')
       .map((r) => r.value) ?? []
 
-    // Data limit
+    // Data limit (always in GB, supports decimals)
     let dataLimit = ''
-    let dataLimitUnit = 'GB'
     if (customer.value.subscription?.data_limit_gb) {
-      const limitGb = customer.value.subscription.data_limit_gb
-      if (limitGb >= 1024) {
-        dataLimit = String(Math.round(limitGb / 1024))
-        dataLimitUnit = 'TB'
-      } else if (limitGb < 1) {
-        dataLimit = String(Math.round(limitGb * 1024))
-        dataLimitUnit = 'MB'
-      } else {
-        dataLimit = String(limitGb)
-        dataLimitUnit = 'GB'
-      }
+      dataLimit = String(customer.value.subscription.data_limit_gb)
     }
 
     return {
       username: customer.value.username,
       status: customer.value.status,
       data_limit: dataLimit,
-      data_limit_unit: dataLimitUnit,
       expiry_date: expirationCheck?.value ?? '',
       note: customer.value.notes ?? '',
       allowed_protocols: protocols,
@@ -233,19 +225,13 @@ function handleModify(): void {
 }
 
 function handleMenuSelect(key: string): void {
-  // Handle each action in context — these show relevant sections or perform actions
   if (key === 'clients') {
-    // Scroll to connected clients section
-    const el = document.querySelector('.connected-clients')
-    el?.scrollIntoView({ behavior: 'smooth' })
+    showClientsModal.value = true
   } else if (key === 'transactions') {
-    // Scroll to transactions section
-    const el = document.querySelector('.transaction-list')
-    el?.scrollIntoView({ behavior: 'smooth' })
+    showTransactionsModal.value = true
   } else if (key === 'reset-usage') {
     // Reset usage — call API
     if (props.userId) {
-      const { post } = useApi({ showErrorToast: true })
       post(`/api/customers/${props.userId}/traffic-reset`, {}).then(() => {
         refresh()
       })
@@ -366,14 +352,6 @@ onUnmounted(() => {
             />
           </div>
 
-          <!-- ConnectedClients -->
-          <ConnectedClients :user-id="userId" />
-
-          <!-- TransactionList -->
-          <TransactionList
-            :transactions="customer.wallet_transactions ?? []"
-          />
-
           <!-- Action Bar -->
           <div class="user-detail-panel__action-bar">
             <KThreeDotMenu
@@ -394,6 +372,28 @@ onUnmounted(() => {
       </aside>
     </Transition>
   </Teleport>
+
+  <!-- Connected Clients Modal -->
+  <KModal
+    :open="showClientsModal"
+    title="Connected Clients"
+    width="600px"
+    @close="showClientsModal = false"
+  >
+    <ConnectedClients :user-id="userId" />
+  </KModal>
+
+  <!-- Transactions Modal -->
+  <KModal
+    :open="showTransactionsModal"
+    title="Transactions"
+    width="600px"
+    @close="showTransactionsModal = false"
+  >
+    <TransactionList
+      :transactions="customer?.wallet_transactions ?? []"
+    />
+  </KModal>
 </template>
 
 <style scoped>

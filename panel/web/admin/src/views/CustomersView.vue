@@ -1077,7 +1077,6 @@ onMounted(async () => {
                 >
                   <RowQuickActions
                     :user="row"
-                    :visible="hoveredRowId === row.id"
                     :loading="quickActions.isRowLoading(row.id)"
                     :active-action="quickActions.getRowAction(row.id)"
                     @enable="handleQuickToggleStatus(row)"
@@ -1157,7 +1156,6 @@ onMounted(async () => {
             >
               <RowQuickActions
                 :user="row"
-                :visible="hoveredRowId === row.id"
                 :loading="quickActions.isRowLoading(row.id)"
                 :active-action="quickActions.getRowAction(row.id)"
                 @enable="handleQuickToggleStatus(row)"
@@ -1225,9 +1223,6 @@ onMounted(async () => {
     </div><!-- /.customers-view__main -->
 
     <!-- Detail Panel (slides in from right, Requirements: 2.1, 2.2, 2.3, 2.9) -->
-    <aside v-if="detailPanelOpen" class="customers-view__panel" aria-label="User detail panel">
-      <!-- Spacer element to push table via grid; actual panel uses Teleport -->
-    </aside>
     <UserDetailPanel
       ref="detailPanelRef"
       :user-id="selectedUserId"
@@ -1535,6 +1530,8 @@ onMounted(async () => {
   background: var(--color-surface);
   overflow-y: auto;
   animation: panel-slide-in 280ms ease-out;
+  /* Hidden — panel uses Teleport to body */
+  display: none;
 }
 
 @keyframes panel-slide-in {
@@ -2119,6 +2116,17 @@ onMounted(async () => {
   color: var(--color-muted, #8b98a5);
   cursor: pointer;
   transition: transform var(--transition-row-expand, 200ms ease-out), color 100ms ease-out, background 100ms ease-out;
+}
+
+/* Hide expand column on desktop (viewport > 1024px) */
+@media (min-width: 1025px) {
+  .expand-chevron {
+    display: none;
+  }
+  :deep(th:first-child),
+  :deep(td:first-child) {
+    display: none;
+  }
 }
 
 .expand-chevron:hover {

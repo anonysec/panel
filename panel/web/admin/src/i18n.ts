@@ -754,6 +754,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'customer.th_description': 'Description',
     'customer.th_plan': 'Plan',
     'customer.th_end': 'End',
+    'customer.data_limit': 'Data Limit',
     // Ticket Detail & Kanban
     'tickets.title': 'Tickets',
     'tickets.back': 'Back',
@@ -1707,6 +1708,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'customer.th_description': 'توضیحات',
     'customer.th_plan': 'پلن',
     'customer.th_end': 'پایان',
+    'customer.data_limit': 'حجم مجاز',
     // Ticket Detail & Kanban
     'tickets.title': 'تیکت‌ها',
     'tickets.back': 'بازگشت',

@@ -6,7 +6,6 @@ import type { Customer } from '@koris/types'
 
 export interface RowQuickActionsProps {
   user: Customer
-  visible: boolean
   loading?: boolean
   activeAction?: string | null
 }
@@ -66,71 +65,62 @@ function handleDelete() {
 </script>
 
 <template>
-  <Transition name="row-actions">
-    <div
-      v-show="visible"
-      class="row-quick-actions"
-      role="toolbar"
-      :aria-label="t('customers.quick_actions') || 'Quick actions'"
-    >
-      <!-- Loading spinner -->
-      <div v-if="loading" class="row-quick-actions__spinner" aria-label="Loading">
-        <svg class="row-quick-actions__spinner-icon" viewBox="0 0 24 24" fill="none">
-          <circle
-            cx="12"
-            cy="12"
-            r="10"
-            stroke="currentColor"
-            stroke-width="3"
-            stroke-linecap="round"
-            stroke-dasharray="50 20"
-          />
-        </svg>
-      </div>
-
-      <!-- Action buttons -->
-      <template v-else>
-        <KButton
-          size="sm"
-          variant="ghost"
-          :icon="toggleIcon"
-          :disabled="actionsDisabled"
-          :aria-label="toggleLabel"
-          :title="toggleLabel"
-          class="row-quick-actions__btn"
-          @click.stop="handleToggleStatus"
-        >
-          {{ toggleLabel }}
-        </KButton>
-
-        <KButton
-          size="sm"
-          variant="ghost"
-          icon="↺"
-          :disabled="actionsDisabled"
-          :aria-label="t('customers.traffic_reset')"
-          :title="t('customers.traffic_reset')"
-          class="row-quick-actions__btn"
-          @click.stop="handleResetTraffic"
-        >
-          {{ t('customers.traffic_reset') }}
-        </KButton>
-
-        <KButton
-          size="sm"
-          variant="danger"
-          icon="🗑"
-          :disabled="actionsDisabled"
-          :aria-label="t('customers.delete')"
-          :title="t('customers.delete')"
-          class="row-quick-actions__btn row-quick-actions__btn--danger"
-          @click.stop="handleDelete"
-        >
-          {{ t('customers.delete') }}
-        </KButton>
-      </template>
+  <div
+    class="row-quick-actions"
+    role="toolbar"
+    :aria-label="t('customers.quick_actions') || 'Quick actions'"
+  >
+    <!-- Loading spinner -->
+    <div v-if="loading" class="row-quick-actions__spinner" aria-label="Loading">
+      <svg class="row-quick-actions__spinner-icon" viewBox="0 0 24 24" fill="none">
+        <circle
+          cx="12"
+          cy="12"
+          r="10"
+          stroke="currentColor"
+          stroke-width="3"
+          stroke-linecap="round"
+          stroke-dasharray="50 20"
+        />
+      </svg>
     </div>
-  </Transition>
+
+    <!-- Action buttons — icon-only, always visible -->
+    <template v-else>
+      <KButton
+        size="sm"
+        variant="ghost"
+        :icon="toggleIcon"
+        :disabled="actionsDisabled"
+        :aria-label="toggleLabel"
+        :title="toggleLabel"
+        class="row-quick-actions__btn"
+        @click.stop="handleToggleStatus"
+      />
+
+      <KButton
+        size="sm"
+        variant="ghost"
+        icon="↺"
+        :disabled="actionsDisabled"
+        :aria-label="t('customers.traffic_reset')"
+        :title="t('customers.traffic_reset')"
+        class="row-quick-actions__btn"
+        @click.stop="handleResetTraffic"
+      />
+
+      <KButton
+        size="sm"
+        variant="danger"
+        icon="🗑"
+        :disabled="actionsDisabled"
+        :aria-label="t('customers.delete')"
+        :title="t('customers.delete')"
+        class="row-quick-actions__btn row-quick-actions__btn--danger"
+        @click.stop="handleDelete"
+      />
+    </template>
+  </div>
 </template>
 
 <style scoped>
@@ -138,14 +128,13 @@ function handleDelete() {
   display: inline-flex;
   align-items: center;
   gap: var(--space-1, 4px);
-  padding: var(--space-1, 4px) var(--space-2, 8px);
-  background: var(--color-surface, #0b1120);
-  border: 1px solid var(--color-border, #28333f);
-  border-radius: var(--radius-md, 8px);
-  box-shadow: var(--shadow-sm, 0 2px 8px rgba(0, 0, 0, 0.2));
 }
 
 .row-quick-actions__btn {
+  min-width: 28px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
   transition: transform var(--transition-hover, 100ms ease-out);
 }
 
@@ -157,7 +146,7 @@ function handleDelete() {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: var(--space-2, 8px) var(--space-4, 16px);
+  padding: var(--space-1, 4px);
   color: var(--color-muted, #8b98a5);
 }
 
@@ -176,17 +165,6 @@ function handleDelete() {
   }
 }
 
-/* Transition for showing/hiding the actions */
-.row-actions-enter-active,
-.row-actions-leave-active {
-  transition: opacity var(--transition-hover, 100ms ease-out);
-}
-
-.row-actions-enter-from,
-.row-actions-leave-to {
-  opacity: 0;
-}
-
 @media (prefers-reduced-motion: reduce) {
   .row-quick-actions__btn:hover:not(:disabled) {
     transform: none;
@@ -194,11 +172,6 @@ function handleDelete() {
 
   .row-quick-actions__spinner-icon {
     animation: none;
-  }
-
-  .row-actions-enter-active,
-  .row-actions-leave-active {
-    transition: none;
   }
 }
 </style>
