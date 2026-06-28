@@ -27,6 +27,7 @@ interface Node {
   name: string
   address: string
   status?: string
+  port?: number
 }
 
 interface ProtocolConfig {
@@ -91,7 +92,7 @@ const panelForm = reactive<Record<string, any>>({})
 
 // Edit node state
 const editNodeOpen = ref(false)
-const editNodeForm = reactive({ id: 0, name: '', address: '', port: 2083, api_key: '', cert_pem: '' })
+const editNodeForm = reactive({ id: 0, name: '', address: '', port: 2083, api_key: '', ca_cert: '' })
 const editNodeSaving = ref(false)
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -290,8 +291,6 @@ function openEditNode(node: Node) {
   editNodeForm.address = node.address
   editNodeForm.port = 2083
   editNodeForm.api_key = ''
-  editNodeForm.client_cert = ''
-  editNodeForm.client_key = ''
   editNodeForm.ca_cert = ''
   editNodeOpen.value = true
 }
@@ -304,8 +303,6 @@ async function saveEditNode() {
       address: editNodeForm.address,
       port: editNodeForm.port,
       ...(editNodeForm.api_key && { api_key: editNodeForm.api_key }),
-      ...(editNodeForm.client_cert && { client_cert_pem: editNodeForm.client_cert }),
-      ...(editNodeForm.client_key && { client_key_pem: editNodeForm.client_key }),
       ...(editNodeForm.ca_cert && { ca_cert_pem: editNodeForm.ca_cert }),
     })
     toast.success(t('nodes.edit_success'))
@@ -453,6 +450,9 @@ async function saveProtocolSettings() {
         <h1>{{ t('services.title') }}</h1>
         <p class="subtitle">{{ t('services.subtitle') }}</p>
       </div>
+      <KButton variant="primary" @click="$router.push({ name: 'node-detail', params: { id: 'new' } })">
+        + {{ t('services.add_node') }}
+      </KButton>
     </header>
 
     <!-- Loading state -->
@@ -476,6 +476,7 @@ async function saveProtocolSettings() {
       <div class="table-header">
         <span class="col-name">{{ t('nodes.node_name') }}</span>
         <span class="col-address">{{ t('nodes.address') }}</span>
+        <span class="col-port">Port</span>
         <span class="col-status">Status</span>
         <span class="col-protocols">Protocols</span>
         <span class="col-actions">Actions</span>
@@ -494,6 +495,9 @@ async function saveProtocolSettings() {
           </span>
           <span class="col-address">
             <code class="node-ip">{{ entry.node.address }}</code>
+          </span>
+          <span class="col-port">
+            <code class="node-ip">{{ entry.node.port || 2083 }}</code>
           </span>
           <span class="col-status">
             <KStatusPill
@@ -673,12 +677,6 @@ async function saveProtocolSettings() {
           <KFormField label="API Key" name="edit-apikey">
             <KInput v-model="editNodeForm.api_key" type="text" placeholder="Leave empty to keep current" autocomplete="off" />
           </KFormField>
-          <KFormField label="Client Certificate (PEM)" name="edit-cert">
-            <textarea v-model="editNodeForm.client_cert" class="pem-textarea" placeholder="Leave empty to keep current" autocomplete="off" spellcheck="false" />
-          </KFormField>
-          <KFormField label="Client Key (PEM)" name="edit-key">
-            <textarea v-model="editNodeForm.client_key" class="pem-textarea" placeholder="Leave empty to keep current" autocomplete="off" spellcheck="false" />
-          </KFormField>
           <KFormField label="CA Certificate (PEM)" name="edit-ca">
             <textarea v-model="editNodeForm.ca_cert" class="pem-textarea" placeholder="Leave empty to keep current" autocomplete="off" spellcheck="false" />
           </KFormField>
@@ -739,7 +737,7 @@ async function saveProtocolSettings() {
 
 .table-header {
   display: grid;
-  grid-template-columns: 1.5fr 1.5fr 0.8fr 1.2fr 0.8fr;
+  grid-template-columns: 1.5fr 1.5fr 0.5fr 0.8fr 1.2fr 0.8fr;
   gap: var(--space-3, 12px);
   padding: var(--space-3, 12px) var(--space-5, 20px);
   background: var(--color-surface-2, #1e2630);
@@ -761,7 +759,7 @@ async function saveProtocolSettings() {
 
 .node-row {
   display: grid;
-  grid-template-columns: 1.5fr 1.5fr 0.8fr 1.2fr 0.8fr;
+  grid-template-columns: 1.5fr 1.5fr 0.5fr 0.8fr 1.2fr 0.8fr;
   gap: var(--space-3, 12px);
   padding: var(--space-4, 16px) var(--space-5, 20px);
   align-items: center;
