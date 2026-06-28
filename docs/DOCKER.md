@@ -5,114 +5,142 @@ This guide covers deploying KorisPanel using Docker and Docker Compose.
 ## Quick Start
 
 ```bash
-# 1. Clone the repository
-git clone https://github.com/your-org/KorisPanel.git
-cd KorisPanel/panel
+# One-liner install (interactive prompts for edition, domain, port, SSL)
+bash <(curl -Ls https://raw.githubusercontent.com/anonysec/panel/main/install.sh)
 
-# 2. Copy the environment file
-cp docker/panel.env.example docker/panel.env
-
-# 3. Edit configuration (set domain, secrets, etc.)
-nano docker/panel.env
-
-# 4. Start all services
-docker compose up -d
-
-# 5. Access the panel
-# Admin:  http://localhost/dashboard/
-# Portal: http://localhost/portal/
+# Or with flags
+bash <(curl -Ls https://raw.githubusercontent.com/anonysec/panel/main/install.sh) \
+  --full --domain=panel.example.com --port=2026
 ```
 
-The panel will run database migrations automatically on first startup.
+The installer handles everything: cloning the source, writing configuration, building Docker images, and starting services. Migrations run automatically on first startup.
+
+If an existing installation is detected (panel or knode), the installer presents an interactive menu:
+1. **Reinstall** — rebuild from source while preserving database data
+2. **Full wipe & fresh install** — remove all data and start from scratch (requires "yes" confirmation)
+3. **Update** — pull latest from `main` and rebuild in place
+4. **Cancel** — exit without changes
+
+This detection checks for `/etc/koris/panel.env`, `/etc/knode/config.toml`, and running `koris`/`knode` containers. To bypass this interactive prompt (e.g., from scripts), use the `--reinstall` flag directly.
+
+## Installer Options
+
+```bash
+install.sh --lite              # Lite edition
+install.sh --full              # Full edition (default)
+install.sh --port=8080         # Custom HTTPS port (default: 2026)
+install.sh --domain=panel.example.com  # Domain for Let's Encrypt
+install.sh --no-knode          # Skip knode agent installation prompt
+install.sh --version=v1.2.0    # Install a specific version tag
+install.sh --reinstall         # Force reinstall (preserves DB data)
+install.sh --uninstall         # Remove KorisPanel completely
+```
+
+Passing `--native` exits with a deprecation error — only Docker deployment is supported.
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────┐
+│  koris (port 2026 HTTPS, port 80 HTTP)          │
+│  Go binary + embedded frontend + migrations     │
+│  Serves TLS directly (no reverse proxy)         │
+└──────────────────────┬──────────────────────────┘
+                       │
+┌──────────────────────▼──────────────────────────┐
+│  koris-db (port 5432 internal)                  │
+│  timescale/timescaledb:latest-pg16              │
+│  Persistent volume: koris_db-data               │
+└─────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────┐
+│  koris-pgadmin (port 5050)                      │
+│  dpage/pgadmin4                                 │
+│  Persistent volume: koris_pgadmin-data          │
+└─────────────────────────────────────────────────┘
+```
+
+No Nginx. No MariaDB. The panel terminates TLS directly using Let's Encrypt (ACME), manual certificates, or self-signed mode.
+
+### Volumes
+
+| Volume | Purpose |
+|--------|---------|
+| `koris_db-data` | PostgreSQL/TimescaleDB data directory |
+| `koris_panel-data` | Panel application data |
+| `koris_pgadmin-data` | pgAdmin session and settings data |
+
+### Health Checks
+
+- **koris**: Container health check polls the panel's `/api/health` endpoint
+- **koris-db**: PostgreSQL `pg_isready` check every 5s
+- The panel service waits for the DB health check to pass before starting
 
 ## Configuration
 
-All configuration is done via environment variables in `docker/panel.env`.
+All configuration lives in `/etc/koris/panel.env` (symlinked to `docker/panel.env` in the source tree).
 
-### Required Variables
+### Core Variables
 
-| Variable | Description | Example |
+| Variable | Description | Default |
 |----------|-------------|---------|
-| `DB_HOST` | Database hostname | `db` (use service name) |
-| `DB_PORT` | Database port | `3306` |
-| `DB_NAME` | Database name | `radius` |
-| `DB_USER` | Database user | `radius` |
-| `DB_PASS` | Database password | `your-secure-password` |
-| `DB_ROOT_PASS` | MariaDB root password | `your-root-password` |
-| `PANEL_PORT` | Panel HTTP listen port | `8080` |
-| `PANEL_DOMAIN` | Public domain name | `panel.example.com` |
-| `PANEL_SESSION_SECRET` | Session signing key (64+ chars) | Random string |
+| `PANEL_PG_DSN` | PostgreSQL connection string | `postgres://koris:...@db:5432/koris` |
+| `POSTGRES_DB` | Database name | `koris` |
+| `POSTGRES_USER` | Database user | `koris` |
+| `POSTGRES_PASSWORD` | Database password | Auto-generated |
+| `PANEL_ADDR` | Listen address | `0.0.0.0:2026` |
+| `PANEL_PORT` | HTTPS port | `2026` |
+| `PANEL_TLS_MODE` | TLS mode (acme/manual/selfsigned) | `selfsigned` |
+| `PANEL_DOMAIN` | Domain for ACME | — |
+| `PANEL_SESSION_SECRET` | Session signing key | Auto-generated |
+| `PANEL_SETUP_KEY` | First-login admin setup key | Auto-generated |
+| `PANEL_MIGRATIONS` | Path to migration files | `/app/migrations` |
+| `BUILD_TAGS` | Edition (full/lite) | `full` |
+
+### pgAdmin Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PGADMIN_EMAIL` | `admin@koris.local` | pgAdmin login email |
+| `PGADMIN_PASSWORD` | Auto-generated | pgAdmin login password |
+| `PGADMIN_PORT` | `5050` | pgAdmin listen port |
 
 ### Optional Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PANEL_WORKERS` | `1` | Number of worker processes |
-| `PANEL_GRACEFUL_WAIT` | `30` | Seconds to wait during graceful shutdown |
+| `PANEL_GRACEFUL_WAIT` | `30` | Seconds for graceful shutdown |
 | `PANEL_DB_MAX_OPEN` | Auto-tuned | Max open DB connections |
 | `PANEL_DB_MAX_IDLE` | Auto-tuned | Max idle DB connections |
 | `PANEL_DB_MAX_LIFETIME` | `5m` | Max connection lifetime |
-| `PANEL_TUI_ENABLED` | `false` | TUI dashboard (disable in Docker) |
-| `PANEL_MIGRATIONS` | `/app/migrations` | Path to SQL migration files |
-| `TELEGRAM_BOT_TOKEN` | — | Telegram bot token for notifications |
+| `TELEGRAM_BOT_TOKEN` | — | Telegram bot token |
 | `TELEGRAM_CHAT_ID` | — | Telegram chat ID for alerts |
 
-## Architecture
+## Manual Deployment
 
-The Docker deployment runs three services:
-
-```
-┌─────────────────────────────────────────────────┐
-│  nginx:alpine (ports 80, 443)                   │
-│  Reverse proxy → routes to panel service        │
-└──────────────────────┬──────────────────────────┘
-                       │
-┌──────────────────────▼──────────────────────────┐
-│  panel (port 8080)                              │
-│  Go binary + frontend assets + migrations       │
-│  Runs as non-root user (UID 1000)              │
-└──────────────────────┬──────────────────────────┘
-                       │
-┌──────────────────────▼──────────────────────────┐
-│  mariadb:10.11 (port 3306)                      │
-│  Persistent volume: db-data                     │
-└─────────────────────────────────────────────────┘
-```
-
-### Volumes
-
-- `db-data` — MariaDB data directory (`/var/lib/mysql`)
-- `panel-data` — Panel application data (`/var/lib/panel`)
-
-### Health Checks
-
-- **panel**: `wget -q --spider http://localhost:8080/api/health` every 10s
-- **db**: MariaDB `healthcheck.sh --connect --innodb_initialized` every 5s
-- The panel service waits for the DB health check to pass before starting.
-
-## Development
-
-Use the development override file for local development with hot-reload:
+If you prefer to deploy without the installer:
 
 ```bash
-docker compose -f docker-compose.yml -f docker/docker-compose.dev.yml up
+# 1. Clone the repository
+git clone https://github.com/anonysec/panel.git /opt/KorisPanel
+cd /opt/KorisPanel
+
+# 2. Create configuration
+mkdir -p /etc/koris
+cp docker/panel.env.example /etc/koris/panel.env
+ln -sf /etc/koris/panel.env docker/panel.env
+
+# 3. Edit configuration (set passwords, domain, port)
+nano /etc/koris/panel.env
+
+# 4. Build and start
+docker compose build
+docker compose up -d
+
+# 5. Verify health
+docker inspect --format='{{.State.Health.Status}}' koris
 ```
-
-This provides:
-
-- **Go hot-reload**: Source is bind-mounted; panel runs via `go run`
-- **Admin dev server**: Vite on `http://localhost:5173` with HMR
-- **Portal dev server**: Vite on `http://localhost:5174` with HMR
-- **Exposed DB port**: MariaDB on `localhost:3306` for local DB tools
-
-### Dev Services
-
-| Service | Port | Purpose |
-|---------|------|---------|
-| `panel` | 8080 | Go backend (live reload) |
-| `admin-dev` | 5173 | Admin dashboard (Vite HMR) |
-| `portal-dev` | 5174 | Customer portal (Vite HMR) |
-| `db` | 3306 | MariaDB (accessible from host) |
 
 ## Scaling
 
@@ -126,126 +154,167 @@ PANEL_WORKERS=4
 
 Each worker shares the same port via `SO_REUSEPORT`. Only one worker holds the background task leader lock.
 
-### Multiple Containers
-
-For horizontal scaling, run multiple panel containers behind the nginx proxy:
-
-```yaml
-# docker-compose.override.yml
-services:
-  panel:
-    deploy:
-      replicas: 3
-```
-
-Or scale manually:
-
-```bash
-docker compose up -d --scale panel=3
-```
-
-Update `docker/nginx.conf` to load-balance across replicas:
-
-```nginx
-upstream panel_backend {
-    server panel:8080;
-    # Docker DNS resolves to all container IPs
-}
-```
-
 ### Scaling Guidelines
 
-| RAM | `PANEL_WORKERS` | `PANEL_DB_MAX_OPEN` | Replicas |
-|-----|----------------|---------------------|----------|
-| 1 GB | 1 | 10 | 1 |
-| 2 GB | 2 | 25 | 1 |
-| 4 GB | 4 | 50 | 1–2 |
-| 8 GB+ | 4 | 50 | 2–4 |
+| RAM | `PANEL_WORKERS` | `PANEL_DB_MAX_OPEN` |
+|-----|----------------|---------------------|
+| 1 GB | 1 | 10 |
+| 2 GB | 2 | 25 |
+| 4 GB | 4 | 50 |
+| 8 GB+ | 4 | 50 |
 
-## Backup & Restore
+## Reinstall & Uninstall
 
-### Database Backup
+### Reinstall (preserve database)
 
 ```bash
-# Backup
-docker compose exec db mariadb-dump -u root -p"$DB_ROOT_PASS" radius > backup_$(date +%Y%m%d).sql
+# Via CLI (recommended)
+koris reinstall              # Rebuild from latest main, preserve DB data
+koris reinstall --clean      # Same, but prune Docker build cache before rebuilding
+
+# Via installer
+install.sh --reinstall
+```
+
+The `koris reinstall` command:
+1. Verifies `/etc/koris/panel.env` exists with `POSTGRES_PASSWORD` — aborts if missing
+2. Stops and removes all Compose stack containers and project images
+3. Removes `koris_panel-data` and `koris_pgadmin-data` volumes (preserves `koris_db-data`)
+4. Optionally prunes Docker build cache (`--clean`)
+5. Pulls latest source from the `main` branch
+6. Rebuilds all containers with `docker compose build`
+7. Runs a health check — polls `/api/health` every 5s for up to 60s
+8. On failure, displays the last 20 lines of container logs and exits
+
+Reinstall preserves `koris_db-data` and reuses the existing `/etc/koris/panel.env`.
+
+### Uninstall
+
+```bash
+# Via installer
+install.sh --uninstall
+
+# Manually
+cd /opt/KorisPanel
+docker compose down -v --remove-orphans
+docker images --filter "label=com.docker.compose.project=koris" -q | xargs -r docker rmi -f
+rm -rf /opt/KorisPanel /etc/koris /usr/local/bin/koris
+```
+
+## Database Management
+
+The `koris db` command provides full database lifecycle management:
+
+```bash
+koris db backup                # Backup to /var/backups/koris/
+koris db backup --path=/mnt/backups  # Backup to custom directory
+koris db restore <file>        # Restore from a specific backup file
+koris db restore               # List available backups and select interactively
+koris db migrate               # Run pending database migrations
+koris db reset                 # Drop and recreate DB, run all migrations (prompts for confirmation)
+koris db shell                 # Open interactive psql session in the DB container
+koris db status                # Show DB size, connections, TimescaleDB version, replication status
+```
+
+| Subcommand | Description |
+|------------|-------------|
+| `backup` | Gzipped `pg_dump` saved as `koris-<YYYYMMDD-HHMMSS>.sql.gz` |
+| `backup --path=<dir>` | Save to a specific directory (must exist and be writable) |
+| `restore <file>` | Validate file, drop+recreate DB, restore dump (confirms before overwriting) |
+| `restore` | List backups sorted by date, prompt for selection |
+| `migrate` | Run pending migrations inside the panel container, display count applied |
+| `reset` | Drop+recreate DB and run all migrations from scratch (requires "yes" confirmation) |
+| `shell` | Interactive `psql -U koris -d koris` inside `koris-db` container |
+| `status` | Database size, active connections, TimescaleDB version, replication info |
+
+All `db` subcommands require the `koris-db` container to be running — they exit with an error if it is not.
+
+### Backup Details
+
+Backups are gzipped SQL dumps named `koris-<YYYYMMDD-HHMMSS>.sql.gz`. Restore drops and recreates the database, then applies the dump. A confirmation prompt is shown before overwriting.
+
+### Manual (Docker commands)
+
+```bash
+# Backup to gzipped SQL dump
+docker exec koris-db pg_dump -U koris -d koris | gzip > backup_$(date +%Y%m%d).sql.gz
 
 # Restore
-docker compose exec -T db mariadb -u root -p"$DB_ROOT_PASS" radius < backup_20240101.sql
+gunzip -c backup_20240101.sql.gz | docker exec -i koris-db psql -U koris -d koris
 ```
 
 ### Volume Backup
 
 ```bash
-# Stop services first for consistency
+# Stop services for consistency
 docker compose stop
 
 # Backup DB volume
-docker run --rm -v panel_db-data:/data -v $(pwd):/backup alpine \
+docker run --rm -v koris_db-data:/data -v $(pwd):/backup alpine \
     tar czf /backup/db-data-$(date +%Y%m%d).tar.gz -C /data .
-
-# Backup panel data volume
-docker run --rm -v panel_panel-data:/data -v $(pwd):/backup alpine \
-    tar czf /backup/panel-data-$(date +%Y%m%d).tar.gz -C /data .
 
 # Restart services
 docker compose start
 ```
 
-### Volume Restore
+## Interactive Menu
+
+Running `koris` without arguments launches an interactive menu:
 
 ```bash
-docker compose down
-
-# Restore DB volume
-docker run --rm -v panel_db-data:/data -v $(pwd):/backup alpine \
-    sh -c "rm -rf /data/* && tar xzf /backup/db-data-20240101.tar.gz -C /data"
-
-docker compose up -d
+koris
 ```
+
+The main menu offers numbered options (0–17) for all operations: start, stop, restart, status, logs, live logs, update, config, enable/disable autostart, uninstall, SSL, clean, DB management, pgAdmin management, reinstall, and downgrade.
+
+Submenus provide guided access to complex operations:
+
+| Submenu | Options |
+|---------|---------|
+| **DB Management** (14) | backup, restore, migrate, reset, shell, status |
+| **pgAdmin Management** (15) | status, enable, disable, URL, reset password, change port |
+| **Clean** (13) | basic clean, clean with volumes, full clean |
+| **Reinstall** (16) | Prompts for confirmation before executing |
+| **Downgrade** (17) | Prompts for target version, then confirms |
+
+Invalid input (non-numeric or out-of-range) displays an error and re-shows the menu.
 
 ## Troubleshooting
 
 ### Port Conflicts
 
-**Symptom**: `bind: address already in use` on port 80 or 443.
-
 ```bash
 # Find what's using the port
-sudo lsof -i :80
-# or
-sudo ss -tlnp | grep :80
+sudo ss -tlnp | grep :2026
 
-# Stop conflicting service or change nginx port in docker-compose.yml:
-# ports:
-#   - "8443:443"
-#   - "8080:80"
+# Change port in /etc/koris/panel.env:
+# PANEL_PORT=8443
+# PANEL_ADDR=0.0.0.0:8443
+docker compose up -d
 ```
 
 ### Database Connection Failures
 
-**Symptom**: Panel logs `dial tcp db:3306: connect: connection refused`.
-
 ```bash
 # Check if DB is healthy
-docker compose ps db
-docker compose logs db --tail=20
+docker compose ps koris-db
+docker compose logs koris-db --tail=20
 
-# Wait for DB to be ready, then restart panel
-docker compose restart panel
-
-# Verify credentials match between panel.env and compose file
-grep DB_PASS docker/panel.env
+# Restart panel after DB is ready
+docker compose restart koris
 ```
 
-### Permission Errors
-
-**Symptom**: `permission denied` when writing to volumes.
+### Panel Not Starting
 
 ```bash
-# Fix volume ownership (panel runs as UID 1000)
-docker compose exec --user root panel chown -R 1000:1000 /var/lib/panel
-docker compose exec --user root panel chown -R 1000:1000 /var/log/panel
+# Check exit code and logs
+docker compose ps -a
+docker compose logs koris --tail=50
+
+# Rebuild from scratch
+docker compose down
+docker compose build --no-cache
+docker compose up -d
 ```
 
 ### Viewing Logs
@@ -254,64 +323,117 @@ docker compose exec --user root panel chown -R 1000:1000 /var/log/panel
 # All services
 docker compose logs -f
 
-# Specific service
-docker compose logs -f panel
-docker compose logs -f db
-docker compose logs -f nginx
+# Panel only
+docker compose logs -f koris
+
+# Database
+docker compose logs -f koris-db
 
 # Last 50 lines
-docker compose logs --tail=50 panel
-```
-
-### Container Won't Start
-
-```bash
-# Check exit code and logs
-docker compose ps -a
-docker compose logs panel
-
-# Rebuild from scratch
-docker compose down
-docker compose build --no-cache panel
-docker compose up -d
+docker compose logs --tail=50 koris
 ```
 
 ### Migrations Failing
 
-**Symptom**: Panel exits with migration errors on startup.
-
 ```bash
 # Check migration logs
-docker compose logs panel | grep -i migrat
+docker compose logs koris | grep -i migrat
 
-# Connect to DB and check state
-docker compose exec db mariadb -u radius -p radius -e "SHOW TABLES;"
+# Connect to DB directly
+docker exec -it koris-db psql -U koris -d koris
 
-# If stuck, reset migrations (WARNING: data loss)
-docker compose exec db mariadb -u root -p"$DB_ROOT_PASS" -e "DROP DATABASE radius; CREATE DATABASE radius;"
-docker compose restart panel
+# If stuck, reset (WARNING: data loss)
+docker exec -it koris-db psql -U koris -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
+docker compose restart koris
 ```
+
+## Clean
+
+Remove unused Docker images and build cache to reclaim disk space:
+
+```bash
+koris clean                   # Remove project images + prune build cache
+koris clean --volumes         # Also remove panel-data and pgadmin-data volumes (preserves DB)
+koris clean --volumes --include-db  # Also remove the database volume
+koris clean --all             # Remove everything (all volumes, images, build cache)
+koris clean --all --force     # Same as --all but skip confirmation prompt
+```
+
+| Flag | Effect |
+|------|--------|
+| *(none)* | Remove images with `com.docker.compose.project=koris` label or `koris` prefix, prune build cache |
+| `--volumes` | Additionally remove `koris_panel-data` and `koris_pgadmin-data` volumes |
+| `--include-db` | When combined with `--volumes`, also remove `koris_db-data` |
+| `--all` | Remove all project volumes, images, and build cache (prompts for confirmation) |
+| `--force` | Skip confirmation prompts |
+
+Volumes that are currently in use by a running container are skipped with a warning. The command displays total disk space reclaimed on completion.
+
+## pgAdmin Management
+
+Manage the pgAdmin service from the CLI:
+
+```bash
+koris pgadmin status            # Show running state, URL, and port
+koris pgadmin enable            # Start pgAdmin service (waits up to 30s)
+koris pgadmin disable           # Stop pgAdmin and disable autostart
+koris pgadmin url               # Print access URL (error if not running)
+koris pgadmin reset-password    # Set new password (min 8 chars), restarts service
+koris pgadmin port <number>     # Change listen port (1024–65535), restarts service
+```
+
+| Subcommand | Description |
+|------------|-------------|
+| `status` | Displays running/stopped state; if running, shows URL and port |
+| `enable` | Starts the container, sets restart policy to `unless-stopped` |
+| `disable` | Stops the container, sets restart policy to `no` |
+| `url` | Prints `http://<server-ip>:<port>` if running |
+| `reset-password` | Prompts for a new password, updates `panel.env`, restarts pgAdmin |
+| `port <N>` | Validates port (1024–65535), updates `panel.env`, restarts pgAdmin |
 
 ## Upgrading
 
 ```bash
-# 1. Pull latest changes
+cd /opt/KorisPanel
 git pull origin main
-
-# 2. Rebuild the panel image
-docker compose build panel
-
-# 3. Restart with new image (migrations run automatically)
+docker compose build
 docker compose up -d
 
-# 4. Verify health
+# Verify
 docker compose ps
-docker compose logs --tail=20 panel
+docker compose logs --tail=20 koris
 ```
 
-For zero-downtime upgrades with multiple replicas:
+Or use the CLI tool:
 
 ```bash
-# Rolling restart
-docker compose up -d --no-deps --build panel
+koris update                    # Pull latest and rebuild
+koris update --version=v1.3.0   # Update to specific version
 ```
+
+The `update` command:
+1. Stores the current version to `/etc/koris/version` before pulling (for rollback reference)
+2. Fetches the latest code (or checks out the specified tag)
+3. Skips rebuild if already at the target version
+4. Rebuilds with `docker compose up -d --build`
+5. Displays a changelog (up to 50 commits) between old and new versions
+6. Runs a health check — polls `/api/health` every 2s for up to 60s
+7. On success, writes the new version to `/etc/koris/version`
+8. On health check failure, displays the last 20 lines of container logs and suggests `koris downgrade <previous-version>`
+
+## Version Pinning
+
+Install or update to a specific git tag:
+
+```bash
+# Fresh install at a specific version
+install.sh --version=v1.2.0
+
+# Update to a specific version
+koris update --version=v1.2.0
+
+# Downgrade
+koris downgrade v1.1.0
+```
+
+The installed version is recorded in `/etc/koris/version`.

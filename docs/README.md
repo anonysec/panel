@@ -2,97 +2,135 @@
 
 ## Requirements
 
-- **OS**: Ubuntu 22.04+ (x86_64)
-- **Go**: 1.22+
-- **Node.js**: 20+ (with npm)
-- **MariaDB**: 10.11+
-- **FreeRADIUS**: 3.x (with `rlm_sql_mysql` module)
+- **OS**: Ubuntu 22.04+ or Debian 12+ (x86_64)
+- **Docker**: 24+ with Docker Compose v2
+- **Git**: 2.x
+
+No other dependencies are required — the panel, database, and frontend are all built and run inside Docker containers.
 
 ## Installation
 
-### 1. Clone the repository
+### Quick Install (recommended)
 
 ```bash
-git clone git@github.com:your-org/koris-panel.git /opt/koris
-cd /opt/koris
+bash <(curl -Ls https://raw.githubusercontent.com/anonysec/KorisPanel/main/install.sh)
 ```
 
-### 2. Configure environment
+The installer accepts the following flags:
 
-Copy the example `.env` file and edit it with your database credentials and settings:
+| Flag | Description |
+|------|-------------|
+| `--lite` | Install lite edition (excludes billing, SLA, teleproxy) |
+| `--full` | Install full edition (default) |
+| `--port=N` | Set panel HTTPS port (default: 2026) |
+| `--domain=X` | Set public domain for auto-TLS |
+| `--no-knode` | Skip knode installation on same host |
+| `--uninstall` | Uninstall the panel |
+| `--version=<tag>` | Install a specific version tag |
+| `--reinstall` | Reinstall preserving database data |
+
+### Manual Installation
 
 ```bash
-cp .env.example .env
-nano .env
+git clone https://github.com/anonysec/KorisPanel.git /opt/KorisPanel
+cd /opt/KorisPanel
+docker compose build && docker compose up -d
 ```
 
-Key variables:
+### Configuration
+
+Panel configuration is stored in `/etc/koris/`:
+
+| File | Description |
+|------|-------------|
+| `panel.env` | Environment variables for Docker Compose |
+| `version` | Currently installed version tag (written automatically on install/update) |
+
+**Environment variables** in `panel.env`:
 
 | Variable | Description |
 |----------|-------------|
-| `DB_HOST` | MariaDB host (default: `127.0.0.1`) |
-| `DB_PORT` | MariaDB port (default: `3306`) |
-| `DB_NAME` | Database name |
-| `DB_USER` | Database user |
-| `DB_PASS` | Database password |
-| `PANEL_PORT` | Panel HTTP port (default: `8080`) |
-| `PANEL_DOMAIN` | Public domain for the panel |
+| `POSTGRES_PASSWORD` | PostgreSQL password (auto-generated) |
+| `PANEL_PORT` | Panel HTTPS port (default: `2026`) |
+| `PANEL_PORT` | Panel HTTPS port (default: `2026`) |
+| `PANEL_DOMAIN` | Public domain for auto-TLS (Let's Encrypt) |
+| `PANEL_EDITION` | `full` or `lite` |
 | `TELEGRAM_BOT_TOKEN` | (Optional) Telegram bot token for notifications |
 
-### 3. Run the installer
+## Docker Stack
 
-```bash
-chmod +x install.sh
-sudo ./install.sh
-```
+The panel runs as a Docker Compose stack with three services:
 
-The installer will:
-- Install system dependencies (MariaDB, FreeRADIUS, etc.)
-- Create the database and apply migrations
-- Build the Go binary
-- Build the admin and customer web interfaces
-- Configure systemd services
-- Set up FreeRADIUS SQL integration
+| Service | Image | Port | Description |
+|---------|-------|------|-------------|
+| `koris` | Custom (multi-stage build) | 2026 (HTTPS), 80 (HTTP) | Panel app (Go + embedded frontend) |
+| `koris-db` | `timescale/timescaledb:latest-pg16` | 5432 (internal) | PostgreSQL 16 + TimescaleDB |
+| `koris-pgadmin` | pgAdmin 4 | 5050 | Database admin UI |
 
-### 4. Build manually (development)
-
-```bash
-# Build backend
-go build -o /usr/local/bin/koris ./panel/cmd/panel
-
-# Build admin frontend
-cd panel/web/admin && npm install && npm run build
-
-# Build customer portal frontend
-cd panel/web/portal && npm install && npm run build
-```
+No Nginx or reverse proxy — the panel serves TLS directly with automatic Let's Encrypt certificate management.
 
 ## Post-Install
 
-1. **Access the panel** at `http://your-server:8080`
+1. **Access the panel** at `https://your-server:2026`
 2. **Run the setup wizard** — create the owner account on first access at `/dashboard/`
 3. The wizard will prompt for:
    - Admin username and password
    - Basic VPN settings (protocol, subnet)
    - Telegram bot configuration (optional)
 
-## Systemd Services
+## CLI Management
+
+After installation, use the `koris` CLI:
 
 ```bash
-# Panel service
-sudo systemctl status koris-panel
-sudo systemctl restart koris-panel
-
-# Node agent (on VPN nodes)
-sudo systemctl status knode
+koris                # Launch interactive menu (numbered options with submenus)
+koris start          # Start all services
+koris stop           # Stop all services
+koris restart        # Restart all services
+koris status         # Show service status
+koris logs           # View panel logs
+koris update         # Update to latest version
+koris downgrade v1.x # Downgrade to a specific version
+koris reinstall      # Rebuild from source (preserves DB)
+koris db backup      # Backup database
+koris db restore     # Restore database
+koris pgadmin status # Manage pgAdmin service
+koris clean          # Remove unused images and build cache
+koris uninstall      # Full uninstall
 ```
+
+Running `koris` without arguments opens an interactive menu with submenus for DB management, pgAdmin, clean operations, reinstall, and downgrade.
+
+## knode (VPN Node Agent)
+
+Install knode on each VPN node server:
+
+```bash
+bash <(curl -Ls https://raw.githubusercontent.com/anonysec/knode/master/install.sh)
+```
+
+Flags:
+
+| Flag | Description |
+|------|-------------|
+| `--port=N` | Set API listen port |
+| `--name=NAME` | Set instance name (for multi-instance) |
+
+knode runs as a standalone Docker container with host networking:
+
+```bash
+docker logs -f knode       # View logs
+docker restart knode       # Restart
+docker stop knode          # Stop
+```
+
+Configuration: `/etc/knode/config.toml`
 
 ## Updating
 
 ```bash
-cd /opt/koris
-git pull
-./deploy.sh
+koris update                    # Update to latest
+koris update --version=v1.2.3   # Update to specific version
 ```
 
 ## Memory Tuning

@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# KorisPanel installer — Docker (default) or native (--native flag)
+# KorisPanel installer — Docker only
 # Usage: bash <(curl -Ls https://raw.githubusercontent.com/anonysec/panel/main/install.sh)
 #   install.sh                          # Docker mode (recommended)
-#   install.sh --lite                   # Lite edition (Docker)
-#   install.sh --native                 # Native mode (systemd)
-#   install.sh --native --lite          # Lite edition (native)
+#   install.sh --lite                   # Lite edition
 #   install.sh --port=8080 --domain=panel.example.com
+
+# Source shared helper functions (provides validate_version_tag, validate_port, etc.)
+# shellcheck source=helpers.sh
+source "$(dirname "$0")/helpers.sh" 2>/dev/null || true
 
 REPO="anonysec/panel"
 KNODE_REPO="anonysec/knode"
-IMAGE="ghcr.io/${REPO}:latest"
 INSTALL_DIR="/opt/KorisPanel"
 CONFIG_DIR="/etc/koris"
 
@@ -48,7 +49,6 @@ detect_os() {
 gen_secret() { openssl rand -hex "${1:-32}" 2>/dev/null || head -c "${1:-32}" /dev/urandom | od -An -tx1 | tr -d ' \n'; }
 
 # --- Parse flags ---
-INSTALL_MODE="docker"
 EDITION="full"
 PANEL_PORT="2026"
 DOMAIN=""
@@ -59,21 +59,21 @@ WITH_KNODE="yes"
 TLS_MODE="selfsigned"
 CERT_PATH="/etc/koris/cert.pem"
 KEY_PATH="/etc/koris/key.pem"
+IMAGE_TAG=""
+FORCE_REINSTALL=""
 
 parse_args() {
   for arg in "$@"; do
     case "${arg}" in
-      --docker)       INSTALL_MODE="docker" ;;
-      --native)       INSTALL_MODE="native" ;;
+      --native)       err "Native mode is no longer supported. Only Docker deployment is available. Remove the --native flag and re-run." ;;
       --lite)         EDITION="lite" ;;
       --full)         EDITION="full" ;;
       --port=*)       PANEL_PORT="${arg#*=}" ;;
       --domain=*)     DOMAIN="${arg#*=}" ;;
-      --db-name=*)    DB_NAME="${arg#*=}" ;;
-      --db-user=*)    DB_USER="${arg#*=}" ;;
-      --db-pass=*)    DB_PASS="${arg#*=}" ;;
       --no-knode)     WITH_KNODE="no" ;;
       --uninstall)    uninstall; exit 0 ;;
+      --version=*)    IMAGE_TAG="${arg#*=}" ;;
+      --reinstall)    FORCE_REINSTALL="yes" ;;
       -h|--help)      banner; usage; exit 0 ;;
       *)              err "Unknown flag: ${arg}" ;;
     esac
@@ -82,17 +82,14 @@ parse_args() {
 
 usage() {
   echo "Flags:"
-  echo "  --docker        Docker mode (default, recommended)"
-  echo "  --native        Native mode (systemd + MariaDB + Nginx)"
   echo "  --lite          Lite edition (OpenVPN, L2TP, basic features)"
   echo "  --full          Full edition (all features, default)"
-  echo "  --port=N        Panel listen port (default: 8080)"
+  echo "  --port=N        Panel listen port (default: 2026)"
   echo "  --domain=X      Domain name (for SSL)"
-  echo "  --db-name=X     Database name (default: radius)"
-  echo "  --db-user=X     Database user (default: radius)"
-  echo "  --db-pass=X     Database password (auto-generated if empty)"
   echo "  --no-knode      Skip knode agent installation"
   echo "  --uninstall     Remove KorisPanel"
+  echo "  --version=<tag> Install a specific version tag"
+  echo "  --reinstall     Force a clean reinstall"
 }
 
 prompt_config() {
@@ -164,777 +161,300 @@ prompt_config() {
       ;;
     *) TLS_MODE="selfsigned" ;;
   esac
-
-  echo ""
-  log "Edition:  ${EDITION}"
-  log "Mode:     ${INSTALL_MODE}"
-  log "Port:     ${PANEL_PORT}"
-  log "Domain:   ${DOMAIN:-<none>}"
-  log "SSL:      ${TLS_MODE}"
-  log "Database: ${DB_NAME} (user: ${DB_USER})"
-  echo ""
 }
 
-# ═══════════════════════════════════════════════════════════════════════
-# CLEAN REINSTALL LOGIC
-# ═══════════════════════════════════════════════════════════════════════
-
-# Detect whether a previous Docker-based installation exists.
-# Returns 0 (true) if docker-compose.yml exists AND at least one
-# associated container is present (running or stopped).
+# --- Check for existing installation ---
 is_existing_installation() {
-  if [[ ! -f "${INSTALL_DIR}/docker-compose.yml" ]]; then
-    return 1
-  fi
-  if docker ps -a --filter "name=koris" --format '{{.Names}}' 2>/dev/null | grep -q .; then
-    return 0
-  fi
-  return 1
+  [[ -f "${CONFIG_DIR}/panel.env" ]] || return 1
+  return 0
 }
 
-# Perform a clean reinstall: stop containers, remove images/volumes (except db-data),
-# prune build cache, and log disk space reclaimed.
-clean_reinstall() {
-  log "Existing installation detected — performing clean reinstall..."
-
-  # Record disk space before cleanup (root partition, in MB)
-  local disk_before
-  disk_before=$(df -BM / | awk 'NR==2 {gsub(/M/,"",$4); print $4}')
-
-  cd "${INSTALL_DIR}"
-
-  # Step 1: Stop and remove all project containers (including knode)
-  log "Stopping containers..."
-  if ! docker compose down 2>/dev/null; then
-    warn "docker compose down failed — attempting manual container removal"
-  fi
-  # Always stop knode separately (not managed by panel's docker-compose)
-  for ctr in koris koris-db koris-pgadmin knode; do
-    if docker ps -a --format '{{.Names}}' | grep -qx "${ctr}"; then
-      docker stop "${ctr}" 2>/dev/null || true
-      docker rm -f "${ctr}" 2>/dev/null || true
-    fi
-  done
-
-  # Step 2: Remove previously built images (Panel + knode)
-  log "Removing project images..."
-  for img in koris:latest knode:latest koris-panel:latest; do
-    if docker image inspect "${img}" &>/dev/null; then
-      docker rmi -f "${img}" 2>/dev/null || true
-    fi
-  done
-  # Also remove images built by compose (project prefix)
-  for img in $(docker images --filter "reference=koris-*" --format '{{.Repository}}:{{.Tag}}' 2>/dev/null); do
-    docker rmi "${img}" 2>/dev/null || warn "Could not remove image: ${img}"
-  done
-
-  # Step 3: Remove volumes EXCEPT db-data (preserve database)
-  log "Removing volumes (preserving db-data)..."
-  local project_prefix="koris"
-  for vol in panel-data pgadmin-data; do
-    # Try both bare name and project-prefixed name
-    docker volume rm "${vol}" 2>/dev/null || true
-    docker volume rm "${project_prefix}_${vol}" 2>/dev/null || true
-  done
-
-  # Step 4: Prune dangling images and build cache
-  log "Pruning Docker system and build cache..."
-  docker system prune -f 2>/dev/null || warn "docker system prune failed"
-  docker builder prune -f 2>/dev/null || warn "docker builder prune failed"
-
-  # Step 5: Log disk space reclaimed
-  local disk_after
-  disk_after=$(df -BM / | awk 'NR==2 {gsub(/M/,"",$4); print $4}')
-  local reclaimed=$((disk_after - disk_before))
-  if [[ ${reclaimed} -gt 0 ]]; then
-    log "Disk space reclaimed: ${reclaimed} MB"
+# --- Clone/fetch source repository ---
+clone_source() {
+  if [[ -d "${INSTALL_DIR}/.git" ]]; then
+    log "Updating source in ${INSTALL_DIR}..."
+    git -C "${INSTALL_DIR}" fetch --all --tags --quiet
   else
-    log "Disk space reclaimed: 0 MB (no net change)"
+    log "Cloning panel source..."
+    rm -rf "${INSTALL_DIR}"
+    git clone "https://github.com/${REPO}.git" "${INSTALL_DIR}" --quiet
   fi
 
-  log "Cleanup complete. Rebuilding from source..."
+  # Checkout specific version tag if requested
+  if [[ -n "${IMAGE_TAG}" ]]; then
+    validate_version_tag "${IMAGE_TAG}" "https://github.com/${REPO}.git"
+    log "Checking out version: ${IMAGE_TAG}"
+    git -C "${INSTALL_DIR}" checkout "${IMAGE_TAG}" --quiet
+  else
+    # Default: latest main branch
+    git -C "${INSTALL_DIR}" checkout main --quiet 2>/dev/null || true
+    git -C "${INSTALL_DIR}" pull origin main --quiet 2>/dev/null || true
+  fi
 }
 
-# ═══════════════════════════════════════════════════════════════════════
-# DOCKER MODE (default)
-# ═══════════════════════════════════════════════════════════════════════
-install_docker() {
-  # Install Docker if not present
-  if ! command -v docker &>/dev/null; then
-    log "Installing Docker..."
-    curl -fsSL https://get.docker.com | sh
-    systemctl enable --now docker
-  fi
-
-  # Ensure docker compose is available
-  if ! docker compose version &>/dev/null; then
-    err "docker compose not available. Install Docker Compose V2."
-  fi
-
-  log "Setting up KorisPanel via Docker Compose..."
-
-  # Clean reinstall: if previous installation exists, clean up first
-  if is_existing_installation; then
-    clean_reinstall
-  fi
-
-  # Clone/update source
-  clone_source
-
-  # Reuse existing DB password if db-data volume exists (reinstall scenario)
-  if [[ -f "${CONFIG_DIR}/panel.env" ]]; then
-    local existing_pass
-    existing_pass=$(grep -oP 'POSTGRES_PASSWORD=\K.*' "${CONFIG_DIR}/panel.env" 2>/dev/null || true)
-    if [[ -n "${existing_pass}" ]]; then
-      DB_PASS="${existing_pass}"
-      log "Reusing existing database password from previous installation"
-    fi
-  fi
-
-  # Generate secrets
-  local session_secret="$(gen_secret 32)"
-  local setup_key="$(gen_secret 16)"
-
-  # Write env file
+# --- Write panel.env configuration ---
+write_panel_env() {
   mkdir -p "${CONFIG_DIR}"
+  local session_secret setup_key pgadmin_pass
+  session_secret="$(gen_secret 32)"
+  setup_key="$(gen_secret 16)"
+  pgadmin_pass="$(gen_secret 8)"
 
-  # Always generate a self-signed cert as baseline
-  local cert_cn="${DOMAIN:-$(curl -fsS4 --max-time 3 https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}')}"
-  CERT_PATH="${CONFIG_DIR}/cert.pem"
-  KEY_PATH="${CONFIG_DIR}/key.pem"
+  cat > "${CONFIG_DIR}/panel.env" <<EOF
+# KorisPanel Docker Configuration
+# Generated by install.sh — do not edit POSTGRES_PASSWORD manually
 
-  if [[ "${TLS_MODE}" == "acme" ]]; then
-    # Check if Let's Encrypt cert already exists (reinstall scenario)
-    if [[ -f "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" && -f "/etc/letsencrypt/live/${DOMAIN}/privkey.pem" ]]; then
-      log "Existing Let's Encrypt certificate found for ${DOMAIN}"
-      cp "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" "${CERT_PATH}"
-      cp "/etc/letsencrypt/live/${DOMAIN}/privkey.pem" "${KEY_PATH}"
-      chmod 600 "${KEY_PATH}"
-      log "Certificate copied to ${CERT_PATH}"
-    else
-      # No existing cert — request a new one
-      log "Installing certbot for Let's Encrypt..."
-      apt-get install -y -qq certbot >/dev/null 2>&1 || true
-      log "Requesting certificate for ${DOMAIN}..."
-      if certbot certonly --standalone -d "${DOMAIN}" --non-interactive --agree-tos --register-unsafely-without-email; then
-        cp "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" "${CERT_PATH}"
-        cp "/etc/letsencrypt/live/${DOMAIN}/privkey.pem" "${KEY_PATH}"
-        chmod 600 "${KEY_PATH}"
-        log "Let's Encrypt certificate obtained for ${DOMAIN}"
-      else
-        warn "Let's Encrypt failed — falling back to self-signed"
-        openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
-          -keyout "${KEY_PATH}" -out "${CERT_PATH}" \
-          -subj "/CN=${cert_cn}" >/dev/null 2>&1
-      fi
-    fi
-    # Ensure auto-renewal cron exists
-    if ! crontab -l 2>/dev/null | grep -q "certbot renew"; then
-      { crontab -l 2>/dev/null || true; echo "0 3 * * * certbot renew --quiet --deploy-hook 'cp /etc/letsencrypt/live/${DOMAIN}/fullchain.pem ${CERT_PATH} && cp /etc/letsencrypt/live/${DOMAIN}/privkey.pem ${KEY_PATH} && docker restart koris'"; } | crontab -
-    fi
-  elif [[ "${TLS_MODE}" == "manual" ]]; then
-    # User provides cert — verify the files exist
-    if [[ ! -f "${CERT_PATH}" || ! -f "${KEY_PATH}" ]]; then
-      warn "Cert files not found at ${CERT_PATH} / ${KEY_PATH} — generating self-signed"
-      openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
-        -keyout "${KEY_PATH}" -out "${CERT_PATH}" \
-        -subj "/CN=${cert_cn}" >/dev/null 2>&1
-    else
-      log "Using custom certificate from ${CERT_PATH}"
-    fi
-  else
-    # Self-signed (default)
-    openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
-      -keyout "${KEY_PATH}" -out "${CERT_PATH}" \
-      -subj "/CN=${cert_cn}" >/dev/null 2>&1
-    log "Self-signed certificate generated for ${cert_cn}"
-  fi
-
-  cat > "${CONFIG_DIR}/panel.env" <<ENV
-# KorisPanel Docker Configuration (TimescaleDB + HTTPS)
-
-# Database (TimescaleDB/PostgreSQL)
+# ─── Database (TimescaleDB/PostgreSQL) ────────────────────────────────
+PANEL_DB_BACKEND=timescaledb
 PANEL_PG_DSN=postgres://${DB_USER}:${DB_PASS}@db:5432/${DB_NAME}?sslmode=disable
 POSTGRES_DB=${DB_NAME}
 POSTGRES_USER=${DB_USER}
 POSTGRES_PASSWORD=${DB_PASS}
 
-# Panel
+# ─── Panel Server ────────────────────────────────────────────────────
 PANEL_ADDR=0.0.0.0:${PANEL_PORT}
+PANEL_PORT=${PANEL_PORT}
 PANEL_SESSION_SECRET=${session_secret}
 PANEL_SETUP_KEY=${setup_key}
 PANEL_MIGRATIONS=/app/migrations
-PANEL_TLS_ENABLED=true
-PANEL_TLS_CERT=${CERT_PATH}
-PANEL_TLS_KEY=${KEY_PATH}
-PANEL_TLS_ADDR=0.0.0.0:${PANEL_PORT}
-PANEL_TLS_DOMAIN=${DOMAIN:-}
+PANEL_TLS_MODE=${TLS_MODE}
 PANEL_DOMAIN=${DOMAIN:-}
-PANEL_EDITION=${EDITION}
-ENV
-  chmod 600 "${CONFIG_DIR}/panel.env"
 
-  # Copy env to working directory
-  cd "${INSTALL_DIR}"
-  cp "${CONFIG_DIR}/panel.env" docker/panel.env
-  # Docker Compose reads .env at project root for variable interpolation
-  ln -sf docker/panel.env .env
+# ─── Build Tags ──────────────────────────────────────────────────────
+BUILD_TAGS=${EDITION}
 
-  # Build and start
-  log "Building Docker images (this may take a few minutes)..."
-  if [[ "${EDITION}" == "lite" ]]; then
-    export BUILD_TAGS="lite"
+# ─── pgAdmin ─────────────────────────────────────────────────────────
+PGADMIN_EMAIL=admin@koris.local
+PGADMIN_PASSWORD=${pgadmin_pass}
+PGADMIN_PORT=5050
+EOF
+
+  # Symlink for docker-compose env_file
+  ln -sf "${CONFIG_DIR}/panel.env" "${INSTALL_DIR}/docker/panel.env" 2>/dev/null || true
+  log "Configuration written to ${CONFIG_DIR}/panel.env"
+}
+
+# --- Write version file after successful install ---
+write_version_file() {
+  local version="${IMAGE_TAG:-}"
+  if [[ -z "${version}" ]]; then
+    # No explicit tag — read version from VERSION file in source
+    version=$(cat "${INSTALL_DIR}/VERSION" 2>/dev/null || echo "latest")
   fi
-  docker compose up -d --build
+  mkdir -p "${CONFIG_DIR}"
+  echo "${version}" > "${CONFIG_DIR}/version"
+  log "Version recorded: ${version}"
+}
 
-  # Wait for health check
-  log "Waiting for panel to start..."
-  local attempts=0
-  local health_url="http://localhost:${PANEL_PORT}/api/health"
-  [[ "${TLS_MODE}" != "disabled" ]] && health_url="https://localhost:${PANEL_PORT}/api/health"
-  while [[ $attempts -lt 30 ]]; do
-    if docker inspect -f '{{.State.Health.Status}}' koris 2>/dev/null | grep -q healthy; then
-      break
+# --- Docker installation (sole installation path) ---
+install_docker() {
+  # Ensure Docker is available
+  if ! command -v docker &>/dev/null; then
+    log "Installing Docker..."
+    curl -fsSL https://get.docker.com | sh
+  fi
+  docker info &>/dev/null || err "Docker installed but daemon is not running"
+
+  # Ensure git is available
+  if ! command -v git &>/dev/null; then
+    apt-get update -qq && apt-get install -y -qq git >/dev/null 2>&1
+  fi
+
+  # Clone or update source
+  clone_source
+
+  # Write config (skip if reinstalling with existing config)
+  if [[ "${FORCE_REINSTALL}" != "yes" ]] || ! is_existing_installation; then
+    write_panel_env
+  else
+    # Reinstall with existing config — source DB_PASS for docker compose
+    if [[ -f "${CONFIG_DIR}/panel.env" ]]; then
+      DB_PASS=$(grep -oP 'POSTGRES_PASSWORD=\K.*' "${CONFIG_DIR}/panel.env" 2>/dev/null || true)
+      if [[ -z "${DB_PASS}" ]]; then
+        err "Reinstall failed: POSTGRES_PASSWORD not found in ${CONFIG_DIR}/panel.env"
+      fi
+      log "Reusing existing configuration from ${CONFIG_DIR}/panel.env"
     fi
-    sleep 3
+  fi
+
+  # Build and start the Docker Compose stack
+  log "Building and starting Docker Compose stack..."
+  cd "${INSTALL_DIR}"
+  docker compose build || err "Docker build failed — check output above"
+  docker compose up -d || err "Docker Compose failed to start services"
+
+  # Wait for panel to become healthy
+  log "Waiting for panel to become healthy..."
+  local attempts=0
+  while [[ ${attempts} -lt 30 ]]; do
+    if docker inspect --format='{{.State.Health.Status}}' koris 2>/dev/null | grep -q "healthy"; then
+      log "Panel is healthy"
+      write_version_file
+      return
+    fi
+    sleep 2
     attempts=$((attempts + 1))
   done
-
-  if [[ $attempts -ge 30 ]]; then
-    warn "Panel health check timed out. Check: koris logs"
-  else
-    log "Panel is ${GREEN}running${NC}"
-  fi
-
-  # Install knode alongside if requested
-  if [[ "${WITH_KNODE}" == "yes" ]]; then
-    read -rp "$(echo -e "${CYAN}Install knode agent on this server? [y/N]: ${NC}")" install_knode </dev/tty
-    if [[ "${install_knode}" =~ ^[yY] ]]; then
-      install_knode_docker
-    fi
-  fi
-
-  # Install koris CLI
-  cp "${INSTALL_DIR}/koris.sh" /usr/local/bin/koris
-  chmod +x /usr/local/bin/koris
-  log "CLI installed: run 'koris' from anywhere"
-
-  show_result "${setup_key}"
+  warn "Panel did not reach healthy state within 60 seconds — check: docker logs koris"
+  # Still write version file — containers are running even if health check timed out
+  write_version_file
 }
 
+# --- Install knode alongside panel ---
 install_knode_docker() {
-  log "Setting up knode agent (Docker)..."
-
-  local knode_dir="/opt/knode"
-  if [[ -d "${knode_dir}/.git" ]]; then
-    cd "${knode_dir}" && git fetch origin master --depth=1 >/dev/null 2>&1 && git reset --hard origin/master >/dev/null 2>&1
-  else
-    rm -rf "${knode_dir}"
-    git clone --depth=1 "https://github.com/${KNODE_REPO}.git" "${knode_dir}" >/dev/null 2>&1
-  fi
-
-  # Build knode image
-  docker build -t knode:latest "${knode_dir}" >/dev/null 2>&1 || {
-    warn "knode Docker build failed — skipping"
-    return
-  }
-
-  # Prompt like standalone knode installer
-  local knode_port
-  local knode_name="knode"
-  read -rp "$(echo -e "${CYAN}knode instance name [knode]: ${NC}")" knode_name </dev/tty
-  knode_name="${knode_name:-knode}"
-  read -rp "$(echo -e "${CYAN}knode port [2083]: ${NC}")" knode_port </dev/tty
-  knode_port="${knode_port:-2083}"
-
-  # Check existing knode config
-  local knode_api_key=""
-  local skip_knode_config=""
-  if [[ -f /etc/knode/config.toml ]]; then
-    echo ""
-    echo -e "  ${CYAN}Existing knode configuration found.${NC}"
-    read -rp "$(echo -e "${CYAN}Keep current knode settings? [Y/n]: ${NC}")" keep_knode </dev/tty
-    if [[ ! "${keep_knode}" =~ ^[nN] ]]; then
-      knode_api_key=$(grep -oP 'api_keys\s*=\s*\["\K[^"]+' /etc/knode/config.toml 2>/dev/null || true)
-      knode_port=$(grep -oP 'listen_addr\s*=\s*"[^:]+:\K[0-9]+' /etc/knode/config.toml 2>/dev/null || echo "2083")
-      skip_knode_config="true"
-      log "Keeping existing knode configuration (port: ${knode_port})"
-    fi
-  fi
-
-  if [[ "${skip_knode_config}" != "true" ]]; then
-    if [[ -z "${knode_api_key}" ]]; then
-      knode_api_key="$(gen_secret 16)"
-    fi
-
-    mkdir -p /etc/knode
-    cat > /etc/knode/config.toml <<TOML
-[api]
-listen_addr = "0.0.0.0:${knode_port}"
-api_keys = ["${knode_api_key}"]
-enable_rest = false
-
-[logging]
-level = "info"
-format = "json"
-
-[performance]
-gogc = 100
-mem_limit = "256MB"
-TOML
-  else
-    if [[ -z "${knode_api_key}" ]]; then
-      knode_api_key="$(gen_secret 16)"
-    fi
-  fi
-
-  # Remove old container and certs (force regeneration with new SANs)
-  docker rm -f knode 2>/dev/null || true
-  rm -rf /etc/knode/certs/api/
-
-  # Run knode container
-  docker run -d --name knode --network host --restart unless-stopped \
-    --cap-add NET_ADMIN --cap-add NET_RAW \
-    -v /etc/knode:/etc/knode \
-    knode:latest
-
-  sleep 3
-  if docker ps --format '{{.Names}}' | grep -qx knode; then
-    log "knode is ${GREEN}running${NC} on port ${knode_port}"
-  else
-    warn "knode container may have failed. Check: docker logs knode"
-    return
-  fi
-
-  # Show node connection details for the panel
-  local server_ip
-  server_ip=$(curl -fsS4 --max-time 3 https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}')
-
-  echo ""
-  echo -e "${GREEN}═══════════════════════════════════════${NC}"
-  echo -e "${YELLOW}  knode — Paste these in your panel to add this node:${NC}"
-  echo -e "${GREEN}═══════════════════════════════════════${NC}"
-  echo ""
-  echo -e "  ${CYAN}Address:${NC}  ${server_ip}"
-  echo -e "  ${CYAN}Port:${NC}     ${knode_port}"
-  echo ""
-  echo -e "  ${CYAN}API Key:${NC}"
-  echo -e "  ${GREEN}${knode_api_key}${NC}"
-  echo ""
-  echo -e "  ${CYAN}Certificate:${NC}"
-  cat "/etc/knode/certs/api/cert.pem" 2>/dev/null || echo "  (certificate not yet generated — wait a moment and run: cat /etc/knode/certs/api/cert.pem)"
-  echo ""
-  echo -e "${GREEN}═══════════════════════════════════════${NC}"
-  echo ""
+  log "Installing knode agent on this host..."
+  curl -fsSL "https://raw.githubusercontent.com/${KNODE_REPO}/master/install.sh" | bash
 }
 
-# ═══════════════════════════════════════════════════════════════════════
-# NATIVE MODE (--native)
-# ═══════════════════════════════════════════════════════════════════════
-install_native() {
-  log "Installing dependencies..."
-  export DEBIAN_FRONTEND=noninteractive
-  apt-get update -qq >/dev/null 2>&1
-  apt-get install -y -qq git curl openssl ca-certificates mariadb-server \
-    freeradius freeradius-mysql freeradius-utils nginx golang-go iproute2 \
-    wireguard-tools openvpn easy-rsa strongswan xl2tpd certbot python3-certbot-nginx >/dev/null 2>&1
-  log "Dependencies installed."
-
-  # Database setup
-  setup_database
-
-  # FreeRADIUS
-  setup_freeradius
-
-  # Clone source & build
-  clone_source
-  build_panel
-
-  # Install knode
-  if [[ "${WITH_KNODE}" == "yes" ]]; then
-    read -rp "$(echo -e "${CYAN}Install knode agent on this server? [y/N]: ${NC}")" install_knode </dev/tty
-    if [[ "${install_knode}" =~ ^[yY] ]]; then
-      build_knode
-    else
-      WITH_KNODE="no"
-    fi
-  fi
-
-  # Generate secrets
-  local session_secret="$(gen_secret 32)"
-  local setup_key="$(gen_secret 16)"
-  local panel_secret="$(gen_secret 32)"
-  local knode_api_key="$(gen_secret 32)"
-
-  # Write panel config
-  mkdir -p "${CONFIG_DIR}"
-  local binary_name="koris"
-  [[ "${EDITION}" == "lite" ]] && binary_name="korislite"
-
-  cat > "${CONFIG_DIR}/panel.env" <<ENV
-PANEL_ADDR='127.0.0.1:${PANEL_PORT}'
-PANEL_DB_DSN='${DB_USER}:${DB_PASS}@tcp(127.0.0.1:3306)/${DB_NAME}?parseTime=true&multiStatements=true&charset=utf8mb4,utf8'
-PANEL_MIGRATIONS='/opt/KorisPanel/panel/migrations'
-PANEL_SETUP_KEY='${setup_key}'
-PANEL_SESSION_SECRET='${session_secret}'
-PANEL_SECRET='${panel_secret}'
-PANEL_PUBLIC_BASE='/dashboard'
-PANEL_ADMIN_WEB_DIR='/opt/KorisPanel/panel/web/admin/www'
-PANEL_PORTAL_WEB_DIR='/opt/KorisPanel/panel/web/portal/www'
-PANEL_VERSION='$(cat "${INSTALL_DIR}/VERSION" 2>/dev/null || echo dev)'
-ENV
-  chmod 600 "${CONFIG_DIR}/panel.env"
-
-  # Systemd — Panel
-  local service_name="${binary_name}"
-  cat > "/etc/systemd/system/${service_name}.service" <<SVC
-[Unit]
-Description=KorisPanel (${EDITION})
-After=network-online.target mariadb.service
-Wants=network-online.target
-
-[Service]
-Type=simple
-EnvironmentFile=${CONFIG_DIR}/panel.env
-ExecStart=/usr/local/bin/${binary_name}
-Restart=always
-RestartSec=3
-User=root
-WorkingDirectory=/opt/KorisPanel
-LimitNOFILE=65535
-
-[Install]
-WantedBy=multi-user.target
-SVC
-
-  # Knode config & service
-  if [[ "${WITH_KNODE}" == "yes" ]]; then
-    mkdir -p /etc/knode
-    cat > /etc/knode/config.toml <<TOML
-[api]
-listen_addr = "0.0.0.0:2083"
-api_keys = ["${knode_api_key}"]
-enable_rest = false
-
-[logging]
-level = "info"
-format = "json"
-
-[performance]
-gogc = 100
-mem_limit = "256MB"
-TOML
-    chmod 600 /etc/knode/config.toml
-
-    cat > /etc/systemd/system/knode.service <<SVC
-[Unit]
-Description=Koris Node Agent
-After=network-online.target ${service_name}.service
-Wants=network-online.target
-
-[Service]
-Type=simple
-ExecStart=/usr/local/bin/knode
-Restart=always
-RestartSec=3
-User=root
-LimitNOFILE=65535
-
-[Install]
-WantedBy=multi-user.target
-SVC
-  fi
-
-  # Nginx
-  setup_nginx
-
-  # Start services
-  systemctl daemon-reload
-  systemctl enable --now "${service_name}" >/dev/null 2>&1
-  [[ "${WITH_KNODE}" == "yes" ]] && systemctl enable --now knode >/dev/null 2>&1
-  sleep 2
-
-  # Health check
-  if curl -fsS "http://127.0.0.1:${PANEL_PORT}/api/health" >/dev/null 2>&1; then
-    log "Health check ${GREEN}PASSED${NC}"
-  else
-    warn "Health check failed — check: journalctl -u ${service_name} -n 20"
-  fi
-
-  # Swap
-  setup_swap
-
-  show_result "${setup_key}"
-}
-
-# ═══════════════════════════════════════════════════════════════════════
-# HELPERS
-# ═══════════════════════════════════════════════════════════════════════
-
-clone_source() {
-  log "Downloading KorisPanel..."
-  if [[ -d "${INSTALL_DIR}/.git" ]]; then
-    cd "${INSTALL_DIR}" && git fetch origin main --depth=1 >/dev/null 2>&1 && git reset --hard origin/main >/dev/null 2>&1
-  else
-    rm -rf "${INSTALL_DIR}"
-    git clone --depth=1 -b main "https://github.com/${REPO}.git" "${INSTALL_DIR}" >/dev/null 2>&1
-  fi
-  cd "${INSTALL_DIR}"
-  log "Source ready."
-}
-
-build_panel() {
-  local binary_name="koris"
-  local build_tags=""
-  [[ "${EDITION}" == "lite" ]] && binary_name="korislite" && build_tags="-tags lite"
-
-  log "Building ${binary_name}..."
-  cd "${INSTALL_DIR}"
-  go mod tidy >/dev/null 2>&1
-  go build -ldflags="-s -w" ${build_tags} -o "/usr/local/bin/${binary_name}" ./panel/cmd/panel/
-  chmod +x "/usr/local/bin/${binary_name}"
-  log "${binary_name} built."
-}
-
-build_knode() {
-  log "Building knode..."
-  local knode_dir="/opt/knode"
-  if [[ -d "${knode_dir}/.git" ]]; then
-    cd "${knode_dir}" && git fetch origin master --depth=1 >/dev/null 2>&1 && git reset --hard origin/master >/dev/null 2>&1
-  else
-    rm -rf "${knode_dir}"
-    git clone --depth=1 "https://github.com/${KNODE_REPO}.git" "${knode_dir}" >/dev/null 2>&1
-  fi
-  cd "${knode_dir}"
-  go build -ldflags="-s -w" -o /usr/local/bin/knode ./cmd/node/
-  chmod +x /usr/local/bin/knode
-  cd "${INSTALL_DIR}"
-  log "knode built."
-}
-
-setup_database() {
-  log "Setting up MariaDB..."
-  systemctl enable --now mariadb >/dev/null 2>&1
-  mysql -u root <<SQL
-CREATE DATABASE IF NOT EXISTS ${DB_NAME} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER IF NOT EXISTS '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASS}';
-ALTER USER '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASS}';
-CREATE USER IF NOT EXISTS '${DB_USER}'@'127.0.0.1' IDENTIFIED BY '${DB_PASS}';
-ALTER USER '${DB_USER}'@'127.0.0.1' IDENTIFIED BY '${DB_PASS}';
-GRANT ALL PRIVILEGES ON ${DB_NAME}.* TO '${DB_USER}'@'localhost';
-GRANT ALL PRIVILEGES ON ${DB_NAME}.* TO '${DB_USER}'@'127.0.0.1';
-FLUSH PRIVILEGES;
-SQL
-
-  # FreeRADIUS schema
-  local schema="/etc/freeradius/3.0/mods-config/sql/main/mysql/schema.sql"
-  if [[ -f "$schema" ]]; then
-    mysql -u root "$DB_NAME" -N -B -e "SHOW TABLES LIKE 'radcheck';" 2>/dev/null | grep -q '^radcheck$' || mysql -u root "$DB_NAME" < "$schema"
-  fi
-
-  # Performance tuning
-  local total_ram=$(free -m | awk '/Mem:/{print $2}')
-  local pool="256M"
-  [[ $total_ram -ge 2000 ]] && pool="512M"
-  [[ $total_ram -ge 4000 ]] && pool="1G"
-  cat > /etc/mysql/mariadb.conf.d/99-koris.cnf <<MYCNF
-[mysqld]
-innodb_buffer_pool_size = ${pool}
-innodb_log_file_size = 128M
-innodb_flush_log_at_trx_commit = 2
-innodb_flush_method = O_DIRECT
-max_connections = 200
-thread_cache_size = 16
-skip-name-resolve
-MYCNF
-  systemctl restart mariadb >/dev/null 2>&1
-  log "Database ready."
-}
-
-setup_freeradius() {
-  log "Configuring FreeRADIUS..."
-  local sql_mod="/etc/freeradius/3.0/mods-available/sql"
-  if [[ -f "$sql_mod" ]]; then
-    sed -i -e 's/^\s*dialect = .*/\tdialect = "mysql"/' \
-           -e "s/^\s*login = .*/\tlogin = \"${DB_USER}\"/" \
-           -e "s/^\s*password = .*/\tpassword = \"${DB_PASS}\"/" \
-           -e "s/^\s*radius_db = .*/\tradius_db = \"${DB_NAME}\"/" "$sql_mod"
-    ln -sf ../mods-available/sql /etc/freeradius/3.0/mods-enabled/sql 2>/dev/null || true
-    systemctl restart freeradius >/dev/null 2>&1 || true
-  fi
-}
-
-setup_nginx() {
-  log "Configuring Nginx..."
-  if [[ ! -f "${CONFIG_DIR}/cert.pem" ]]; then
-    openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
-      -keyout "${CONFIG_DIR}/key.pem" -out "${CONFIG_DIR}/cert.pem" \
-      -subj "/CN=${DOMAIN:-localhost}" >/dev/null 2>&1
-  fi
-
-  local server_name="${DOMAIN:-_}"
-  cat > /etc/nginx/sites-available/koris.conf <<NGINX
-server {
-    listen 80 default_server;
-    server_name ${server_name};
-    return 301 https://\$host\$request_uri;
-}
-server {
-    listen 443 ssl default_server;
-    server_name ${server_name};
-    client_max_body_size 20m;
-    ssl_certificate ${CONFIG_DIR}/cert.pem;
-    ssl_certificate_key ${CONFIG_DIR}/key.pem;
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers HIGH:!aNULL:!MD5;
-    ssl_prefer_server_ciphers on;
-    ssl_session_cache shared:SSL:10m;
-
-    location = / { return 302 /dashboard/; }
-    location = /dashboard { return 302 /dashboard/; }
-    location /dashboard/ {
-        proxy_pass http://127.0.0.1:${PANEL_PORT};
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto https;
-    }
-    location /api/ {
-        proxy_pass http://127.0.0.1:${PANEL_PORT};
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto https;
-    }
-    location = /portal { return 302 /portal/; }
-    location /portal/ {
-        proxy_pass http://127.0.0.1:${PANEL_PORT};
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto https;
-    }
-}
-NGINX
-  rm -f /etc/nginx/sites-enabled/default 2>/dev/null
-  ln -sf /etc/nginx/sites-available/koris.conf /etc/nginx/sites-enabled/koris.conf
-  nginx -t >/dev/null 2>&1 && systemctl reload nginx
-}
-
-setup_swap() {
-  if swapon --show | grep -q '/'; then return; fi
-  local total_ram=$(free -m | awk '/Mem:/{print $2}')
-  local swap_size="2G"
-  [[ $total_ram -ge 4000 ]] && swap_size="4G"
-  fallocate -l "$swap_size" /swapfile 2>/dev/null || dd if=/dev/zero of=/swapfile bs=1M count=2048 status=none
-  chmod 600 /swapfile && mkswap /swapfile >/dev/null 2>&1 && swapon /swapfile
-  grep -q '/swapfile' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
-  sysctl -w vm.swappiness=10 >/dev/null 2>&1
-  log "Swap configured (${swap_size})."
-}
-
-show_result() {
-  local setup_key="$1"
-  local server_ip
-  server_ip=$(curl -fsS4 --max-time 3 https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}')
-
-  # Build access URL with port — always HTTPS
-  local access_host="${DOMAIN:-${server_ip}}"
-  local access_url="https://${access_host}:${PANEL_PORT}"
-
-  echo ""
-  echo -e "${GREEN}═══════════════════════════════════════════════${NC}"
-  echo -e "${GREEN}  KorisPanel Installed Successfully!${NC}"
-  echo -e "${GREEN}═══════════════════════════════════════════════${NC}"
-  echo ""
-  echo -e "  Edition:    ${CYAN}${EDITION}${NC}"
-  echo -e "  Mode:       ${CYAN}${INSTALL_MODE}${NC}"
-  echo -e "  Dashboard:  ${CYAN}${access_url}/dashboard/${NC}"
-  echo -e "  Portal:     ${CYAN}${access_url}/portal/${NC}"
-  echo ""
-  echo -e "${GREEN}═══════════════════════════════════════════════${NC}"
-  echo -e "${YELLOW}  Setup Key (use to create admin account):${NC}"
-  echo -e "${GREEN}═══════════════════════════════════════════════${NC}"
-  echo ""
-  echo -e "  ${CYAN}${setup_key}${NC}"
-  echo ""
-  echo -e "${GREEN}═══════════════════════════════════════════════${NC}"
-  echo ""
-  if [[ "${TLS_MODE}" == "selfsigned" ]]; then
-    echo -e "  ${CYAN}SSL:${NC}       Self-signed (accept browser warning)"
-  elif [[ "${TLS_MODE}" == "acme" ]]; then
-    echo -e "  ${CYAN}SSL:${NC}       Let's Encrypt (auto-renewed)"
-  elif [[ "${TLS_MODE}" == "manual" ]]; then
-    echo -e "  ${CYAN}SSL:${NC}       Custom cert"
-  fi
-  echo -e "  ${CYAN}Cert:${NC}      ${CERT_PATH}"
-  echo -e "  ${CYAN}Key:${NC}       ${KEY_PATH}"
-  echo ""
-  if [[ "${INSTALL_MODE}" == "docker" ]]; then
-    echo -e "  ${CYAN}Logs:${NC}      koris logs"
-    echo -e "  ${CYAN}Restart:${NC}   koris restart"
-    echo -e "  ${CYAN}Stop:${NC}      koris stop"
-    echo -e "  ${CYAN}Update:${NC}    koris update"
-    echo -e "  ${CYAN}Status:${NC}    koris status"
-  else
-    local svc="koris"
-    [[ "${EDITION}" == "lite" ]] && svc="korislite"
-    echo -e "  ${CYAN}Logs:${NC}      koris logs"
-    echo -e "  ${CYAN}Restart:${NC}   koris restart"
-    echo -e "  ${CYAN}Stop:${NC}      koris stop"
-    echo -e "  ${CYAN}Update:${NC}    koris update"
-  fi
-  echo ""
-  echo -e "${GREEN}═══════════════════════════════════════════════${NC}"
-  echo -e "  ${CYAN}Uninstall:${NC}   koris uninstall"
-  echo ""
+# --- Clean reinstall (remove containers/images, preserve db-data) ---
+clean_reinstall() {
+  log "Performing clean reinstall..."
+  cd "${INSTALL_DIR}" 2>/dev/null || true
+  docker compose down --remove-orphans 2>/dev/null || true
+  docker compose rm -f 2>/dev/null || true
+  # Remove panel and pgadmin volumes, keep db-data
+  docker volume rm koris_panel-data koris_pgadmin-data 2>/dev/null || true
+  # Remove project images
+  docker images --filter "label=com.docker.compose.project=koris" -q | xargs -r docker rmi -f 2>/dev/null || true
 }
 
 # --- Uninstall ---
 uninstall() {
   log "Uninstalling KorisPanel..."
 
-  # Docker cleanup
-  if command -v docker &>/dev/null; then
-    if [[ -f "${INSTALL_DIR}/docker-compose.yml" ]]; then
-      cd "${INSTALL_DIR}" && docker compose down -v 2>/dev/null || true
-      log "Removed Docker containers and volumes"
-    fi
-    docker rm -f knode 2>/dev/null && log "Removed knode container" || true
-  fi
-
-  # Systemd services
-  for svc in koris korislite knode; do
-    if [[ -f "/etc/systemd/system/${svc}.service" ]]; then
-      systemctl stop "${svc}" 2>/dev/null || true
-      systemctl disable "${svc}" 2>/dev/null || true
-      rm -f "/etc/systemd/system/${svc}.service"
-      log "Removed service: ${svc}"
-    fi
-  done
-  systemctl daemon-reload 2>/dev/null || true
-
-  # Binaries
-  rm -f /usr/local/bin/koris /usr/local/bin/korislite /usr/local/bin/knode
-
-  # Config
-  rm -rf "${CONFIG_DIR}"
-  rm -rf /etc/knode
-
-  # Nginx config
-  rm -f /etc/nginx/sites-enabled/koris.conf /etc/nginx/sites-available/koris.conf
-  systemctl reload nginx 2>/dev/null || true
-
-  # Source (prompt)
+  # Stop and remove Docker Compose stack
   if [[ -d "${INSTALL_DIR}" ]]; then
-    read -rp "$(echo -e "${YELLOW}Remove source code at ${INSTALL_DIR}? [y/N]: ${NC}")" confirm </dev/tty
-    [[ "${confirm}" =~ ^[yY] ]] && rm -rf "${INSTALL_DIR}" && log "Removed ${INSTALL_DIR}"
+    cd "${INSTALL_DIR}"
+    docker compose down -v --remove-orphans 2>/dev/null || true
   fi
 
-  log "KorisPanel uninstalled."
+  # Remove images
+  docker images --filter "label=com.docker.compose.project=koris" -q | xargs -r docker rmi -f 2>/dev/null || true
+
+  # Remove directories
+  rm -rf "${INSTALL_DIR}"
+  rm -rf "${CONFIG_DIR}"
+  rm -f /usr/local/bin/koris
+
+  log "KorisPanel uninstalled"
+}
+
+# --- Show installation result ---
+show_result() {
+  local SERVER_IP
+  SERVER_IP=$(curl -fsS4 --max-time 3 https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}')
+
+  echo ""
+  echo -e "${GREEN}═══════════════════════════════════════${NC}"
+  echo -e "${GREEN}  KorisPanel installed successfully!${NC}"
+  echo -e "${GREEN}═══════════════════════════════════════${NC}"
+  echo ""
+  echo -e "  Edition:   ${CYAN}${EDITION}${NC}"
+  echo -e "  URL:       ${CYAN}https://${DOMAIN:-${SERVER_IP}}:${PANEL_PORT}${NC}"
+  echo -e "  Port:      ${CYAN}${PANEL_PORT}${NC}"
+  echo -e "  Config:    ${CONFIG_DIR}/panel.env"
+  echo -e "  Source:    ${INSTALL_DIR}"
+  echo ""
+  echo -e "  ${CYAN}Logs:${NC}      docker compose -f ${INSTALL_DIR}/docker-compose.yml logs -f"
+  echo -e "  ${CYAN}Restart:${NC}   docker compose -f ${INSTALL_DIR}/docker-compose.yml restart"
+  echo -e "  ${CYAN}Stop:${NC}      docker compose -f ${INSTALL_DIR}/docker-compose.yml down"
+  echo ""
+  if [[ -f "${CONFIG_DIR}/panel.env" ]]; then
+    local setup_key
+    setup_key=$(grep -oP 'PANEL_SETUP_KEY=\K.*' "${CONFIG_DIR}/panel.env" 2>/dev/null || echo "")
+    if [[ -n "${setup_key}" ]]; then
+      echo -e "  ${YELLOW}Setup Key:${NC} ${setup_key}"
+      echo -e "  (Use this key on first login to create your admin account)"
+      echo ""
+    fi
+  fi
+  echo -e "${GREEN}═══════════════════════════════════════${NC}"
+  echo ""
+}
+
+# --- Detect existing installations ---
+detect_existing() {
+  local has_panel="" has_knode="" panel_ver=""
+
+  # Check for existing panel
+  if [[ -f "${CONFIG_DIR}/panel.env" ]] || docker ps -a --format '{{.Names}}' 2>/dev/null | grep -qx koris; then
+    has_panel="yes"
+    panel_ver=$(cat "${INSTALL_DIR}/VERSION" 2>/dev/null || echo "unknown")
+  fi
+
+  # Check for existing knode
+  if [[ -f "/etc/knode/config.toml" ]] || docker ps -a --format '{{.Names}}' 2>/dev/null | grep -qx knode; then
+    has_knode="yes"
+  fi
+
+  if [[ -z "${has_panel}" && -z "${has_knode}" ]]; then
+    return 1  # No existing installation found
+  fi
+
+  # Show what we found
+  echo -e "${BOLD}Existing installation detected:${NC}"
+  echo ""
+  if [[ "${has_panel}" == "yes" ]]; then
+    local panel_state
+    panel_state=$(docker inspect -f '{{.State.Status}}' koris 2>/dev/null || echo "stopped")
+    echo -e "  ${CYAN}●${NC} KorisPanel v${panel_ver} (${panel_state})"
+  fi
+  if [[ "${has_knode}" == "yes" ]]; then
+    local knode_state
+    knode_state=$(docker inspect -f '{{.State.Status}}' knode 2>/dev/null || echo "stopped")
+    echo -e "  ${CYAN}●${NC} knode (${knode_state})"
+  fi
+  echo ""
+
+  # Ask what to do
+  echo -e "  ${CYAN}1)${NC} Update (pull latest, rebuild — no downtime beyond restart)"
+  echo -e "  ${CYAN}2)${NC} Clean reinstall (wipe containers/images, keep DB, rebuild from scratch)"
+  echo -e "  ${CYAN}3)${NC} Full wipe & fresh install (removes ALL data including database)"
+  echo -e "  ${CYAN}4)${NC} Cancel"
+  echo ""
+  read -rp "$(echo -e "${CYAN}Choose [1/2/3/4]: ${NC}")" reinstall_choice </dev/tty
+
+  case "${reinstall_choice}" in
+    1)
+      log "Updating to latest version..."
+      cd "${INSTALL_DIR}"
+      git fetch origin main --depth=1 >/dev/null 2>&1
+      git reset --hard origin/main >/dev/null 2>&1
+      docker compose up -d --build
+      [[ -f "${INSTALL_DIR}/koris.sh" ]] && cp "${INSTALL_DIR}/koris.sh" /usr/local/bin/koris && chmod +x /usr/local/bin/koris
+      log "Updated to v$(cat "${INSTALL_DIR}/VERSION" 2>/dev/null || echo '?')"
+      exit 0
+      ;;
+    2)
+      log "Clean reinstall — database data will be preserved"
+      FORCE_REINSTALL="yes"
+      clean_reinstall
+      ;;
+    3)
+      echo ""
+      echo -e "${RED}WARNING: This will delete ALL data including the database.${NC}"
+      read -rp "Type 'yes' to confirm: " wipe_confirm </dev/tty
+      if [[ "${wipe_confirm}" != "yes" ]]; then
+        log "Cancelled."
+        exit 0
+      fi
+      log "Full wipe — removing everything..."
+      cd "${INSTALL_DIR}" 2>/dev/null && docker compose down --volumes --remove-orphans 2>/dev/null || true
+      docker rm -f koris koris-db koris-pgadmin knode 2>/dev/null || true
+      docker volume rm koris_db-data koris_panel-data koris_pgadmin-data 2>/dev/null || true
+      docker images --format '{{.ID}} {{.Repository}}' 2>/dev/null | awk '$2 ~ /^koris/ {print $1}' | xargs -r docker rmi -f 2>/dev/null || true
+      docker images --filter "label=com.docker.compose.project=koris" -q 2>/dev/null | xargs -r docker rmi -f 2>/dev/null || true
+      rm -rf "${INSTALL_DIR}" "${CONFIG_DIR}" /usr/local/bin/koris
+      rm -rf /etc/knode
+      log "Wipe complete. Starting fresh install..."
+      ;;
+    4|*)
+      log "Cancelled."
+      exit 0
+      ;;
+  esac
+
+  return 0
 }
 
 # --- Main ---
@@ -944,41 +464,50 @@ main() {
   detect_os
   parse_args "$@"
 
-  # Detect existing installation and offer to keep config
-  if [[ -f "${CONFIG_DIR}/panel.env" && "${EDITION}" != "knode" ]]; then
-    echo ""
-    echo -e "  ${CYAN}Existing panel configuration found.${NC}"
-    read -rp "$(echo -e "${CYAN}Keep current settings? [Y/n]: ${NC}")" keep_config </dev/tty
-    if [[ ! "${keep_config}" =~ ^[nN] ]]; then
-      log "Keeping existing configuration"
-      source "${CONFIG_DIR}/panel.env"
-      DB_PASS="${POSTGRES_PASSWORD:-}"
-      DB_NAME="${POSTGRES_DB:-koris}"
-      DB_USER="${POSTGRES_USER:-koris}"
-      DOMAIN="${PANEL_DOMAIN:-}"
-      PANEL_PORT="${PANEL_PORT%%:*}"  # extract port from PANEL_ADDR if formatted as host:port
-      # Detect TLS mode from existing cert
-      if [[ -f "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" ]]; then
-        TLS_MODE="acme"
-      elif [[ -f "${PANEL_TLS_CERT:-}" ]]; then
-        TLS_MODE="manual"
-        CERT_PATH="${PANEL_TLS_CERT}"
-        KEY_PATH="${PANEL_TLS_KEY}"
-      else
-        TLS_MODE="selfsigned"
-      fi
-      SKIP_PROMPTS=true
+  # Handle explicit --reinstall flag (non-interactive, e.g. from koris downgrade)
+  if [[ "${FORCE_REINSTALL}" == "yes" ]]; then
+    if is_existing_installation; then
+      clean_reinstall
+    fi
+  else
+    # Interactive: detect existing installation and ask user what to do
+    if detect_existing 2>/dev/null; then
+      # User chose option 1 (reinstall) or 2 (wipe) — continue with install
+      :
     fi
   fi
 
-  if [[ "${SKIP_PROMPTS:-}" != "true" ]]; then
+  # If knode-only edition was selected, delegate to knode installer
+  if [[ "${EDITION}" == "knode" ]]; then
+    install_knode_docker
+    exit 0
+  fi
+
+  # Interactive prompts (skipped if reinstalling with existing config)
+  if [[ "${FORCE_REINSTALL}" != "yes" ]]; then
     prompt_config
   fi
 
-  case "${INSTALL_MODE}" in
-    docker) install_docker ;;
-    native) install_native ;;
-  esac
+  # Docker installation — the only supported path
+  install_docker
+
+  # Install CLI management tool
+  if [[ -f "${INSTALL_DIR}/koris.sh" ]]; then
+    cp "${INSTALL_DIR}/koris.sh" /usr/local/bin/koris
+    chmod +x /usr/local/bin/koris
+    log "CLI installed: /usr/local/bin/koris"
+  fi
+
+  # Optional knode co-installation
+  if [[ "${WITH_KNODE}" == "yes" && "${EDITION}" != "knode" ]]; then
+    echo ""
+    read -rp "$(echo -e "${CYAN}Install knode agent on this server too? [y/N]: ${NC}")" install_knode </dev/tty
+    if [[ "${install_knode}" =~ ^[yY] ]]; then
+      install_knode_docker
+    fi
+  fi
+
+  show_result
 }
 
 main "$@"

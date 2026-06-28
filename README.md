@@ -49,11 +49,18 @@ Manage your entire VPN infrastructure from a single dashboard: nodes, customers,
 bash <(curl -Ls https://raw.githubusercontent.com/anonysec/panel/main/install.sh)
 ```
 
+Running without flags launches an interactive prompt for edition, domain, port, DB, and SSL configuration. If an existing installation is detected, the installer offers reinstall, full wipe, update, or cancel options before proceeding.
+
 Options:
 ```bash
 install.sh --lite              # Lite edition
+install.sh --full             # Full edition (default)
 install.sh --port=8080         # Custom port
 install.sh --domain=panel.example.com
+install.sh --no-knode          # Skip knode agent installation
+install.sh --version=v1.2.0    # Install a specific version tag
+install.sh --reinstall         # Force reinstall (preserves DB data)
+install.sh --uninstall         # Remove KorisPanel
 ```
 
 ### Node Agent (on each VPN server)
@@ -170,7 +177,9 @@ The `/api/info` endpoint returns `{"edition": "full"}` or `{"edition": "lite"}`.
 
 ## Configuration
 
-Panel config: `/etc/koris/panel.env`
+Panel config directory: `/etc/koris/`
+- `panel.env` — environment variables for the Docker stack
+- `version` — installed version tag (written on install/update)
 
 | Variable | Description | Default |
 |----------|-------------|---------|
