@@ -154,6 +154,22 @@
         </div>
       </template>
     </KFormField>
+
+    <!-- Avatar -->
+    <KFormField name="avatar" :label="t('user.avatar')">
+      <template #default>
+        <div class="profile-fields__emoji-picker">
+          <button
+            v-for="em in defaultEmojis"
+            :key="em"
+            type="button"
+            class="profile-fields__emoji-btn"
+            :class="{ 'profile-fields__emoji-btn--active': modelValue.avatar === em }"
+            @click="updateField('avatar', modelValue.avatar === em ? '' : em)"
+          >{{ em }}</button>
+        </div>
+      </template>
+    </KFormField>
   </div>
 </template>
 
@@ -190,6 +206,7 @@ export interface ProfileFormData {
   allowed_protocols: string[]
   protocol_options: Record<string, string>
   billing_enabled: boolean
+  avatar: string
 }
 
 export interface ProfileFieldsProps {
@@ -223,6 +240,9 @@ const planOptions = computed(() => {
 
 // ─── Expiry Chips ───────────────────────────────────────────────────────────
 const expiryChips: ExpiryOffset[] = ['+7d', '+1m', '+2m', '+3m', '+6m', '+1y']
+
+// ─── Default Emojis ─────────────────────────────────────────────────────────
+const defaultEmojis = ['🦊', '🐻', '🐼', '🐨', '🦁', '🐯', '🐸', '🐙', '🦋', '🌟', '🔥', '💎', '🎯', '🚀', '⚡', '🌈', '🎪', '🎭', '🏆', '👑']
 
 // ─── Available Protocols with sub-options ───────────────────────────────────
 const availableProtocols = [
@@ -607,5 +627,36 @@ function setProtocolOption(protocol: string, value: string) {
   background: rgba(37, 99, 235, 0.08);
   color: var(--color-primary, #2563eb);
   font-weight: 500;
+}
+
+/* ─── Emoji Picker ────────────────────────────────────────────────────────── */
+.profile-fields__emoji-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.profile-fields__emoji-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md, 6px);
+  border: 1px solid var(--color-border, #28333f);
+  background: var(--color-surface, #0b1120);
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 100ms ease;
+}
+
+.profile-fields__emoji-btn:hover {
+  border-color: var(--color-primary, #2563eb);
+}
+
+.profile-fields__emoji-btn--active {
+  border-color: var(--color-primary, #2563eb);
+  background: rgba(37, 99, 235, 0.12);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.25);
 }
 </style>

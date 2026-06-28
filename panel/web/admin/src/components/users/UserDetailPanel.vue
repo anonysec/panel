@@ -88,6 +88,7 @@ const profileFormData = ref<ProfileFormData>({
   allowed_protocols: [],
   protocol_options: {},
   billing_enabled: true,
+  avatar: '',
 })
 
 /** Sync form data when customer data is fetched */
@@ -104,6 +105,17 @@ function syncFormFromCustomer() {
   let dataLimit = ''
   if (customer.value.subscription?.data_limit_gb) {
     dataLimit = String(customer.value.subscription.data_limit_gb)
+  } else {
+    // Fallback: read from radcheck Max-Data attribute (stored in bytes)
+    const maxDataCheck = customer.value.radius_checks?.find(
+      (r) => r.attribute === 'Max-Data'
+    )
+    if (maxDataCheck?.value) {
+      const bytes = Number(maxDataCheck.value)
+      if (bytes > 0) {
+        dataLimit = String(Math.round((bytes / (1024 * 1024 * 1024)) * 100) / 100)
+      }
+    }
   }
 
   profileFormData.value = {
@@ -116,6 +128,7 @@ function syncFormFromCustomer() {
     allowed_protocols: protocols,
     protocol_options: {},
     billing_enabled: customer.value.billing_enabled !== false,
+    avatar: customer.value.avatar ?? '',
   }
 }
 

@@ -309,6 +309,7 @@ const newUserProfileData = ref<ProfileFormData>({
   allowed_protocols: [],
   protocol_options: {},
   billing_enabled: false,
+  avatar: '',
 })
 
 const resellerForm = ref({
@@ -546,6 +547,7 @@ function openNewUserSlideOver() {
     allowed_protocols: [],
     protocol_options: {},
     billing_enabled: false,
+    avatar: '',
   }
   showUserSlideOver.value = true
 }
@@ -562,7 +564,7 @@ async function handleCreateUser() {
     speed_mbps: userForm.value.speed_mbps ? Number(userForm.value.speed_mbps) : 0,
     days: userForm.value.days ? Number(userForm.value.days) : 0,
     template_id: userForm.value.template_id ? Number(userForm.value.template_id) : undefined,
-    avatar: userForm.value.avatar || undefined,
+    avatar: newUserProfileData.value.avatar || undefined,
     status: newUserProfileData.value.status || 'active',
     expiry_date: newUserProfileData.value.expiry_date || undefined,
     note: newUserProfileData.value.note || undefined,
@@ -1320,28 +1322,6 @@ onMounted(async () => {
           mode="create"
           @update:model-value="newUserProfileData = $event"
         />
-        <KFormField v-if="!isReseller" name="user-avatar" :label="t('user.avatar')">
-          <template #default>
-            <div class="emoji-picker">
-              <button
-                v-for="em in availableUserEmojis"
-                :key="em"
-                type="button"
-                class="emoji-btn"
-                :class="{ 'emoji-btn--active': userForm.avatar === em }"
-                @click="userForm.avatar = userForm.avatar === em ? '' : em"
-              >{{ em }}</button>
-              <button
-                v-for="em in reservedEmojiList"
-                :key="'reserved-' + em.emoji"
-                type="button"
-                class="emoji-btn emoji-btn--reserved"
-                disabled
-                :title="`Used by reseller: ${em.reseller}`"
-              >{{ em.emoji }}</button>
-            </div>
-          </template>
-        </KFormField>
         <div class="slide-form__footer">
           <KButton type="button" variant="ghost" @click="showUserSlideOver = false">{{ t('btn.cancel') }}</KButton>
           <KButton type="submit" variant="primary" :loading="saving">{{ t('btn.create') }}</KButton>
