@@ -47,7 +47,17 @@
       </KFormField>
 
       <!-- Expiry Date -->
-      <KFormField name="expiry" :label="t('customer.expiry_date')">
+      <KFormField name="expiry">
+        <template #label>
+          <span class="profile-fields__expiry-label">
+            {{ t('customer.expiry_date') }}
+            <span v-if="expiresInDays !== null" class="profile-fields__expiry-badge">
+              <span v-if="expiresInDays > 0">{{ expiresInDays }}d</span>
+              <span v-else-if="expiresInDays === 0" class="profile-fields__expiry-badge--warning">today</span>
+              <span v-else class="profile-fields__expiry-badge--expired">-{{ Math.abs(expiresInDays) }}d</span>
+            </span>
+          </span>
+        </template>
         <template #default="{ fieldId }">
           <div class="profile-fields__expiry">
             <!-- Date input with calendar icon + inline expiry info -->
@@ -70,12 +80,6 @@
                   <path d="M5 1v2M11 1v2M1.5 6h13M2.5 3h11a1 1 0 011 1v10a1 1 0 01-1 1h-11a1 1 0 01-1-1V4a1 1 0 011-1z" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
               </button>
-              <!-- "Expires in X days" inline beside the date input -->
-              <span v-if="expiresInDays !== null" class="profile-fields__expiry-inline">
-                <span v-if="expiresInDays > 0">{{ expiresInDays }}d</span>
-                <span v-else-if="expiresInDays === 0" class="profile-fields__expiry-inline--warning">today</span>
-                <span v-else class="profile-fields__expiry-inline--expired">-{{ Math.abs(expiresInDays) }}d</span>
-              </span>
             </div>
 
             <!-- Quick-set chips (always visible, compact, one row) -->
@@ -206,12 +210,13 @@ const availableProtocols = [
     label: 'OpenVPN',
     value: 'openvpn',
     options: [
-      { label: 'Password + Certificate', value: 'auth' },
-      { label: 'Passwordless (cert only)', value: 'noauth' },
+      { label: 'User/Pass', value: 'auth' },
+      { label: 'Passwordless', value: 'noauth' },
     ],
+    defaultOption: 'auth',
   },
-  { label: 'WireGuard', value: 'wireguard', options: null },
-  { label: 'IKEv2', value: 'ikev2', options: null },
+  { label: 'WireGuard', value: 'wireguard', options: null, defaultOption: null },
+  { label: 'IKEv2', value: 'ikev2', options: null, defaultOption: null },
   {
     label: 'L2TP',
     value: 'l2tp',
@@ -219,9 +224,10 @@ const availableProtocols = [
       { label: 'L2TP/IPsec', value: 'ipsec' },
       { label: 'L2TP (plain)', value: 'plain' },
     ],
+    defaultOption: 'ipsec',
   },
-  { label: 'SSH', value: 'ssh', options: null },
-  { label: 'MTProto', value: 'mtproto', options: null },
+  { label: 'SSH', value: 'ssh', options: null, defaultOption: null },
+  { label: 'MTProto', value: 'mtproto', options: null, defaultOption: null },
 ]
 
 // ─── Computed ───────────────────────────────────────────────────────────────
@@ -291,6 +297,13 @@ function toggleProtocol(protocol: string) {
     current.splice(index, 1)
   } else {
     current.push(protocol)
+    // Set default sub-option when enabling a protocol with options
+    const proto = availableProtocols.find(p => p.value === protocol)
+    if (proto?.defaultOption && !getProtocolOption(protocol)) {
+      const opts = { ...(props.modelValue.protocol_options || {}), [protocol]: proto.defaultOption }
+      emit('update:modelValue', { ...props.modelValue, allowed_protocols: current, protocol_options: opts })
+      return
+    }
   }
   updateField('allowed_protocols', current)
 }
@@ -341,6 +354,26 @@ function setProtocolOption(protocol: string, value: string) {
 }
 
 /* ─── Expiry Section ──────────────────────────────────────────────────────── */
+.profile-fields__expiry-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2, 6px);
+}
+
+.profile-fields__expiry-badge {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--color-muted, #6b7280);
+}
+
+.profile-fields__expiry-badge--warning {
+  color: var(--color-warning, #d97706);
+}
+
+.profile-fields__expiry-badge--expired {
+  color: var(--color-danger, #dc2626);
+}
+
 .profile-fields__expiry {
   display: flex;
   flex-direction: column;

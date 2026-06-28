@@ -44,7 +44,7 @@ const emit = defineEmits<{
 }>()
 
 // ─── API & State ────────────────────────────────────────────────────────────
-const { get, post } = useApi({ showErrorToast: false })
+const { get, post, patch } = useApi({ showErrorToast: false })
 
 const customer = ref<CustomerDetail | null>(null)
 const loading = ref(false)
@@ -137,15 +137,8 @@ const connectionLimit = computed(() => {
   return Number(connCheck?.value) || 0
 })
 
-// ─── Advanced Settings Toggle (collapsed by default, shown if values non-zero) ─
+// ─── Advanced Settings Toggle (collapsed by default) ───────────────────────
 const showAdvanced = ref(false)
-
-// Auto-expand when values are non-zero
-watch([speedLimit, connectionLimit], ([speed, conn]) => {
-  if (speed > 0 || conn > 0) {
-    showAdvanced.value = true
-  }
-})
 
 // ─── Usage data ─────────────────────────────────────────────────────────────
 const usedBytes = computed(() => {
@@ -220,8 +213,27 @@ function handleClose(): void {
   emit('close')
 }
 
+const saving = ref(false)
+
 function handleModify(): void {
-  emit('edit')
+  if (!props.userId || saving.value) return
+  saving.value = true
+  const payload: Record<string, unknown> = {
+    status: profileFormData.value.status,
+    note: profileFormData.value.note,
+    expiry_date: profileFormData.value.expiry_date || null,
+    billing_enabled: profileFormData.value.billing_enabled,
+    data_limit_gb: profileFormData.value.data_limit ? Number(profileFormData.value.data_limit) : 0,
+    allowed_protocols: profileFormData.value.allowed_protocols,
+    protocol_options: profileFormData.value.protocol_options,
+  }
+  patch(`/api/customers/${props.userId}`, payload)
+    .then(() => {
+      emit('updated')
+      refresh()
+    })
+    .catch(() => {})
+    .finally(() => { saving.value = false })
 }
 
 function handleMenuSelect(key: string): void {
