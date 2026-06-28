@@ -78,57 +78,44 @@ const showClientsModal = ref(false)
 const showTransactionsModal = ref(false)
 
 // ─── Derived form data for ProfileFields ────────────────────────────────────
-const profileFormData = computed<ProfileFormData>({
-  get() {
-    if (!customer.value) {
-      return {
-        username: '',
-        status: 'active',
-        data_limit: '',
-        expiry_date: '',
-        note: '',
-        allowed_protocols: [],
-        protocol_options: {},
-        billing_enabled: true,
-      }
-    }
-    // Extract expiry from radius_checks (Expiration attribute)
-    const expirationCheck = customer.value.radius_checks?.find(
-      (r) => r.attribute === 'Expiration'
-    )
-    // Extract allowed protocols from radius_replies or assume all
-    const protocols = customer.value.radius_replies
-      ?.filter((r) => r.attribute === 'Allowed-Protocol')
-      .map((r) => r.value) ?? []
-
-    // Data limit (always in GB, supports decimals)
-    let dataLimit = ''
-    if (customer.value.subscription?.data_limit_gb) {
-      dataLimit = String(customer.value.subscription.data_limit_gb)
-    }
-
-    return {
-      username: customer.value.username,
-      status: customer.value.status,
-      data_limit: dataLimit,
-      expiry_date: expirationCheck?.value ?? '',
-      note: customer.value.notes ?? '',
-      allowed_protocols: protocols,
-      protocol_options: {},
-      billing_enabled: customer.value.billing_enabled !== false,
-    }
-  },
-  set(value: ProfileFormData) {
-    // Update local state - actual save happens on Modify click
-    if (customer.value) {
-      customer.value = {
-        ...customer.value,
-        status: value.status as CustomerDetail['status'],
-        notes: value.note,
-      }
-    }
-  },
+const profileFormData = ref<ProfileFormData>({
+  username: '',
+  status: 'active',
+  data_limit: '',
+  expiry_date: '',
+  note: '',
+  allowed_protocols: [],
+  protocol_options: {},
+  billing_enabled: true,
 })
+
+/** Sync form data when customer data is fetched */
+function syncFormFromCustomer() {
+  if (!customer.value) return
+
+  const expirationCheck = customer.value.radius_checks?.find(
+    (r) => r.attribute === 'Expiration'
+  )
+  const protocols = customer.value.radius_replies
+    ?.filter((r) => r.attribute === 'Allowed-Protocol')
+    .map((r) => r.value) ?? []
+
+  let dataLimit = ''
+  if (customer.value.subscription?.data_limit_gb) {
+    dataLimit = String(customer.value.subscription.data_limit_gb)
+  }
+
+  profileFormData.value = {
+    username: customer.value.username,
+    status: customer.value.status,
+    data_limit: dataLimit,
+    expiry_date: expirationCheck?.value ?? '',
+    note: customer.value.notes ?? '',
+    allowed_protocols: protocols,
+    protocol_options: {},
+    billing_enabled: customer.value.billing_enabled !== false,
+  }
+}
 
 // ─── Derived advanced settings values ───────────────────────────────────────
 const speedLimit = computed(() => {
@@ -185,6 +172,7 @@ async function fetchUserData(userId: number): Promise<void> {
   try {
     const res = await get<CustomerDetailResponse>(`/api/customers/${userId}`)
     customer.value = res.customer
+    syncFormFromCustomer()
   } catch (e: any) {
     error.value = e?.message || 'Failed to load user data'
     customer.value = null
