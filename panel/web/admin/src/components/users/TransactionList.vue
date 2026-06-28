@@ -1,6 +1,6 @@
 <template>
   <div class="transaction-list">
-    <h3 class="transaction-list__title">Transactions</h3>
+    <h3 v-if="showTitle" class="transaction-list__title">Transactions</h3>
 
     <div v-if="sortedTransactions.length === 0" class="transaction-list__empty">
       <p class="transaction-list__empty-text">No transactions yet</p>
@@ -43,10 +43,12 @@ import { formatCurrency } from '@/utils/formatCurrency'
 export interface TransactionListProps {
   transactions: WalletTransaction[]
   currencySymbol?: string
+  showTitle?: boolean
 }
 
 const props = withDefaults(defineProps<TransactionListProps>(), {
   currencySymbol: '$',
+  showTitle: true,
 })
 
 const sortedTransactions = computed(() =>

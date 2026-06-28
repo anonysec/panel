@@ -1,91 +1,119 @@
 <template>
   <div class="profile-fields">
-    <!-- Username (read-only) -->
-    <KFormField name="username" :label="t('customer.username')">
-      <template #default="{ fieldId, describedBy }">
-        <KInput
-          :id="fieldId"
-          :model-value="modelValue.username"
-          :aria-describedby="describedBy"
-          disabled
-        />
-      </template>
-    </KFormField>
-
-    <!-- Status dropdown -->
-    <KFormField name="status" :label="t('customer.status')">
-      <template #default="{ fieldId, describedBy }">
-        <KSelect
-          :id="fieldId"
-          :model-value="modelValue.status"
-          :options="statusOptions"
-          :aria-describedby="describedBy"
-          @update:model-value="updateField('status', $event)"
-        />
-      </template>
-    </KFormField>
-
-    <!-- Data Limit (GB only, decimals supported) -->
-    <KFormField name="data-limit" :label="t('customer.data_limit')">
-      <template #default="{ fieldId }">
-        <div class="profile-fields__data-limit">
+    <!-- Row 1: Username + Status side by side -->
+    <div class="profile-fields__row">
+      <KFormField name="username" :label="t('customer.username')">
+        <template #default="{ fieldId, describedBy }">
           <KInput
             :id="fieldId"
-            :model-value="modelValue.data_limit"
-            type="number"
-            step="0.1"
-            min="0"
-            placeholder="0 = unlimited"
-            @update:model-value="updateField('data_limit', $event)"
+            :model-value="modelValue.username"
+            :aria-describedby="describedBy"
+            disabled
           />
-          <span class="profile-fields__data-limit-suffix">GB</span>
-        </div>
-      </template>
-    </KFormField>
+        </template>
+      </KFormField>
 
-    <!-- Expiry Date — always show date input + chips below -->
-    <KFormField name="expiry" :label="t('customer.expiry_date')">
-      <template #default="{ fieldId }">
-        <div class="profile-fields__expiry">
-          <!-- Date input with calendar icon -->
-          <div class="profile-fields__date-wrapper">
-            <input
+      <KFormField name="status" :label="t('customer.status')">
+        <template #default="{ fieldId, describedBy }">
+          <KSelect
+            :id="fieldId"
+            :model-value="modelValue.status"
+            :options="statusOptions"
+            :aria-describedby="describedBy"
+            @update:model-value="updateField('status', $event)"
+          />
+        </template>
+      </KFormField>
+    </div>
+
+    <!-- Row 2: Data Limit + Expiry Date side by side -->
+    <div class="profile-fields__row">
+      <!-- Data Limit (GB only, decimals supported) -->
+      <KFormField name="data-limit" :label="t('customer.data_limit')">
+        <template #default="{ fieldId }">
+          <div class="profile-fields__data-limit">
+            <KInput
               :id="fieldId"
-              type="date"
-              class="profile-fields__date-input"
-              :value="expiryDateValue"
-              @input="onDateInput"
+              :model-value="modelValue.data_limit"
+              type="number"
+              step="0.1"
+              min="0"
+              placeholder="0 = unlimited"
+              @update:model-value="updateField('data_limit', $event)"
             />
+            <span class="profile-fields__data-limit-suffix">GB</span>
           </div>
+        </template>
+      </KFormField>
 
-          <!-- Quick-set chips (always visible, minimal style) -->
-          <div class="profile-fields__quick-chips">
-            <button
-              v-for="chip in expiryChips"
-              :key="chip"
-              type="button"
-              class="profile-fields__chip"
-              @click="applyChip(chip)"
-            >
-              {{ chip }}
-            </button>
+      <!-- Expiry Date -->
+      <KFormField name="expiry" :label="t('customer.expiry_date')">
+        <template #default="{ fieldId }">
+          <div class="profile-fields__expiry">
+            <!-- Date input with calendar icon -->
+            <div class="profile-fields__date-wrapper">
+              <input
+                ref="dateInputRef"
+                :id="fieldId"
+                type="date"
+                class="profile-fields__date-input"
+                :value="expiryDateValue"
+                @input="onDateInput"
+              />
+              <button
+                type="button"
+                class="profile-fields__calendar-icon"
+                aria-label="Open calendar"
+                @click="openDatePicker"
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path d="M5 1v2M11 1v2M1.5 6h13M2.5 3h11a1 1 0 011 1v10a1 1 0 01-1 1h-11a1 1 0 01-1-1V4a1 1 0 011-1z" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </button>
+            </div>
+
+            <!-- Quick-set chips (always visible, minimal style) -->
+            <div class="profile-fields__quick-chips">
+              <button
+                v-for="chip in expiryChips"
+                :key="chip"
+                type="button"
+                class="profile-fields__chip"
+                @click="applyChip(chip)"
+              >
+                {{ chip }}
+              </button>
+            </div>
+
+            <!-- "Expires in X days" display -->
+            <p v-if="expiresInDays !== null" class="profile-fields__expiry-info">
+              <span v-if="expiresInDays > 0">
+                Expires in {{ expiresInDays }} day{{ expiresInDays === 1 ? '' : 's' }}
+              </span>
+              <span v-else-if="expiresInDays === 0" class="profile-fields__expiry-info--warning">
+                Expires today
+              </span>
+              <span v-else class="profile-fields__expiry-info--expired">
+                Expired {{ Math.abs(expiresInDays) }} day{{ Math.abs(expiresInDays) === 1 ? '' : 's' }} ago
+              </span>
+            </p>
           </div>
+        </template>
+      </KFormField>
+    </div>
 
-          <!-- "Expires in X days" display -->
-          <p v-if="expiresInDays !== null" class="profile-fields__expiry-info">
-            <span v-if="expiresInDays > 0">
-              Expires in {{ expiresInDays }} day{{ expiresInDays === 1 ? '' : 's' }}
-            </span>
-            <span v-else-if="expiresInDays === 0" class="profile-fields__expiry-info--warning">
-              Expires today
-            </span>
-            <span v-else class="profile-fields__expiry-info--expired">
-              Expired {{ Math.abs(expiresInDays) }} day{{ Math.abs(expiresInDays) === 1 ? '' : 's' }} ago
-            </span>
-          </p>
-        </div>
-      </template>
-    </KFormField>
+    <!-- Billing Toggle -->
+    <div class="profile-fields__toggle-field">
+      <label class="profile-fields__toggle-label">
+        <input
+          type="checkbox"
+          class="profile-fields__toggle-checkbox"
+          :checked="modelValue.billing_enabled"
+          @change="updateField('billing_enabled', ($event.target as HTMLInputElement).checked)"
+        />
+        <span class="profile-fields__toggle-text">Enable Billing</span>
+      </label>
+    </div>
 
     <!-- Note -->
     <KFormField name="note" :label="t('customer.note')">
@@ -95,30 +123,26 @@
           :model-value="modelValue.note"
           :aria-describedby="describedBy"
           placeholder="Note..."
-          :rows="3"
+          :rows="2"
           @update:model-value="updateField('note', $event)"
         />
       </template>
     </KFormField>
 
-    <!-- Proxy settings — inline checkboxes, always visible -->
+    <!-- Proxy settings — styled cards (no checkboxes) -->
     <KFormField name="proxy-settings" :label="t('customer.proxy_settings')">
       <template #default>
         <div class="profile-fields__proxy-list">
-          <label
+          <button
             v-for="protocol in availableProtocols"
             :key="protocol.value"
-            class="profile-fields__protocol-chip"
-            :class="{ 'profile-fields__protocol-chip--active': isProtocolEnabled(protocol.value) }"
+            type="button"
+            class="profile-fields__protocol-card"
+            :class="{ 'profile-fields__protocol-card--active': isProtocolEnabled(protocol.value) }"
+            @click="toggleProtocol(protocol.value)"
           >
-            <input
-              type="checkbox"
-              :checked="isProtocolEnabled(protocol.value)"
-              class="profile-fields__protocol-checkbox"
-              @change="toggleProtocol(protocol.value)"
-            />
             <span class="profile-fields__protocol-label">{{ protocol.label }}</span>
-          </label>
+          </button>
         </div>
         <!-- Protocol sub-options (shown inline for enabled protocols that have options) -->
         <div
@@ -158,6 +182,13 @@ import { computeExpiryDate, type ExpiryOffset } from '@/utils/computeExpiryDate'
 
 const { t } = useI18n()
 
+// ─── Date input ref for calendar icon click ─────────────────────────────────
+const dateInputRef = ref<HTMLInputElement | null>(null)
+
+function openDatePicker() {
+  dateInputRef.value?.showPicker?.()
+}
+
 /**
  * Form data shape for user profile editing.
  */
@@ -169,6 +200,7 @@ export interface ProfileFormData {
   note: string
   allowed_protocols: string[]
   protocol_options: Record<string, string>
+  billing_enabled: boolean
 }
 
 export interface ProfileFieldsProps {
@@ -301,7 +333,20 @@ function setProtocolOption(protocol: string, value: string) {
 .profile-fields {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4, 16px);
+  gap: var(--space-3, 12px);
+}
+
+/* ─── Side-by-side Row ────────────────────────────────────────────────────── */
+.profile-fields__row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3, 12px);
+}
+
+@media (max-width: 480px) {
+  .profile-fields__row {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ─── Data Limit ──────────────────────────────────────────────────────────── */
@@ -334,7 +379,7 @@ function setProtocolOption(protocol: string, value: string) {
   display: block;
   width: 100%;
   height: 36px;
-  padding: 0 var(--space-3, 12px);
+  padding: 0 var(--space-8, 32px) 0 var(--space-3, 12px);
   background: var(--color-surface, #0b1120);
   border: 1px solid var(--color-border, #28333f);
   border-radius: var(--radius-md, 6px);
@@ -352,11 +397,45 @@ function setProtocolOption(protocol: string, value: string) {
   box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.25);
 }
 
+/* Hide native calendar icon in dark theme and provide our own */
+.profile-fields__date-input::-webkit-calendar-picker-indicator {
+  opacity: 0;
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+}
+
+.profile-fields__calendar-icon {
+  position: absolute;
+  right: var(--space-2, 8px);
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  background: transparent;
+  color: var(--color-muted, #8b98a5);
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.profile-fields__calendar-icon:hover {
+  color: var(--color-primary, #2563eb);
+}
+
 /* Quick-set chips — minimal, no bg/border */
 .profile-fields__quick-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2, 8px);
+  gap: var(--space-1, 4px);
 }
 
 .profile-fields__chip {
@@ -378,7 +457,7 @@ function setProtocolOption(protocol: string, value: string) {
 
 .profile-fields__expiry-info {
   margin: 0;
-  font-size: var(--text-sm, 13px);
+  font-size: var(--text-xs, 12px);
   color: var(--color-muted, #6b7280);
 }
 
@@ -392,43 +471,65 @@ function setProtocolOption(protocol: string, value: string) {
   font-weight: 500;
 }
 
-/* ─── Proxy Settings — Inline Checkboxes ──────────────────────────────────── */
+/* ─── Billing Toggle ─────────────────────────────────────────────────────── */
+.profile-fields__toggle-field {
+  display: flex;
+  align-items: center;
+}
+
+.profile-fields__toggle-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  cursor: pointer;
+}
+
+.profile-fields__toggle-checkbox {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--color-primary, #2563eb);
+  cursor: pointer;
+  margin: 0;
+}
+
+.profile-fields__toggle-text {
+  font-size: var(--text-sm, 13px);
+  font-weight: 500;
+  color: var(--color-text, #e6edf3);
+}
+
+/* ─── Proxy Settings — Styled Cards (no checkboxes) ───────────────────────── */
 .profile-fields__proxy-list {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2, 8px);
 }
 
-.profile-fields__protocol-chip {
+.profile-fields__protocol-card {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
+  padding: 6px 12px;
   border: 1px solid var(--color-border, #28333f);
   border-radius: var(--radius-md, 6px);
   background: var(--color-surface, #0b1120);
   cursor: pointer;
   font-size: var(--text-sm, 13px);
-  color: var(--color-text, #e6edf3);
-  transition: border-color 100ms ease, background 100ms ease;
+  font-family: var(--font-family);
+  color: var(--color-muted, #8b98a5);
+  transition: border-color 100ms ease, background 100ms ease, color 100ms ease;
   user-select: none;
 }
 
-.profile-fields__protocol-chip:hover {
+.profile-fields__protocol-card:hover {
   border-color: var(--color-primary, #2563eb);
+  color: var(--color-text, #e6edf3);
 }
 
-.profile-fields__protocol-chip--active {
+.profile-fields__protocol-card--active {
   border-color: var(--color-primary, #2563eb);
   background: rgba(37, 99, 235, 0.08);
-}
-
-.profile-fields__protocol-checkbox {
-  width: 14px;
-  height: 14px;
-  accent-color: var(--color-primary, #2563eb);
-  cursor: pointer;
-  margin: 0;
+  color: var(--color-primary, #2563eb);
+  font-weight: 500;
 }
 
 .profile-fields__protocol-label {

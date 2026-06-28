@@ -519,7 +519,9 @@ function handleRowClick(row: any) {
 }
 
 function openNewUserSlideOver() {
-  userForm.value = { username: '', password: '', display_name: '', plan_id: '', data_gb: '', speed_mbps: '', days: '', template_id: '', avatar: '' }
+  // Default to the first plan (typically "Pay as Go")
+  const defaultPlanId = planOptions.value.length > 0 ? String(planOptions.value[0].value) : ''
+  userForm.value = { username: '', password: '', display_name: '', plan_id: defaultPlanId, data_gb: '', speed_mbps: '', days: '', template_id: '', avatar: '' }
   showUserSlideOver.value = true
 }
 
@@ -873,18 +875,6 @@ onMounted(async () => {
     <!-- Header -->
     <header class="page-header">
       <div class="page-header__actions">
-        <KButton
-          v-if="currentMainTab === 'users'"
-          variant="ghost"
-          size="sm"
-          @click="showAdvancedFilters = !showAdvancedFilters"
-        >{{ t('customers.advanced_filters') }}</KButton>
-        <KButton
-          v-if="currentMainTab === 'users'"
-          variant="ghost"
-          size="sm"
-          @click="showColumnToggle = !showColumnToggle"
-        >{{ t('customers.columns') }}</KButton>
       </div>
       <KButton
         v-if="currentMainTab === 'users'"
@@ -973,7 +963,7 @@ onMounted(async () => {
         </div>
       </Transition>
 
-      <!-- Filter Row: Status tabs + Search -->
+      <!-- Filter Row: Status tabs + Search + Filter/Columns buttons -->
       <div class="filter-row">
         <nav class="status-tabs" aria-label="Customer status filter">
           <button
@@ -985,6 +975,30 @@ onMounted(async () => {
             {{ tab.label }}
           </button>
         </nav>
+        <div class="filter-row__inline-actions">
+          <button
+            type="button"
+            class="filter-row__icon-btn"
+            :class="{ 'filter-row__icon-btn--active': showAdvancedFilters }"
+            :title="t('customers.advanced_filters')"
+            @click="showAdvancedFilters = !showAdvancedFilters"
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+              <path d="M1.5 2.5h11M3.5 5.5h7M5.5 8.5h3M6.5 11.5h1" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+            </svg>
+          </button>
+          <button
+            type="button"
+            class="filter-row__icon-btn"
+            :class="{ 'filter-row__icon-btn--active': showColumnToggle }"
+            :title="t('customers.columns')"
+            @click="showColumnToggle = !showColumnToggle"
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+              <path d="M2 2h3v10H2zM6 2h3v10H6zM10 2h2v10h-2z" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+        </div>
         <div class="filter-row__search">
           <KInput
             :model-value="searchQuery"
@@ -1257,26 +1271,32 @@ onMounted(async () => {
     <!-- New User Slide-Over -->
     <KSlideOver :open="showUserSlideOver" :title="t('customers.new_user')" @close="showUserSlideOver = false">
       <form class="slide-form" autocomplete="off" @submit.prevent="handleCreateUser">
-        <KFormField name="user-username" :label="t('user.username')" required>
-          <template #default="{ fieldId }">
-            <KInput :id="fieldId" v-model="userForm.username" autocomplete="off" placeholder="username" />
-          </template>
-        </KFormField>
-        <KFormField name="user-password" :label="t('user.password')" required>
-          <template #default="{ fieldId }">
-            <KInput :id="fieldId" v-model="userForm.password" type="password" autocomplete="new-password" placeholder="••••••" />
-          </template>
-        </KFormField>
-        <KFormField name="user-display-name" :label="t('user.display_name')">
-          <template #default="{ fieldId }">
-            <KInput :id="fieldId" v-model="userForm.display_name" :placeholder="t('customer.placeholder_display_name')" />
-          </template>
-        </KFormField>
-        <KFormField name="user-plan" :label="t('user.plan')">
-          <template #default="{ fieldId }">
-            <KSelect :id="fieldId" v-model="userForm.plan_id" :options="planOptions" :placeholder="t('resellers.select_plan')" />
-          </template>
-        </KFormField>
+        <!-- Row: Username + Plan side by side -->
+        <div class="slide-form__row">
+          <KFormField name="user-username" :label="t('user.username')" required>
+            <template #default="{ fieldId }">
+              <KInput :id="fieldId" v-model="userForm.username" autocomplete="off" placeholder="username" />
+            </template>
+          </KFormField>
+          <KFormField name="user-plan" :label="t('user.plan')">
+            <template #default="{ fieldId }">
+              <KSelect :id="fieldId" v-model="userForm.plan_id" :options="planOptions" :placeholder="t('resellers.select_plan')" />
+            </template>
+          </KFormField>
+        </div>
+        <!-- Row: Password + Display Name side by side -->
+        <div class="slide-form__row">
+          <KFormField name="user-password" :label="t('user.password')" required>
+            <template #default="{ fieldId }">
+              <KInput :id="fieldId" v-model="userForm.password" type="password" autocomplete="new-password" placeholder="••••••" />
+            </template>
+          </KFormField>
+          <KFormField name="user-display-name" :label="t('user.display_name')">
+            <template #default="{ fieldId }">
+              <KInput :id="fieldId" v-model="userForm.display_name" :placeholder="t('customer.placeholder_display_name')" />
+            </template>
+          </KFormField>
+        </div>
         <div class="form-row-3">
           <KFormField name="user-data" :label="t('plans.data_gb')">
             <template #default="{ fieldId }">
@@ -1718,6 +1738,40 @@ onMounted(async () => {
   width: 240px;
 }
 
+/* Inline icon buttons for filters/columns */
+.filter-row__inline-actions {
+  display: flex;
+  gap: var(--space-1);
+  flex-shrink: 0;
+}
+
+.filter-row__icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-muted);
+  cursor: pointer;
+  transition: all var(--duration-fast);
+}
+
+.filter-row__icon-btn:hover {
+  color: var(--color-text);
+  border-color: var(--color-primary);
+  background: rgba(37, 99, 235, 0.06);
+}
+
+.filter-row__icon-btn--active {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+  background: rgba(37, 99, 235, 0.1);
+}
+
 /* Status filter tabs - compact pill style */
 .status-tabs {
   display: flex;
@@ -1866,6 +1920,12 @@ onMounted(async () => {
   padding-top: var(--space-4);
   border-top: 1px solid var(--color-border);
   margin-top: var(--space-2);
+}
+
+.slide-form__row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
 }
 
 .form-row-3 {

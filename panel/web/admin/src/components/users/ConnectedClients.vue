@@ -14,9 +14,12 @@ import { useConnectedClients } from '@/composables/useConnectedClients'
 import type { ConnectedClient } from '@koris/types/entities'
 import KButton from '@koris/ui/KButton.vue'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   userId: number | null
-}>()
+  showTitle?: boolean
+}>(), {
+  showTitle: true,
+})
 
 // Create a stable ref for the composable that stays in sync with the prop
 const internalUserId = ref<number | null>(props.userId)
@@ -39,7 +42,7 @@ function getUserAgentLabel(client: ConnectedClient): string {
 <template>
   <section class="connected-clients" aria-label="Connected Clients">
     <div class="connected-clients__header">
-      <h3 class="connected-clients__title">Connected Clients</h3>
+      <h3 v-if="showTitle" class="connected-clients__title">Connected Clients</h3>
       <KButton
         variant="ghost"
         size="sm"

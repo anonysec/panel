@@ -89,6 +89,7 @@ const profileFormData = computed<ProfileFormData>({
         note: '',
         allowed_protocols: [],
         protocol_options: {},
+        billing_enabled: true,
       }
     }
     // Extract expiry from radius_checks (Expiration attribute)
@@ -114,6 +115,7 @@ const profileFormData = computed<ProfileFormData>({
       note: customer.value.notes ?? '',
       allowed_protocols: protocols,
       protocol_options: {},
+      billing_enabled: customer.value.billing_enabled !== false,
     }
   },
   set(value: ProfileFormData) {
@@ -146,6 +148,16 @@ const connectionLimit = computed(() => {
     (r) => r.attribute === 'Simultaneous-Use'
   )
   return Number(connCheck?.value) || 0
+})
+
+// ─── Advanced Settings Toggle (collapsed by default, shown if values non-zero) ─
+const showAdvanced = ref(false)
+
+// Auto-expand when values are non-zero
+watch([speedLimit, connectionLimit], ([speed, conn]) => {
+  if (speed > 0 || conn > 0) {
+    showAdvanced.value = true
+  }
 })
 
 // ─── Usage data ─────────────────────────────────────────────────────────────
@@ -232,7 +244,7 @@ function handleMenuSelect(key: string): void {
   } else if (key === 'reset-usage') {
     // Reset usage — call API
     if (props.userId) {
-      post(`/api/customers/${props.userId}/traffic-reset`, {}).then(() => {
+      post(`/api/customers/${props.userId}/reset-traffic`, {}).then(() => {
         refresh()
       })
     }
@@ -278,11 +290,12 @@ onUnmounted(() => {
 
 <template>
   <Teleport to="body">
-    <!-- Overlay for mobile only -->
+    <!-- Overlay: mobile (opaque) + desktop (transparent click-catcher) -->
     <Transition name="panel-overlay">
       <div
-        v-if="open && isMobile"
+        v-if="open"
         class="user-detail-panel__overlay"
+        :class="{ 'user-detail-panel__overlay--desktop': !isMobile }"
         aria-hidden="true"
         @click="handleClose"
       />
@@ -333,6 +346,7 @@ onUnmounted(() => {
             :used-bytes="usedBytes"
             :limit-bytes="limitBytes"
             :wallet-balance="customer.credit ?? 0"
+            :billing-enabled="profileFormData.billing_enabled"
             @top-up="handleTopUp"
             @deduct="handleDeduct"
           />
@@ -342,9 +356,24 @@ onUnmounted(() => {
             <ProfileFields v-model="profileFormData" />
           </div>
 
-          <!-- AdvancedSettings -->
+          <!-- AdvancedSettings (collapsible) -->
           <div class="user-detail-panel__section">
+            <button
+              type="button"
+              class="user-detail-panel__advanced-toggle"
+              @click="showAdvanced = !showAdvanced"
+            >
+              <span>Advanced</span>
+              <svg
+                width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true"
+                :class="{ 'user-detail-panel__chevron--open': showAdvanced }"
+                class="user-detail-panel__chevron"
+              >
+                <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
             <AdvancedSettings
+              v-if="showAdvanced"
               :speed-limit="speedLimit"
               :connection-limit="connectionLimit"
               @update:speed-limit="onSpeedLimitUpdate"
@@ -380,7 +409,7 @@ onUnmounted(() => {
     width="600px"
     @close="showClientsModal = false"
   >
-    <ConnectedClients :user-id="userId" />
+    <ConnectedClients :user-id="userId" :show-title="false" />
   </KModal>
 
   <!-- Transactions Modal -->
@@ -392,6 +421,7 @@ onUnmounted(() => {
   >
     <TransactionList
       :transactions="customer?.wallet_transactions ?? []"
+      :show-title="false"
     />
   </KModal>
 </template>
@@ -428,6 +458,12 @@ onUnmounted(() => {
   inset: 0;
   background: rgba(0, 0, 0, 0.5);
   z-index: calc(var(--z-modal, 200) - 1);
+}
+
+/* Desktop: transparent overlay just to catch clicks */
+.user-detail-panel__overlay--desktop {
+  background: transparent;
+  z-index: calc(var(--z-panel, 150) - 1);
 }
 
 /* ─── Close Button ────────────────────────────────────────────────────────── */
@@ -525,6 +561,35 @@ onUnmounted(() => {
 .user-detail-panel__section {
   padding: var(--space-4, 16px);
   border-bottom: 1px solid var(--color-border, #28333f);
+}
+
+/* ─── Advanced Toggle ─────────────────────────────────────────────────────── */
+.user-detail-panel__advanced-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  width: 100%;
+  padding: 0;
+  margin-bottom: var(--space-3, 12px);
+  border: none;
+  background: none;
+  color: var(--color-muted, #8b98a5);
+  font-size: var(--text-sm, 13px);
+  font-weight: 500;
+  cursor: pointer;
+  font-family: var(--font-family);
+}
+
+.user-detail-panel__advanced-toggle:hover {
+  color: var(--color-text, #e6edf3);
+}
+
+.user-detail-panel__chevron {
+  transition: transform 150ms ease;
+}
+
+.user-detail-panel__chevron--open {
+  transform: rotate(180deg);
 }
 
 /* ─── Action Bar (fixed at bottom) ────────────────────────────────────────── */

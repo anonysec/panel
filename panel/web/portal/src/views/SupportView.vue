@@ -17,6 +17,18 @@ import TicketThread from '@/components/TicketThread.vue'
 const { t } = useI18n()
 const ticketsStore = usePortalTicketsStore()
 
+const categoryOptions = computed(() => [
+  { label: t('portal.support.categoryGeneral'), value: 'general' },
+  { label: t('portal.support.categoryTechnical'), value: 'technical' },
+  { label: t('portal.support.categoryBilling'), value: 'billing' },
+])
+
+const priorityOptions = computed(() => [
+  { label: t('portal.support.priorityLow'), value: 'low' },
+  { label: t('portal.support.priorityMedium'), value: 'medium' },
+  { label: t('portal.support.priorityHigh'), value: 'high' },
+])
+
 const showCreateForm = ref(false)
 const ticketForm = ref({
   subject: '',
@@ -152,7 +164,7 @@ function statusVariant(status: string) {
 
     <div v-if="notice" class="support__notice" role="status">{{ notice }}</div>
 
-    <KSkeleton v-if="ticketsStore.loading && !ticketsStore.list.length && !selectedTicket" type="card" :count="2" />
+    <KSkeleton v-if="ticketsStore.loading && !ticketsStore.list.length && !selectedTicket" variant="card" :count="2" />
 
     <!-- Create Ticket Form -->
     <section v-else-if="showCreateForm && !selectedTicket" class="support__section">
@@ -163,19 +175,11 @@ function statusVariant(status: string) {
         </KFormField>
 
         <KFormField :label="t('portal.support.category')">
-          <KSelect v-model="ticketForm.category">
-            <option value="general">{{ t('portal.support.categoryGeneral') }}</option>
-            <option value="technical">{{ t('portal.support.categoryTechnical') }}</option>
-            <option value="billing">{{ t('portal.support.categoryBilling') }}</option>
-          </KSelect>
+          <KSelect v-model="ticketForm.category" :options="categoryOptions" />
         </KFormField>
 
         <KFormField :label="t('portal.support.priority')">
-          <KSelect v-model="ticketForm.priority">
-            <option value="low">{{ t('portal.support.priorityLow') }}</option>
-            <option value="medium">{{ t('portal.support.priorityMedium') }}</option>
-            <option value="high">{{ t('portal.support.priorityHigh') }}</option>
-          </KSelect>
+          <KSelect v-model="ticketForm.priority" :options="priorityOptions" />
         </KFormField>
 
         <KFormField :label="t('portal.support.message')" :required="true">

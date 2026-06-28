@@ -21,6 +21,7 @@
 import { ref, watch, computed } from 'vue'
 import { useApi } from '@koris/composables/useApi'
 import { useI18n } from '@koris/composables/useI18n'
+import { usePlansStore } from '@/stores/plans'
 import KModal from '@koris/ui/KModal.vue'
 import KFormField from '@koris/ui/KFormField.vue'
 import KInput from '@koris/ui/KInput.vue'
@@ -45,10 +46,12 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const { get, patch, loading: apiLoading } = useApi({ showErrorToast: false })
+const plansStore = usePlansStore()
 
 // ─── Form State ─────────────────────────────────────────────────────────────
 const username = ref('')
 const status = ref<string>('active')
+const planId = ref<string>('')
 const dataLimitValue = ref<string>('')
 const dataLimitUnit = ref<string>('GB')
 const periodicUsageReset = ref(false)
@@ -76,6 +79,14 @@ const unitOptions = [
   { label: 'GB', value: 'GB' },
   { label: 'TB', value: 'TB' },
 ]
+
+// ─── Plan Options ───────────────────────────────────────────────────────────
+const editPlanOptions = computed(() => {
+  return plansStore.activePlans.map((p) => ({
+    value: String(p.id),
+    label: `${p.name} (${p.data_gb}GB / ${p.duration_days}d)`,
+  }))
+})
 
 // ─── Three-dot menu items ───────────────────────────────────────────────────
 const menuItems: MenuItem[] = [
@@ -130,6 +141,7 @@ async function fetchUserData(userId: number): Promise<void> {
 
     username.value = c.username
     status.value = c.status
+    planId.value = c.plan_id ? String(c.plan_id) : ''
 
     // Extract data limit from subscription or radius attributes
     if (c.subscription?.data_limit_gb) {
@@ -221,6 +233,7 @@ async function handleSubmit(): Promise<void> {
     expiry_date: expiryDate.value || null,
     periodic_usage_reset: periodicUsageReset.value,
     hwid_limit: hwidLimit.value ? Number(hwidLimit.value) : 0,
+    plan_id: planId.value ? Number(planId.value) : undefined,
   }
 
   if (dataLimitGb !== null) {
@@ -315,6 +328,19 @@ function handleMenuSelect(key: string): void {
           </template>
         </KFormField>
       </div>
+
+      <!-- Plan -->
+      <KFormField name="plan" label="Plan">
+        <template #default="{ fieldId }">
+          <KSelect
+            :id="fieldId"
+            :model-value="planId"
+            :options="editPlanOptions"
+            placeholder="Select plan"
+            @update:model-value="planId = String($event)"
+          />
+        </template>
+      </KFormField>
 
       <!-- Data Limit (numeric + unit) -->
       <KFormField name="data-limit" label="Data Limit">

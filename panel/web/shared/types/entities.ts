@@ -72,6 +72,7 @@ export interface CustomerDetail extends Customer {
   subscription?: Subscription
   subscriptions: SubscriptionHistory[]
   wallet_transactions: WalletTransaction[]
+  billing_enabled?: boolean
 }
 
 export interface Plan {

@@ -9,7 +9,7 @@
       <KUsageBar :used="usedBytes" :limit="limitBytes" size="sm" />
     </div>
 
-    <div class="detail-header__wallet">
+    <div v-if="billingEnabled" class="detail-header__wallet">
       <span class="detail-header__balance">{{ formattedBalance }}</span>
       <div class="detail-header__wallet-actions">
         <KButton variant="ghost" size="sm" @click="$emit('top-up')">
@@ -37,10 +37,12 @@ export interface DetailHeaderProps {
   limitBytes: number
   walletBalance: number
   currencySymbol?: string
+  billingEnabled?: boolean
 }
 
 const props = withDefaults(defineProps<DetailHeaderProps>(), {
   currencySymbol: '$',
+  billingEnabled: true,
 })
 
 defineEmits<{
