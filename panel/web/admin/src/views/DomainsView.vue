@@ -122,6 +122,27 @@ function onIPRotated() {
   store.fetchDomains()
 }
 
+async function removeDomain(domain: VpnDomain) {
+  const confirmed = await confirm({
+    title: 'Delete Domain',
+    message: domain.binding_count > 0
+      ? `Cannot delete "${domain.name}" — it has ${domain.binding_count} active binding${domain.binding_count !== 1 ? 's' : ''}. Remove bindings first.`
+      : `Delete "${domain.name}"? This action cannot be undone.`,
+    variant: 'danger',
+    confirmText: 'Delete',
+    cancelText: 'Cancel',
+  })
+  if (!confirmed) return
+  if (domain.binding_count > 0) return
+
+  const success = await store.deleteDomain(domain.id)
+  if (success) {
+    toast.success(`Domain "${domain.name}" deleted`)
+  } else {
+    toast.error('Failed to delete domain')
+  }
+}
+
 // ─── Lifecycle ───────────────────────────────────────────────────────────────
 onMounted(() => {
   store.fetchDomains()
@@ -214,6 +235,14 @@ onMounted(() => {
             @click="changeStatus(row, 'active')"
           >
             Activate
+          </KButton>
+          <KButton
+            variant="ghost"
+            size="sm"
+            class="delete-btn"
+            @click="removeDomain(row)"
+          >
+            Delete
           </KButton>
         </div>
       </template>
@@ -394,6 +423,10 @@ onMounted(() => {
   display: flex;
   gap: var(--space-1);
   flex-wrap: wrap;
+}
+
+.delete-btn {
+  color: var(--color-danger, #ef4444);
 }
 
 @media (max-width: 640px) {

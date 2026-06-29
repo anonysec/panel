@@ -197,10 +197,8 @@ Node agent endpoints use Bearer token authentication (`Authorization: Bearer <no
 
 ## MTProto Secrets
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/admin/customers/{id}/mtproto-secret` | Get customer MTProto secret and status |
-| POST | `/api/admin/customers/{id}/mtproto-secret/regenerate` | Regenerate MTProto secret (64-char hex) |
+> **Removed**: The dedicated MTProto secret endpoints have been removed. MTProto secret management is now handled through the general customer admin endpoints (`/api/admin/customers/`).
+
 
 ## Certificates
 

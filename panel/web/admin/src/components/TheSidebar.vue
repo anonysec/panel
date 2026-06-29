@@ -253,6 +253,11 @@ const navGroups = computed<NavGroup[]>(() => {
         label: t('nav.services'),
         icon: 'services',
       },
+      {
+        route: 'domains',
+        label: 'Domains',
+        icon: 'domains',
+      },
     )
   }
 
@@ -437,6 +442,12 @@ function handleToggleTheme() {
               <rect x="3" y="14" width="18" height="6" rx="1" />
               <circle cx="7" cy="7" r="1" fill="currentColor" />
               <circle cx="7" cy="17" r="1" fill="currentColor" />
+            </svg>
+            <!-- Domains icon (globe with link) -->
+            <svg v-else-if="item.icon === 'domains'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10" />
+              <path d="M2 12h20" />
+              <path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z" />
             </svg>
             <!-- Cores icon (shield with network) -->
             <svg v-else-if="item.icon === 'cores'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
