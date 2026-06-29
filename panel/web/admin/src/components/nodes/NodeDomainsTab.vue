@@ -63,6 +63,7 @@ async function loadCurrentDomain() {
 onMounted(() => {
   loadBindings()
   loadCurrentDomain()
+  store.fetchDomains()
 })
 
 // ─── Add Domain ──────────────────────────────────────────────────────────────
@@ -79,19 +80,17 @@ async function addDomain() {
 
   adding.value = true
 
-  // First create the domain in vpn_domains table (if it doesn't exist)
-  const existingDomains = store.domains
+  // Create the domain (API returns existing if duplicate)
   let domainId: number | null = null
-
-  // Check if domain already exists in store
-  const existing = existingDomains.find(d => d.name === name)
-  if (existing) {
-    domainId = existing.id
+  const created = await store.createDomain({ name, ip_address: '0.0.0.0' })
+  if (created) {
+    domainId = created.id
   } else {
-    // Create the domain first
-    const created = await store.createDomain({ name, ip_address: '0.0.0.0' })
-    if (created) {
-      domainId = created.id
+    // Domain might already exist — fetch list and find it
+    await store.fetchDomains()
+    const existing = store.domains.find(d => d.name === name)
+    if (existing) {
+      domainId = existing.id
     }
   }
 
@@ -101,7 +100,7 @@ async function addDomain() {
     return
   }
 
-  // Now create the binding (openvpn-udp as the primary protocol for configs)
+  // Create the binding (openvpn-udp as the primary protocol for configs)
   const nextPosition = sortedDomains.value.length + 1
   const success = await store.createBinding(props.nodeId, {
     protocol: 'openvpn-udp',
@@ -115,8 +114,6 @@ async function addDomain() {
     toast.success(`Domain "${name}" added`)
     newDomain.value = ''
     await loadBindings()
-    // Refresh store domains list
-    await store.fetchDomains()
   } else {
     toast.error('Failed to add domain — it may already be assigned')
   }
