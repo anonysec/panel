@@ -33,8 +33,7 @@ CREATE TABLE IF NOT EXISTS vpn_protocol_bindings (
     protocol   VARCHAR(20) NOT NULL
         CHECK (protocol IN ('openvpn-udp', 'openvpn-tcp', 'l2tp', 'ikev2', 'wireguard', 'ssh', 'mtproto')),
     domain_id  BIGINT NOT NULL REFERENCES vpn_domains(id) ON DELETE RESTRICT,
-    position   INT NOT NULL DEFAULT 1
-        CHECK (position >= 1 AND position <= 10),
+    position   INT NOT NULL DEFAULT 1,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT uq_binding_node_proto_domain UNIQUE (node_id, protocol, domain_id),
     CONSTRAINT uq_binding_node_proto_position UNIQUE (node_id, protocol, position)
