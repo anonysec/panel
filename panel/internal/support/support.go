@@ -136,18 +136,15 @@ func (s *TicketService) Create(ctx context.Context, customerID int64, subject, c
 	defer tx.Rollback()
 
 	// Insert ticket
-	result, err := tx.ExecContext(ctx, `
+	var ticketID int64
+	err = tx.QueryRowContext(ctx, `
 		INSERT INTO tickets (customer_id, subject, category, priority, status)
-		VALUES ($1, $2, $3, $4, 'open')`,
+		VALUES ($1, $2, $3, $4, 'open')
+		RETURNING id`,
 		customerID, subject, category, priority,
-	)
+	).Scan(&ticketID)
 	if err != nil {
 		return nil, fmt.Errorf("insert ticket: %w", err)
-	}
-
-	ticketID, err := result.LastInsertId()
-	if err != nil {
-		return nil, fmt.Errorf("get ticket id: %w", err)
 	}
 
 	// Fetch customer name for sender_name
@@ -372,18 +369,15 @@ func (s *TicketService) Reply(ctx context.Context, ticketID int64, senderType, s
 	defer tx.Rollback()
 
 	// Insert message
-	result, err := tx.ExecContext(ctx, `
+	var msgID int64
+	err = tx.QueryRowContext(ctx, `
 		INSERT INTO ticket_messages (ticket_id, sender_type, sender_name, body, is_internal)
-		VALUES ($1, $2, $3, $4, $5)`,
+		VALUES ($1, $2, $3, $4, $5)
+		RETURNING id`,
 		ticketID, senderType, senderName, body, isInternal,
-	)
+	).Scan(&msgID)
 	if err != nil {
 		return nil, fmt.Errorf("insert message: %w", err)
-	}
-
-	msgID, err := result.LastInsertId()
-	if err != nil {
-		return nil, fmt.Errorf("get message id: %w", err)
 	}
 
 	// Update ticket status based on who replied (skip for internal notes)
