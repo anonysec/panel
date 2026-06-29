@@ -299,9 +299,13 @@ function handleKeydown(event: KeyboardEvent) {
 function handleClickOutside(event: MouseEvent) {
   if (!props.open || isMobile.value) return
   const panel = document.querySelector('.user-detail-panel')
-  if (panel && !panel.contains(event.target as Node)) {
-    handleClose()
-  }
+  const target = event.target as Node
+  // Don't close if clicking inside the panel itself
+  if (panel && panel.contains(target)) return
+  // Don't close if clicking inside a modal, dialog, or dropdown (they're Teleported to body)
+  const modal = (target as Element).closest?.('[role="dialog"], .k-modal, .k-three-dot-menu__dropdown, [role="menu"]')
+  if (modal) return
+  handleClose()
 }
 
 onMounted(() => {
