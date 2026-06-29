@@ -427,6 +427,8 @@ const messages: Record<Locale, Record<string, string>> = {
     'services.max_sessions': 'Max Sessions',
     'services.max_connections': 'Max Connections',
     'services.key_type': 'Key Type',
+    'services.auth_mode': 'Auth Mode',
+    'services.backup_domain': 'Backup Domain',
     // Resellers
     'resellers.title': 'Resellers',
     'resellers.add': 'Add Reseller',
