@@ -111,23 +111,22 @@ func (s *Server) portalNodes(w http.ResponseWriter, r *http.Request) {
 		writeJSONCode(w, http.StatusUnauthorized, map[string]any{"ok": false, "error": "unauthorized"})
 		return
 	}
-	rows, err := s.DB.Query(`SELECT id,name,COALESCE(domain,''),public_ip,status FROM nodes WHERE status <> 'disabled' ORDER BY CASE status WHEN 'online' THEN 0 WHEN 'stale' THEN 1 ELSE 2 END, id ASC`)
+	rows, err := s.DB.Query(`SELECT id, name, address, status FROM knode_connections WHERE enabled=TRUE ORDER BY CASE status WHEN 'online' THEN 0 WHEN 'stale' THEN 1 ELSE 2 END, id ASC`)
 	if err != nil {
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
 	defer rows.Close()
 	type NodeInfo struct {
-		ID       int64  `json:"id"`
-		Name     string `json:"name"`
-		Domain   string `json:"domain"`
-		PublicIP string `json:"public_ip"`
-		Status   string `json:"status"`
+		ID      int64  `json:"id"`
+		Name    string `json:"name"`
+		Address string `json:"address"`
+		Status  string `json:"status"`
 	}
 	out := []NodeInfo{}
 	for rows.Next() {
 		var n NodeInfo
-		if err := rows.Scan(&n.ID, &n.Name, &n.Domain, &n.PublicIP, &n.Status); err == nil {
+		if err := rows.Scan(&n.ID, &n.Name, &n.Address, &n.Status); err == nil {
 			out = append(out, n)
 		}
 	}
@@ -148,9 +147,9 @@ func (s *Server) openVPNEndpointNode(r *http.Request, nodeID int64) (host string
 	}
 
 	if nodeID > 0 {
-		// Get node name regardless
-		var domain, publicIP string
-		_ = s.DB.QueryRow(`SELECT name,COALESCE(domain,''),public_ip FROM nodes WHERE id=$1 AND status <> 'disabled' LIMIT 1`, nodeID).Scan(&nodeName, &domain, &publicIP)
+		// Get node name and address from knode_connections
+		var address string
+		_ = s.DB.QueryRow(`SELECT name, address FROM knode_connections WHERE id=$1 AND enabled=TRUE LIMIT 1`, nodeID).Scan(&nodeName, &address)
 
 		if host == "" {
 			// Priority 1: Check for active failover domain pointing to this node
@@ -163,22 +162,15 @@ func (s *Server) openVPNEndpointNode(r *http.Request, nodeID int64) (host string
 		}
 
 		if host == "" {
-			// Priority 2 & 3: Node's domain field, then public_ip
-			var domain2, publicIP2 string
-			_ = s.DB.QueryRow(`SELECT COALESCE(domain,''),public_ip FROM nodes WHERE id=$1 LIMIT 1`, nodeID).Scan(&domain2, &publicIP2)
-			host = strings.TrimSpace(domain2)
-			if host == "" {
-				host = strings.TrimSpace(publicIP2)
-			}
+			// Priority 2: Node's address (IP)
+			host = strings.TrimSpace(address)
 		}
 	}
 	if host == "" {
-		var domain, publicIP string
-		_ = s.DB.QueryRow(`SELECT name,COALESCE(domain,''),public_ip FROM nodes WHERE status <> 'disabled' ORDER BY CASE status WHEN 'online' THEN 0 WHEN 'stale' THEN 1 ELSE 2 END, id ASC LIMIT 1`).Scan(&nodeName, &domain, &publicIP)
-		host = strings.TrimSpace(domain)
-		if host == "" {
-			host = strings.TrimSpace(publicIP)
-		}
+		// Fallback: pick any online enabled node from knode_connections
+		var address string
+		_ = s.DB.QueryRow(`SELECT name, address FROM knode_connections WHERE enabled=TRUE ORDER BY CASE status WHEN 'online' THEN 0 WHEN 'stale' THEN 1 ELSE 2 END, id ASC LIMIT 1`).Scan(&nodeName, &address)
+		host = strings.TrimSpace(address)
 	}
 	if host == "" {
 		host = r.Host

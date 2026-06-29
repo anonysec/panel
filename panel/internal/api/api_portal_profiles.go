@@ -99,12 +99,9 @@ func (s *Server) openVPNEndpoint(r *http.Request) (host string, port int, proto 
 	port = 1194
 	proto = "udp"
 	_ = s.DB.QueryRow(`SELECT openvpn_port,openvpn_protocol FROM vpn_core_settings WHERE id=1`).Scan(&port, &proto)
-	var domain, publicIP string
-	_ = s.DB.QueryRow(`SELECT name,COALESCE(domain,''),public_ip FROM nodes WHERE status <> 'disabled' ORDER BY CASE status WHEN 'online' THEN 0 WHEN 'stale' THEN 1 ELSE 2 END, id ASC LIMIT 1`).Scan(&nodeName, &domain, &publicIP)
-	host = strings.TrimSpace(domain)
-	if host == "" {
-		host = strings.TrimSpace(publicIP)
-	}
+	var address string
+	_ = s.DB.QueryRow(`SELECT name, address FROM knode_connections WHERE enabled=TRUE ORDER BY CASE status WHEN 'online' THEN 0 WHEN 'stale' THEN 1 ELSE 2 END, id ASC LIMIT 1`).Scan(&nodeName, &address)
+	host = strings.TrimSpace(address)
 	if host == "" {
 		host = r.Host
 		if strings.Contains(host, ":") {
@@ -151,12 +148,9 @@ func (s *Server) openVPNProfileTCP(username string, r *http.Request, nodeID int6
 	var preferredNodeID int64
 	_ = s.DB.QueryRow(`SELECT COALESCE(preferred_node_id, 0) FROM customers WHERE username=$1 AND deleted_at IS NULL`, username).Scan(&preferredNodeID)
 	if preferredNodeID > 0 && preferredNodeID != nodeID {
-		var prefDomain, prefIP string
-		if s.DB.QueryRow(`SELECT COALESCE(domain,''), public_ip FROM nodes WHERE id=$1 AND status <> 'disabled'`, preferredNodeID).Scan(&prefDomain, &prefIP) == nil {
-			prefHost := strings.TrimSpace(prefDomain)
-			if prefHost == "" {
-				prefHost = strings.TrimSpace(prefIP)
-			}
+		var prefIP string
+		if s.DB.QueryRow(`SELECT address FROM knode_connections WHERE id=$1 AND enabled=TRUE`, preferredNodeID).Scan(&prefIP) == nil {
+			prefHost := strings.TrimSpace(prefIP)
 			if prefHost != "" && prefHost != host {
 				// Preferred node goes first
 				remoteLines = fmt.Sprintf("remote %s %d tcp\nremote %s %d tcp", prefHost, tcpPort, host, tcpPort)
@@ -166,20 +160,17 @@ func (s *Server) openVPNProfileTCP(username string, r *http.Request, nodeID int6
 
 	// Add other active nodes as backup
 	rows, err := s.DB.Query(`
-		SELECT COALESCE(n.domain,''), n.public_ip
-		FROM nodes n
+		SELECT n.address
+		FROM knode_connections n
 		JOIN node_vpn_configs c ON c.node_id = n.id AND c.protocol = 'openvpn' AND c.enabled = TRUE
-		WHERE n.status <> 'disabled' AND n.id <> $1 AND n.id <> $2
+		WHERE n.enabled = TRUE AND n.id <> $1 AND n.id <> $2
 		ORDER BY n.id`, nodeID, preferredNodeID)
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {
-			var domain, ip string
-			if rows.Scan(&domain, &ip) == nil {
-				backupHost := strings.TrimSpace(domain)
-				if backupHost == "" {
-					backupHost = strings.TrimSpace(ip)
-				}
+			var ip string
+			if rows.Scan(&ip) == nil {
+				backupHost := strings.TrimSpace(ip)
 				if backupHost != "" && backupHost != host {
 					remoteLines += fmt.Sprintf("\nremote %s %d tcp", backupHost, tcpPort)
 				}
@@ -249,20 +240,17 @@ func (s *Server) openVPNProfileWithAuth(username string, r *http.Request, nodeID
 
 	// Add backup remotes: all other active nodes with OpenVPN enabled
 	rows, err := s.DB.Query(`
-		SELECT COALESCE(n.domain,''), n.public_ip
-		FROM nodes n
+		SELECT n.address
+		FROM knode_connections n
 		JOIN node_vpn_configs c ON c.node_id = n.id AND c.protocol = 'openvpn' AND c.enabled = TRUE
-		WHERE n.status <> 'disabled' AND n.id <> $1
+		WHERE n.enabled = TRUE AND n.id <> $1
 		ORDER BY n.id`, nodeID)
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {
-			var domain, ip string
-			if rows.Scan(&domain, &ip) == nil {
-				backupHost := strings.TrimSpace(domain)
-				if backupHost == "" {
-					backupHost = strings.TrimSpace(ip)
-				}
+			var ip string
+			if rows.Scan(&ip) == nil {
+				backupHost := strings.TrimSpace(ip)
 				if backupHost != "" && backupHost != host {
 					remoteLines += fmt.Sprintf("\nremote %s %d %s", backupHost, port, proto)
 				}

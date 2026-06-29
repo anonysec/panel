@@ -337,7 +337,7 @@ func (s *Server) portalPreferredNode(w http.ResponseWriter, r *http.Request) {
 		// Validate node exists and is active (0 = auto/random)
 		if in.NodeID > 0 {
 			var exists int
-			if err := s.DB.QueryRow(`SELECT COUNT(*) FROM nodes WHERE id=$1 AND status <> 'disabled'`, in.NodeID).Scan(&exists); err != nil || exists == 0 {
+			if err := s.DB.QueryRow(`SELECT COUNT(*) FROM knode_connections WHERE id=$1 AND enabled=TRUE`, in.NodeID).Scan(&exists); err != nil || exists == 0 {
 				writeJSONCode(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid_node"})
 				return
 			}
