@@ -1520,6 +1520,13 @@ onMounted(async () => {
   grid-template-columns: 1fr auto;
 }
 
+/* When panel is open on desktop, offset main content to avoid overlap with fixed panel */
+@media (min-width: 769px) {
+  .customers-view--panel-open .customers-view__main {
+    margin-right: 480px;
+  }
+}
+
 .customers-view__main {
   display: flex;
   flex-direction: column;
