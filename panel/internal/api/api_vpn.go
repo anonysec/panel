@@ -200,7 +200,7 @@ func cidrToOpenVPNServer(cidr string) (string, string) {
 func (s *Server) vpnCertificates(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		rows, err := s.DB.Query(`SELECT id, name, type, node_id, is_default, status, expires_at, fingerprint, created_at FROM vpn_certificates ORDER BY node_id, type, id DESC`)
+		rows, err := s.DB.Query(`SELECT id, name, type, node_id, is_default, status, expires_at, COALESCE(fingerprint,''), created_at FROM vpn_certificates ORDER BY node_id, type, id DESC`)
 		if err != nil {
 			writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 			return
