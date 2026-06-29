@@ -210,10 +210,6 @@ func (s *Server) portalProfiles(w http.ResponseWriter, r *http.Request) {
 	if nodeBase == "" {
 		nodeBase = "vpn"
 	}
-	userBase := safeFilename(username)
-	perUserOvpn := userBase + "-" + nodeBase + ".ovpn"
-	perUserL2TP := userBase + "-" + nodeBase + ".mobileconfig"
-	perUserIKEv2 := userBase + "-" + nodeBase + "-ikev2.mobileconfig"
 
 	// Query which protocols are actually enabled on the target node
 	enabledProtocols := map[string]bool{}
@@ -252,16 +248,19 @@ func (s *Server) portalProfiles(w http.ResponseWriter, r *http.Request) {
 	_ = s.DB.QueryRow(`SELECT COALESCE(preferred_node_id, 0) FROM customers WHERE username=$1 AND deleted_at IS NULL`, username).Scan(&preferredNodeID)
 
 	// Build dynamic profiles list based on enabled protocols
+	// Order: OpenVPN UDP → OpenVPN TCP → L2TP → IKEv2 → WireGuard → SSH → MTProxy → Cisco
 	profiles := []map[string]any{}
 
-	// OpenVPN UDP
+	// Filename prefix: koris-nodename
+	fnPrefix := "koris-" + nodeBase
+
+	// 1. OpenVPN UDP
 	if enabledProtocols["openvpn"] {
-		// When user is passwordless/certificate, show only the passwordless config
 		if authMode == "certificate" {
 			profiles = append(profiles, map[string]any{
 				"type":        "openvpn-udp",
 				"name":        "OpenVPN UDP — " + nodeName,
-				"filename":    perUserOvpn,
+				"filename":    fnPrefix + "-openvpn.ovpn",
 				"available":   true,
 				"remote":      host,
 				"port":        port,
@@ -275,8 +274,8 @@ func (s *Server) portalProfiles(w http.ResponseWriter, r *http.Request) {
 			profiles = append(profiles, map[string]any{
 				"type":                  "openvpn-udp",
 				"name":                  "OpenVPN UDP — " + nodeName,
-				"filename":              nodeBase + ".ovpn",
-				"filename_passwordless": perUserOvpn,
+				"filename":              fnPrefix + "-openvpn.ovpn",
+				"filename_passwordless": fnPrefix + "-openvpn-cert.ovpn",
 				"available":             true,
 				"remote":                host,
 				"port":                  port,
@@ -289,12 +288,12 @@ func (s *Server) portalProfiles(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// OpenVPN TCP — only if explicitly enabled as a separate protocol
+	// 2. OpenVPN TCP
 	if enabledProtocols["openvpn-tcp"] {
 		profiles = append(profiles, map[string]any{
 			"type":        "openvpn-tcp",
 			"name":        "OpenVPN TCP — " + nodeName,
-			"filename":    nodeBase + "-TCP.ovpn",
+			"filename":    fnPrefix + "-openvpn-tcp.ovpn",
 			"available":   true,
 			"remote":      host,
 			"port":        443,
@@ -306,12 +305,12 @@ func (s *Server) portalProfiles(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	// L2TP/IPSec
+	// 3. L2TP/IPSec
 	if enabledProtocols["l2tp"] {
 		profiles = append(profiles, map[string]any{
 			"type":      "l2tp",
 			"name":      "L2TP/IPSec — " + nodeName,
-			"filename":  perUserL2TP,
+			"filename":  fnPrefix + "-l2tp.mobileconfig",
 			"available": true,
 			"remote":    host,
 			"port":      1701,
@@ -322,12 +321,12 @@ func (s *Server) portalProfiles(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	// IKEv2
+	// 4. IKEv2
 	if enabledProtocols["ikev2"] {
 		profiles = append(profiles, map[string]any{
 			"type":      "ikev2",
 			"name":      "IKEv2 — " + nodeName,
-			"filename":  perUserIKEv2,
+			"filename":  fnPrefix + "-ikev2.mobileconfig",
 			"available": true,
 			"remote":    host,
 			"port":      500,
@@ -338,9 +337,25 @@ func (s *Server) portalProfiles(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	// SSH Tunnel — display as separate copyable fields (host, port, username)
+	// 5. WireGuard
+	if enabledProtocols["wireguard"] {
+		profiles = append(profiles, map[string]any{
+			"type":        "wireguard",
+			"name":        "WireGuard — " + nodeName,
+			"filename":    fnPrefix + "-wireguard.conf",
+			"available":   true,
+			"remote":      host,
+			"port":        51820,
+			"protocol":    "wireguard",
+			"node":        nodeName,
+			"download":    fmt.Sprintf("/api/portal/profiles/wireguard.conf?node_id=%d", nodeID),
+			"description": "Modern, fast, lightweight VPN protocol.",
+			"auth_mode":   authMode,
+		})
+	}
+
+	// 6. SSH Tunnel — clickable fields (host, port, username)
 	if enabledProtocols["ssh"] {
-		// Get SSH port from node config if available
 		sshPort := 22
 		if nodeID > 0 {
 			_ = s.DB.QueryRow(`SELECT COALESCE(port, 22) FROM node_vpn_configs WHERE node_id=$1 AND protocol='ssh' AND enabled=TRUE LIMIT 1`, nodeID).Scan(&sshPort)
@@ -361,26 +376,8 @@ func (s *Server) portalProfiles(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	// WireGuard
-	if enabledProtocols["wireguard"] {
-		profiles = append(profiles, map[string]any{
-			"type":        "wireguard",
-			"name":        "WireGuard — " + nodeName,
-			"filename":    userBase + "-" + nodeBase + "-wg.conf",
-			"available":   true,
-			"remote":      host,
-			"port":        51820,
-			"protocol":    "wireguard",
-			"node":        nodeName,
-			"download":    fmt.Sprintf("/api/portal/profiles/wireguard.conf?node_id=%d", nodeID),
-			"description": "Modern, fast, lightweight VPN protocol.",
-			"auth_mode":   authMode,
-		})
-	}
-
-	// MTProto Proxy — display as connection info text
+	// 7. MTProto Proxy — full tg:// URL
 	if enabledProtocols["mtproto"] {
-		// Get MTProto port and secret from node config or mtproto_proxies table
 		mtPort := 443
 		var mtSecret string
 		if nodeID > 0 {
@@ -390,10 +387,11 @@ func (s *Server) portalProfiles(w http.ResponseWriter, r *http.Request) {
 			_ = s.DB.QueryRow(`SELECT COALESCE(port, 443) FROM node_vpn_configs WHERE protocol='mtproto' AND enabled=TRUE LIMIT 1`).Scan(&mtPort)
 			_ = s.DB.QueryRow(`SELECT COALESCE(extra_json->>'secret', '') FROM node_vpn_configs WHERE protocol='mtproto' AND enabled=TRUE LIMIT 1`).Scan(&mtSecret)
 		}
-		// Fallback: check mtproto_proxies table for the secret
 		if mtSecret == "" {
 			_ = s.DB.QueryRow(`SELECT COALESCE(secret, '') FROM mtproto_proxies WHERE node_id=$1 AND enabled=TRUE LIMIT 1`, nodeID).Scan(&mtSecret)
 		}
+		// Build full tg:// proxy URL
+		tgURL := fmt.Sprintf("tg://proxy?server=%s&port=%d&secret=%s", host, mtPort, mtSecret)
 		profiles = append(profiles, map[string]any{
 			"type":      "mtproto",
 			"name":      "MTProto Proxy — " + nodeName,
@@ -403,17 +401,18 @@ func (s *Server) portalProfiles(w http.ResponseWriter, r *http.Request) {
 			"protocol":  "mtproto",
 			"node":      nodeName,
 			"secret":    mtSecret,
+			"tg_url":    tgURL,
 			"auth_mode": authMode,
 			"info_only": true,
 		})
 	}
 
-	// Cisco IPSec
+	// 8. Cisco IPSec
 	if enabledProtocols["cisco_ipsec"] {
 		profiles = append(profiles, map[string]any{
 			"type":        "cisco-ipsec",
 			"name":        "Cisco IPSec — " + nodeName,
-			"filename":    userBase + "-" + nodeBase + "-cisco.mobileconfig",
+			"filename":    fnPrefix + "-cisco.mobileconfig",
 			"available":   true,
 			"remote":      host,
 			"port":        500,

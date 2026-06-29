@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { usePortalAuthStore } from '@/stores/auth'
+import { useToast } from '@koris/composables/useToast'
 import KButton from '@koris/ui/KButton.vue'
 import KFormField from '@koris/ui/KFormField.vue'
 import KInput from '@koris/ui/KInput.vue'
 
 const auth = usePortalAuthStore()
+const toast = useToast()
 
 const form = ref({
   username: '',
@@ -31,6 +33,7 @@ async function handleLogin() {
   })
 
   if (success) {
+    toast.success('Welcome back!')
     // Force full page navigation to guarantee clean state and bypass guard race
     window.location.href = '/portal/'
   } else if (!auth.totpRequired) {

@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { usePortalAuthStore } from '@/stores/auth'
 import { useTheme } from '@koris/composables/useTheme'
 import { useI18n } from '@koris/composables/useI18n'
+import { useToast } from '@koris/composables/useToast'
 import { useEdition } from '@/composables/useEdition'
 import type { Locale } from '@koris/composables/useI18n'
 
@@ -11,6 +12,7 @@ const router = useRouter()
 const auth = usePortalAuthStore()
 const { isDark, toggle: toggleTheme } = useTheme()
 const { t, locale, setLocale } = useI18n()
+const toast = useToast()
 const { isFull } = useEdition()
 
 const userMenuOpen = ref(false)
@@ -46,6 +48,7 @@ function goToProfile() {
 
 async function logout() {
   closeUserMenu()
+  toast.success('Logged out')
   await auth.logout()
   window.location.href = '/portal/login'
 }

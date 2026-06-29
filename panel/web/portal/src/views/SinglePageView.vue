@@ -7,6 +7,7 @@ import { useUsageDisplay, formatBytes } from '@/composables/useUsageDisplay'
 import { useEdition } from '@/composables/useEdition'
 import { useApi } from '@koris/composables/useApi'
 import { useClipboard } from '@koris/composables/useClipboard'
+import { useToast } from '@koris/composables/useToast'
 import { useI18n } from '@koris/composables/useI18n'
 import { useWireGuardPortal } from '@/composables/useWireGuardPortal'
 import KButton from '@koris/ui/KButton.vue'
@@ -24,6 +25,7 @@ const usageStore = useUsageStore()
 const ticketsStore = usePortalTicketsStore()
 const { get, loading: profilesLoading } = useApi()
 const { copy, copied } = useClipboard()
+const toast = useToast()
 const { t, locale: currentLang } = useI18n()
 const { peers, loading: wgLoading, fetchMyPeers, downloadConfig, getQRCodeUrl } = useWireGuardPortal()
 const { isFull } = useEdition()
@@ -44,6 +46,7 @@ interface VpnProfile {
   info_only?: boolean
   username?: string
   secret?: string
+  tg_url?: string
 }
 
 interface ProfilesResponse {
@@ -121,6 +124,7 @@ function copyProxyLink(proxy: TelegramProxy) {
 function copyProfileUrl(downloadPath: string) {
   const fullUrl = `${window.location.origin}${downloadPath}`
   copy(fullUrl)
+  toast.success('URL copied to clipboard')
   copiedProfileUrl.value = downloadPath
   setTimeout(() => {
     if (copiedProfileUrl.value === downloadPath) {
@@ -142,6 +146,7 @@ function copyProfileText(profile: VpnProfile) {
 
 function copyValue(value: string) {
   copy(value)
+  toast.success('Copied to clipboard')
 }
 
 // ---- Support ----
@@ -275,9 +280,11 @@ async function handleCreateTicket() {
     body: ticketForm.value.body,
   })
   if (id) {
-    notice.value = t('portal.support.ticketCreated')
+    toast.success('Ticket created successfully')
     ticketForm.value = { subject: '', category: 'general', body: '' }
     showCreateForm.value = false
+  } else {
+    toast.error('Failed to create ticket')
   }
 }
 
@@ -307,7 +314,9 @@ async function handleReply() {
   const success = await ticketsStore.replyToTicket(ticketsStore.detail.id, replyMessage.value)
   if (success) {
     replyMessage.value = ''
-    notice.value = t('portal.support.replySent')
+    toast.success('Reply sent')
+  } else {
+    toast.error('Failed to send reply')
   }
 }
 
@@ -447,21 +456,10 @@ async function handleRate() {
                   <p class="sp__ssh-note">Password is your login password. Click any field to copy.</p>
                 </div>
                 <div v-else-if="profile.type === 'mtproto'" class="sp__ssh-info">
-                  <div class="sp__ssh-fields">
-                    <span class="sp__ssh-field" @click="copyValue(profile.remote)" :title="'Click to copy'">
-                      <span class="sp__ssh-label">Server</span>
-                      <span class="sp__ssh-value">{{ profile.remote }}</span>
-                    </span>
-                    <span class="sp__ssh-field" @click="copyValue(String(profile.port))" :title="'Click to copy'">
-                      <span class="sp__ssh-label">Port</span>
-                      <span class="sp__ssh-value">{{ profile.port }}</span>
-                    </span>
-                    <span v-if="profile.secret" class="sp__ssh-field" @click="copyValue(profile.secret)" :title="'Click to copy'">
-                      <span class="sp__ssh-label">Secret</span>
-                      <span class="sp__ssh-value">{{ profile.secret }}</span>
-                    </span>
-                  </div>
-                  <p class="sp__ssh-note">Use in Telegram Settings → Data and Storage → Proxy. Click any field to copy.</p>
+                  <a v-if="profile.tg_url" :href="profile.tg_url" target="_blank" class="sp__mtproto-link">
+                    {{ profile.tg_url }}
+                  </a>
+                  <p class="sp__ssh-note">Tap the link or paste in Telegram → Settings → Data and Storage → Proxy.</p>
                 </div>
                 <div v-else class="sp__profile-actions">
                   <KButton
@@ -475,9 +473,6 @@ async function handleRate() {
               </template>
               <!-- Downloadable profiles: show download link -->
               <template v-else>
-                <a :href="profile.download" download class="sp__profile-dl">
-                  <KButton variant="primary" size="sm">{{ t('portal.vpn.download') }}</KButton>
-                </a>
                 <KButton
                   v-if="profile.type.startsWith('openvpn')"
                   variant="ghost"
@@ -486,6 +481,9 @@ async function handleRate() {
                 >
                   {{ copiedProfileUrl === profile.download ? '✓' : '📋' }} URL
                 </KButton>
+                <a :href="profile.download" download class="sp__profile-dl">
+                  <KButton variant="primary" size="sm">{{ t('portal.vpn.download') }}</KButton>
+                </a>
               </template>
             </div>
           </div>
@@ -981,6 +979,22 @@ async function handleRate() {
   font-size: var(--text-xs);
   color: var(--color-muted);
   margin: 0;
+}
+.sp__mtproto-link {
+  display: block;
+  font-size: var(--text-sm);
+  font-family: var(--font-mono, monospace);
+  color: var(--color-primary);
+  word-break: break-all;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+}
+.sp__mtproto-link:hover {
+  border-color: var(--color-primary);
+  background: rgba(var(--color-primary-rgb, 99, 102, 241), 0.05);
 }
 
 /* Cisco IPSec Instructions */
