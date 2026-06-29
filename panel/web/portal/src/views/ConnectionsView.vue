@@ -2,7 +2,8 @@
 import { ref, onMounted } from 'vue'
 import { useApi } from '@koris/composables/useApi'
 import ConnectionCard from '@/components/ConnectionCard.vue'
-import UsageProgressBar from '@/components/UsageProgressBar.vue'
+import KUsageBar from '@koris/ui/KUsageBar.vue'
+import { sanitizeNumber } from '@/utils/sanitizeNumber'
 
 interface Connection {
   protocol: string
@@ -13,20 +14,20 @@ interface Connection {
   txBytes: number
 }
 
-interface UsageInfo {
+interface UsageData {
   used: number
-  total: number
+  limit: number
 }
 
 const { get } = useApi()
 const connections = ref<Connection[]>([])
-const usage = ref<UsageInfo | null>(null)
+const usage = ref<UsageData | null>(null)
 const loading = ref(false)
 
 async function loadConnections() {
   loading.value = true
   try {
-    const res = await get<{ ok: boolean; connections: any[]; usage?: UsageInfo }>('/api/portal/connections')
+    const res = await get<{ ok: boolean; connections: any[]; usage?: { used_bytes?: unknown; limit_bytes?: unknown } }>('/api/portal/connections')
     if (res?.ok) {
       connections.value = (res.connections || []).map((c: any) => ({
         protocol: c.protocol || c.core_type || '',
@@ -37,7 +38,12 @@ async function loadConnections() {
         txBytes: c.tx_bytes || c.output_bytes || 0,
       }))
       if (res.usage) {
-        usage.value = res.usage
+        usage.value = {
+          used: sanitizeNumber(res.usage.used_bytes),
+          limit: sanitizeNumber(res.usage.limit_bytes),
+        }
+      } else {
+        usage.value = null
       }
     }
   } catch {
@@ -55,10 +61,10 @@ onMounted(loadConnections)
     <h2 class="page-title">Active Connections</h2>
 
     <!-- Usage Progress -->
-    <UsageProgressBar
+    <KUsageBar
       v-if="usage"
       :used="usage.used"
-      :total="usage.total"
+      :limit="usage.limit"
     />
 
     <!-- Loading State -->

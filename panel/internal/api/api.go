@@ -272,6 +272,7 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/api/portal/wireguard/peers", s.requireCustomer(s.portalWireguardPeers))
 	mux.HandleFunc("/api/portal/wireguard/peers/", s.requireCustomer(s.portalWireguardPeerByID))
 	mux.HandleFunc("/api/portal/connections", s.requireCustomer(s.handlePortalConnections))
+	mux.HandleFunc("/api/portal/wallet-transactions", s.requireCustomer(s.handlePortalWalletTransactions))
 	mux.HandleFunc("/api/portal/configs/", s.requireCustomer(s.handlePortalConfigDownload))
 
 	mux.HandleFunc("/api/node/agent/version", s.agentVersion)

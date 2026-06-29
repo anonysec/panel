@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useUsageStore } from '@/stores/usage'
+import { formatBytes } from '@/composables/useUsageDisplay'
 import { useFreshData } from '@koris/composables/useFreshData'
 import KChart from '@koris/ui/KChart.vue'
 import KStatusPill from '@koris/ui/KStatusPill.vue'
 import KSkeleton from '@koris/ui/KSkeleton.vue'
 import KDataTable from '@koris/ui/KDataTable.vue'
 import KEmptyState from '@koris/ui/KEmptyState.vue'
-import UsageGauge from '@/components/UsageGauge.vue'
+import KUsageBar from '@koris/ui/KUsageBar.vue'
 
 const usageStore = useUsageStore()
 
@@ -36,14 +37,6 @@ const sessionColumns = [
   { key: 'total_bytes', label: 'Total' },
 ]
 
-function formatBytes(value: number): string {
-  if (value >= 1024 ** 4) return `${(value / 1024 ** 4).toFixed(2)} TB`
-  if (value >= 1024 ** 3) return `${(value / 1024 ** 3).toFixed(2)} GB`
-  if (value >= 1024 ** 2) return `${(value / 1024 ** 2).toFixed(2)} MB`
-  if (value >= 1024) return `${(value / 1024).toFixed(2)} KB`
-  return `${Math.round(value)} B`
-}
-
 function formatDuration(seconds: number): string {
   const h = Math.floor(seconds / 3600)
   const m = Math.floor((seconds % 3600) / 60)
@@ -68,7 +61,7 @@ function formatDuration(seconds: number): string {
               {{ isOnline ? 'Online' : 'Offline' }}
             </KStatusPill>
           </div>
-          <UsageGauge :percent="usagePercent" />
+          <KUsageBar :used="totalUsageBytes" :limit="maxDataBytes || 0" />
           <div class="usage__gauge-details">
             <span>{{ formatBytes(totalUsageBytes) }} used</span>
             <span>{{ maxDataBytes ? formatBytes(maxDataBytes) + ' limit' : 'Unlimited' }}</span>

@@ -230,29 +230,35 @@ func (s *TicketService) List(ctx context.Context, f ListFilter) ([]Ticket, int, 
 		f.Limit = 20
 	}
 
-	// Build WHERE clause
+	// Build WHERE clause with sequential placeholder numbering
 	where := "WHERE 1=1"
 	args := []any{}
+	paramIdx := 1
 
 	if f.Status != "" {
-		where += " AND status = $1"
+		where += fmt.Sprintf(" AND status = $%d", paramIdx)
 		args = append(args, f.Status)
+		paramIdx++
 	}
 	if f.Category != "" {
-		where += " AND category = $1"
+		where += fmt.Sprintf(" AND category = $%d", paramIdx)
 		args = append(args, f.Category)
+		paramIdx++
 	}
 	if f.Priority != "" {
-		where += " AND priority = $1"
+		where += fmt.Sprintf(" AND priority = $%d", paramIdx)
 		args = append(args, f.Priority)
+		paramIdx++
 	}
 	if f.CustomerID > 0 {
-		where += " AND customer_id = $1"
+		where += fmt.Sprintf(" AND customer_id = $%d", paramIdx)
 		args = append(args, f.CustomerID)
+		paramIdx++
 	}
 	if f.AssignedTo != "" {
-		where += " AND assigned_to = $1"
+		where += fmt.Sprintf(" AND assigned_to = $%d", paramIdx)
 		args = append(args, f.AssignedTo)
+		paramIdx++
 	}
 
 	// Count total
@@ -262,12 +268,12 @@ func (s *TicketService) List(ctx context.Context, f ListFilter) ([]Ticket, int, 
 		return nil, 0, fmt.Errorf("count tickets: %w", err)
 	}
 
-	// Fetch page
+	// Fetch page — continue sequential placeholders for LIMIT and OFFSET
 	query := fmt.Sprintf(`
 		SELECT id, customer_id, subject, category, priority, status,
 		       assigned_to, satisfaction_rating, created_at, updated_at, resolved_at, closed_at
 		FROM tickets %s
-		ORDER BY updated_at DESC LIMIT $1 OFFSET $2`, where)
+		ORDER BY updated_at DESC LIMIT $%d OFFSET $%d`, where, paramIdx, paramIdx+1)
 	args = append(args, f.Limit, f.Offset)
 
 	rows, err := s.db.QueryContext(ctx, query, args...)

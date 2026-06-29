@@ -7,7 +7,7 @@ import { useUsageDisplay, formatBytes } from '@/composables/useUsageDisplay'
 import KStatusPill from '@koris/ui/KStatusPill.vue'
 import KSkeleton from '@koris/ui/KSkeleton.vue'
 import PlanCard from '@/components/PlanCard.vue'
-import UsageGauge from '@/components/UsageGauge.vue'
+import KUsageBar from '@koris/ui/KUsageBar.vue'
 
 const router = useRouter()
 const auth = usePortalAuthStore()
@@ -137,7 +137,7 @@ function formatDuration(seconds: number): string {
           </div>
 
           <!-- Usage gauge -->
-          <UsageGauge :percent="usagePercent" />
+          <KUsageBar :used="totalUsageBytes" :limit="maxDataBytes || 0" />
 
           <!-- Remaining data: percentage and absolute value -->
           <div class="usage-card__remaining">

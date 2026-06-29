@@ -212,6 +212,10 @@ func (s *Server) portalProfiles(w http.ResponseWriter, r *http.Request) {
 	psk = strings.TrimSpace(psk)
 	passwordlessAvailable := s.canUsePasswordless(username)
 
+	// Resolve auth_mode for this customer: check radcheck Auth-Mode attribute first,
+	// then fall back to node's OpenVPN extra_json config, default to "userpass".
+	authMode := s.resolveAuthMode(username, nodeID)
+
 	// Build filenames:
 	// - OpenVPN with auth: generic config, use node name only (e.g. "🇩🇪Germany.ovpn")
 	// - Passwordless / mobileconfig: per-user, use "username-nodename" (e.g. "john-🇩🇪Germany.ovpn")
@@ -260,6 +264,7 @@ func (s *Server) portalProfiles(w http.ResponseWriter, r *http.Request) {
 				"node":                  nodeName,
 				"download":              fmt.Sprintf("/api/portal/profiles/openvpn.ovpn?node_id=%d", nodeID),
 				"description":           "Fast, best for gaming. Direct connection with failover.",
+				"auth_mode":             authMode,
 			},
 			{
 				"type":        "openvpn-tcp",
@@ -272,6 +277,7 @@ func (s *Server) portalProfiles(w http.ResponseWriter, r *http.Request) {
 				"node":        nodeName,
 				"download":    fmt.Sprintf("/api/portal/profiles/openvpn-tcp.ovpn?node_id=%d", nodeID),
 				"description": "Stable, supports node selection. Works behind firewalls.",
+				"auth_mode":   authMode,
 			},
 			{
 				"type":      "l2tp",
@@ -283,6 +289,7 @@ func (s *Server) portalProfiles(w http.ResponseWriter, r *http.Request) {
 				"protocol":  "l2tp",
 				"node":      nodeName,
 				"download":  fmt.Sprintf("/api/portal/profiles/l2tp.mobileconfig?node_id=%d", nodeID),
+				"auth_mode": authMode,
 			},
 			{
 				"type":      "ikev2",
@@ -294,6 +301,7 @@ func (s *Server) portalProfiles(w http.ResponseWriter, r *http.Request) {
 				"protocol":  "ikev2",
 				"node":      nodeName,
 				"download":  fmt.Sprintf("/api/portal/profiles/ikev2.mobileconfig?node_id=%d", nodeID),
+				"auth_mode": authMode,
 			},
 			{
 				"type":        "cisco-ipsec",
@@ -306,7 +314,46 @@ func (s *Server) portalProfiles(w http.ResponseWriter, r *http.Request) {
 				"node":        nodeName,
 				"download":    "/api/customer/configs/cisco-ipsec",
 				"description": "IKEv1 + XAUTH. For iOS, macOS, and Android (strongSwan).",
+				"auth_mode":   authMode,
 			},
 		},
 	})
+}
+
+// resolveAuthMode determines the OpenVPN authentication mode for a customer.
+// It checks (in order):
+//  1. radcheck attribute "Auth-Mode" for the customer's username
+//  2. The node's OpenVPN extra_json config (node_vpn_configs)
+//  3. Defaults to "userpass"
+func (s *Server) resolveAuthMode(username string, nodeID int64) string {
+	// 1. Check radcheck for per-user Auth-Mode attribute
+	var mode string
+	err := s.DB.QueryRow(
+		`SELECT value FROM radcheck WHERE username=$1 AND attribute='Auth-Mode' ORDER BY id DESC LIMIT 1`,
+		username,
+	).Scan(&mode)
+	if err == nil {
+		mode = strings.TrimSpace(mode)
+		if mode == "certificate" || mode == "userpass" {
+			return mode
+		}
+	}
+
+	// 2. Check the node's OpenVPN config extra_json
+	if nodeID > 0 {
+		var nodeMode sql.NullString
+		_ = s.DB.QueryRow(
+			`SELECT extra_json->>'auth_mode' FROM node_vpn_configs WHERE node_id=$1 AND protocol='openvpn' AND enabled=TRUE LIMIT 1`,
+			nodeID,
+		).Scan(&nodeMode)
+		if nodeMode.Valid {
+			m := strings.TrimSpace(nodeMode.String)
+			if m == "certificate" || m == "userpass" {
+				return m
+			}
+		}
+	}
+
+	// 3. Default
+	return "userpass"
 }

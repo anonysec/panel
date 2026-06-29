@@ -16,6 +16,7 @@ import KEmptyState from '@koris/ui/KEmptyState.vue'
 import KFormField from '@koris/ui/KFormField.vue'
 import KTextarea from '@koris/ui/KTextarea.vue'
 import KInput from '@koris/ui/KInput.vue'
+import KUsageBar from '@koris/ui/KUsageBar.vue'
 
 // ---- Composables ----
 const auth = usePortalAuthStore()
@@ -33,6 +34,7 @@ interface VpnProfile {
   name: string
   filename: string
   available: boolean
+  auth_mode?: string
   remote: string
   port: number
   protocol: string
@@ -47,6 +49,8 @@ interface ProfilesResponse {
 }
 
 const profiles = ref<VpnProfile[]>([])
+const authMode = ref<string>('')
+const profilesError = ref(false)
 const subUrl = ref('')
 const preferredNodeId = ref(0)
 const availableNodes = ref<{ id: number; name: string }[]>([])
@@ -64,6 +68,16 @@ const displayAppLinks = computed(() => appLinks.value)
 
 // Check if Cisco IPSec is available from profiles data
 const ciscoAvailable = computed(() => profiles.value.some(p => p.type === 'cisco-ipsec' && p.available))
+
+// Filtered profiles: only show available profiles
+const availableProfiles = computed(() => profiles.value.filter(p => p.available))
+
+// Auth mode label
+const authModeLabel = computed(() => {
+  if (authMode.value === 'userpass') return '🔑 Username & password required'
+  if (authMode.value === 'certificate') return '🔒 Certificate-based (no password needed)'
+  return ''
+})
 
 // ---- Telegram Proxies ----
 interface TelegramProxy {
@@ -129,19 +143,11 @@ const totalUsageBytes = computed(() => usageStore.totalUsageBytes)
 const expiresAt = computed(() => auth.user?.subscription?.expires_at ?? '')
 const isOnline = computed(() => usageStore.isOnline)
 
-const { progressColor, daysRemaining } = useUsageDisplay(
+const { daysRemaining } = useUsageDisplay(
   totalUsageBytes,
   maxDataBytes,
   expiresAt
 )
-
-const progressBarColor = computed(() => {
-  switch (progressColor.value) {
-    case 'red': return 'var(--color-danger)'
-    case 'amber': return 'var(--color-warning)'
-    default: return 'var(--color-success, #22c55e)'
-  }
-})
 
 const statusVariant = computed(() => {
   switch (status.value) {
@@ -175,11 +181,14 @@ onMounted(async () => {
   try {
     const res = await get<ProfilesResponse>('/api/portal/profiles')
     profiles.value = res.profiles || []
+    if (profiles.value.length > 0 && profiles.value[0].auth_mode) {
+      authMode.value = profiles.value[0].auth_mode
+    }
     if ((res as any).preferred_node_id) {
       preferredNodeId.value = (res as any).preferred_node_id
     }
   } catch {
-    // keep empty state
+    profilesError.value = true
   }
 
   try {
@@ -229,6 +238,9 @@ async function handleNodeChange(event: Event) {
     // Reload profiles to reflect new preferred node in TCP config
     const res = await get<ProfilesResponse>('/api/portal/profiles')
     profiles.value = res.profiles || []
+    if (profiles.value.length > 0 && profiles.value[0].auth_mode) {
+      authMode.value = profiles.value[0].auth_mode
+    }
   } catch {
     // ignore
   }
@@ -345,9 +357,7 @@ async function handleRate() {
             <span class="sp__usage-compact-percent">{{ usagePercent }}% used</span>
             <span class="sp__usage-compact-values">{{ formatBytes(totalUsageBytes) }} / {{ maxDataBytes ? formatBytes(maxDataBytes) : 'Unlimited' }}</span>
           </div>
-          <div class="sp__progress-bar">
-            <div class="sp__progress-bar-fill" :style="{ width: `${Math.min(100, usagePercent)}%`, backgroundColor: progressBarColor }"></div>
-          </div>
+          <KUsageBar :used="totalUsageBytes" :limit="maxDataBytes" :show-label="false" />
           <div class="sp__usage-compact-footer">
             <span>{{ daysRemaining === Infinity ? '∞' : daysRemaining }} days remaining</span>
             <span>Expires {{ formattedExpiry }}</span>
@@ -365,6 +375,9 @@ async function handleRate() {
 
       <KSkeleton v-if="profilesLoading && !profiles.length" type="card" :count="2" />
       <template v-else>
+        <!-- Auth mode label -->
+        <p v-if="authModeLabel" class="sp__auth-mode">{{ authModeLabel }}</p>
+
         <!-- Node selector -->
         <div v-if="availableNodes.length > 1" class="sp__node-selector">
           <label class="sp__node-label">{{ t('portal.vpn.preferredNode') }}</label>
@@ -378,14 +391,14 @@ async function handleRate() {
 
         <!-- Profile list -->
         <KEmptyState
-          v-if="!profiles.filter(p => p.available).length && !peers.length"
+          v-if="profilesError || (!availableProfiles.length && !peers.length)"
           :title="t('portal.vpn.noProfiles')"
           :description="t('portal.vpn.noProfilesDesc')"
           icon="📡"
         />
 
         <div v-else class="sp__profiles-list">
-          <div v-for="profile in profiles.filter(p => p.available)" :key="profile.type" class="sp__profile-card">
+          <div v-for="profile in availableProfiles" :key="profile.type" class="sp__profile-card">
             <div class="sp__profile-icon">{{ getProfileIcon(profile.type) }}</div>
             <div class="sp__profile-info">
               <div class="sp__profile-name">{{ profile.node ? profile.name : profile.name.replace(/ —.*$/, '') }}</div>
@@ -737,17 +750,6 @@ async function handleRate() {
   color: var(--color-muted);
   margin-top: var(--space-1);
 }
-.sp__progress-bar {
-  height: 8px;
-  background: var(--color-border);
-  border-radius: 4px;
-  overflow: hidden;
-}
-.sp__progress-bar-fill {
-  height: 100%;
-  border-radius: 4px;
-  transition: width 0.4s ease, background-color 0.3s ease;
-}
 
 /* VPN */
 .sp__sub-url {
@@ -787,6 +789,15 @@ async function handleRate() {
   align-items: center;
   gap: var(--space-3);
   margin-bottom: var(--space-3);
+}
+.sp__auth-mode {
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+  margin: 0 0 var(--space-3) 0;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
 }
 .sp__node-label {
   font-size: var(--text-sm);

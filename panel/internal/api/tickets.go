@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -328,12 +329,20 @@ func (s *Server) customerTicketByID(w http.ResponseWriter, r *http.Request) {
 
 // customerListTickets lists tickets belonging to the current customer.
 func (s *Server) customerListTickets(w http.ResponseWriter, r *http.Request) {
+	// Check if the support service is initialized
+	if s.Support == nil {
+		log.Printf("[tickets] Support service is nil — service not initialized")
+		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "service_unavailable"})
+		return
+	}
+
 	username, _ := s.currentCustomer(r)
 
 	// Get customer ID from username
 	var customerID int64
 	err := s.DB.QueryRowContext(r.Context(), `SELECT id FROM customers WHERE username = $1 AND deleted_at IS NULL LIMIT 1`, username).Scan(&customerID)
 	if err != nil {
+		log.Printf("[tickets] customer username %q could not be resolved to a customer_id: %v", username, err)
 		writeJSONCode(w, http.StatusInternalServerError, map[string]any{"ok": false, "error": "customer_not_found"})
 		return
 	}

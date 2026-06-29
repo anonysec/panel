@@ -1,4 +1,8 @@
 import { computed, type Ref, toValue, type MaybeRef } from 'vue'
+import { formatBytes } from '@koris/composables/formatBytes'
+
+// Re-export formatBytes so existing consumers keep the same import path
+export { formatBytes }
 
 /**
  * Composable for calculating and displaying data usage metrics.
@@ -47,18 +51,4 @@ export function useUsageDisplay(
     progressColor,
     daysRemaining
   }
-}
-
-/**
- * Formats a byte count into a human-readable string with appropriate units.
- *
- * @param bytes - Number of bytes to format
- * @returns Formatted string (e.g., "2.4 GB", "512.0 MB", "0 B")
- */
-export function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B'
-  const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  const k = 1024
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return `${(bytes / Math.pow(k, i)).toFixed(1)} ${units[i]}`
 }

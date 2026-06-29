@@ -1,20 +1,38 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { usePortalAuthStore } from '@/stores/auth'
 import { useBillingStore } from '@/stores/billing'
 import { useFreshData } from '@koris/composables/useFreshData'
 import { formatDate } from '@koris/composables/useFormatDate'
+import { useApi } from '@koris/composables/useApi'
+import { useToast } from '@koris/composables/useToast'
 import KButton from '@koris/ui/KButton.vue'
 import KDataTable from '@koris/ui/KDataTable.vue'
 import KFormField from '@koris/ui/KFormField.vue'
 import KInput from '@koris/ui/KInput.vue'
+import KModal from '@koris/ui/KModal.vue'
 import KSelect from '@koris/ui/KSelect.vue'
 import KStatusPill from '@koris/ui/KStatusPill.vue'
 import KSkeleton from '@koris/ui/KSkeleton.vue'
 import KEmptyState from '@koris/ui/KEmptyState.vue'
 
+interface WalletTransaction {
+  id: number
+  amount: number
+  type: string
+  description: string
+  created_at: string
+}
+
+interface WalletTransactionsResponse {
+  ok: boolean
+  transactions: WalletTransaction[]
+}
+
 const auth = usePortalAuthStore()
 const billing = useBillingStore()
+const { get } = useApi()
+const toast = useToast()
 
 const paymentForm = ref({
   amount: 0,
@@ -25,6 +43,34 @@ const paymentForm = ref({
 const renewPlanId = ref<number>(0)
 const notice = ref('')
 
+// Modal state
+const showRenewalModal = ref(false)
+const showTopupModal = ref(false)
+const confirming = ref(false)
+
+// Wallet transactions state
+const walletTransactions = ref<WalletTransaction[]>([])
+const walletTransactionsLoading = ref(false)
+
+const walletTransactionColumns = [
+  { key: 'amount', label: 'Amount', sortable: true },
+  { key: 'type', label: 'Type' },
+  { key: 'description', label: 'Description' },
+  { key: 'created_at', label: 'Date', sortable: true },
+]
+
+async function fetchWalletTransactions(): Promise<void> {
+  walletTransactionsLoading.value = true
+  try {
+    const res = await get<WalletTransactionsResponse>('/api/portal/wallet-transactions')
+    walletTransactions.value = res.transactions || []
+  } catch {
+    toast.error('Failed to load wallet transactions')
+  } finally {
+    walletTransactionsLoading.value = false
+  }
+}
+
 useFreshData(async () => {
   await billing.loadBillingData()
   if (billing.paymentMethods.length && !paymentForm.value.method) {
@@ -33,6 +79,10 @@ useFreshData(async () => {
   if (billing.activePlans.length && !renewPlanId.value) {
     renewPlanId.value = billing.activePlans[0].id
   }
+})
+
+onMounted(() => {
+  fetchWalletTransactions()
 })
 
 const walletCredit = computed(() => auth.credit)
@@ -55,32 +105,64 @@ function formatMoney(value: number): string {
   return `${new Intl.NumberFormat('en', { maximumFractionDigits: 0 }).format(value)} IRT`
 }
 
+function formatTransactionAmount(value: number): string {
+  const formatted = formatMoney(Math.abs(value))
+  return value >= 0 ? `+${formatted}` : `-${formatted}`
+}
+
 function formatGB(value: number): string {
   return value > 0 ? `${value} GB` : 'Unlimited'
 }
 
 async function handleSubmitPayment() {
   if (paymentForm.value.amount <= 0) return
-  notice.value = ''
-  const success = await billing.submitPayment({
-    amount: paymentForm.value.amount,
-    method: paymentForm.value.method,
-    receipt: paymentForm.value.receipt,
-  })
-  if (success) {
-    notice.value = 'Payment request submitted. Admin will review it.'
-    paymentForm.value = { amount: 0, method: paymentForm.value.method, receipt: '' }
+  showTopupModal.value = true
+}
+
+async function confirmTopup() {
+  confirming.value = true
+  try {
+    const success = await billing.submitPayment({
+      amount: paymentForm.value.amount,
+      method: paymentForm.value.method,
+      receipt: paymentForm.value.receipt,
+    })
+    if (success) {
+      showTopupModal.value = false
+      notice.value = 'Payment request submitted. Admin will review it.'
+      paymentForm.value = { amount: 0, method: paymentForm.value.method, receipt: '' }
+    } else {
+      toast.error('Payment submission failed. Please try again.')
+    }
+  } catch {
+    toast.error('Payment submission failed. Please try again.')
+  } finally {
+    confirming.value = false
   }
 }
 
 async function handleRenew() {
   if (!renewPlanId.value) return
-  notice.value = ''
-  const res = await billing.renewPlan(renewPlanId.value)
-  if (res?.renewed) {
-    notice.value = 'Plan activated. Wallet was charged.'
-  } else if (res?.payment_required) {
-    notice.value = `Payment request #${res.payment_id} created for ${formatMoney(res.required_amount || 0)}.`
+  showRenewalModal.value = true
+}
+
+async function confirmRenewal() {
+  confirming.value = true
+  try {
+    const res = await billing.renewPlan(renewPlanId.value)
+    if (res?.renewed) {
+      showRenewalModal.value = false
+      notice.value = 'Plan activated. Wallet was charged.'
+    } else if (res?.payment_required) {
+      showRenewalModal.value = false
+      notice.value = `Payment request #${res.payment_id} created for ${formatMoney(res.required_amount || 0)}.`
+    } else {
+      toast.error('Plan renewal failed. Please try again.')
+    }
+  } catch {
+    toast.error('Plan renewal failed. Please try again.')
+  } finally {
+    confirming.value = false
   }
 }
 </script>
@@ -183,7 +265,119 @@ async function handleRenew() {
           </template>
         </KDataTable>
       </section>
+
+      <!-- Wallet Transactions -->
+      <section class="billing__section">
+        <h2 class="billing__section-title">Wallet Transactions</h2>
+
+        <KEmptyState
+          v-if="!walletTransactionsLoading && !walletTransactions.length"
+          title="No transactions yet"
+          description="Your wallet transaction history will appear here."
+          icon="📒"
+        />
+
+        <KDataTable
+          v-else
+          :columns="walletTransactionColumns"
+          :data="walletTransactions"
+          :loading="walletTransactionsLoading"
+        >
+          <template #cell-amount="{ row }">
+            <span :class="row.amount >= 0 ? 'billing__credit' : 'billing__debit'">
+              {{ formatTransactionAmount(row.amount) }}
+            </span>
+          </template>
+          <template #cell-type="{ row }">
+            {{ row.type }}
+          </template>
+          <template #cell-description="{ row }">
+            {{ row.description }}
+          </template>
+          <template #cell-created_at="{ row }">
+            {{ formatDate(row.created_at) }}
+          </template>
+        </KDataTable>
+      </section>
     </template>
+
+    <!-- Renewal Confirmation Modal -->
+    <KModal
+      :open="showRenewalModal"
+      title="Confirm Plan Renewal"
+      @close="showRenewalModal = false"
+    >
+      <div class="billing__modal-details">
+        <dl class="billing__modal-dl">
+          <div class="billing__modal-row">
+            <dt>Plan</dt>
+            <dd>{{ selectedPlan?.name || '—' }}</dd>
+          </div>
+          <div class="billing__modal-row">
+            <dt>Price</dt>
+            <dd>{{ formatMoney(selectedPlan?.price || 0) }}</dd>
+          </div>
+          <div class="billing__modal-row">
+            <dt>Wallet Balance</dt>
+            <dd>{{ formatMoney(walletCredit) }}</dd>
+          </div>
+          <div class="billing__modal-row">
+            <dt>Deduction</dt>
+            <dd>{{ formatMoney(Math.min(selectedPlan?.price || 0, walletCredit)) }}</dd>
+          </div>
+        </dl>
+      </div>
+      <template #footer>
+        <div class="billing__modal-actions">
+          <KButton variant="ghost" @click="showRenewalModal = false">Cancel</KButton>
+          <KButton
+            variant="primary"
+            :loading="confirming"
+            :disabled="confirming"
+            @click="confirmRenewal"
+          >
+            Confirm Renewal
+          </KButton>
+        </div>
+      </template>
+    </KModal>
+
+    <!-- Top-up Confirmation Modal -->
+    <KModal
+      :open="showTopupModal"
+      title="Confirm Payment"
+      @close="showTopupModal = false"
+    >
+      <div class="billing__modal-details">
+        <dl class="billing__modal-dl">
+          <div class="billing__modal-row">
+            <dt>Amount</dt>
+            <dd>{{ formatMoney(paymentForm.amount) }}</dd>
+          </div>
+          <div class="billing__modal-row">
+            <dt>Payment Method</dt>
+            <dd>{{ paymentForm.method || '—' }}</dd>
+          </div>
+          <div class="billing__modal-row">
+            <dt>Receipt Reference</dt>
+            <dd>{{ paymentForm.receipt || '—' }}</dd>
+          </div>
+        </dl>
+      </div>
+      <template #footer>
+        <div class="billing__modal-actions">
+          <KButton variant="ghost" @click="showTopupModal = false">Cancel</KButton>
+          <KButton
+            variant="primary"
+            :loading="confirming"
+            :disabled="confirming"
+            @click="confirmTopup"
+          >
+            Confirm Payment
+          </KButton>
+        </div>
+      </template>
+    </KModal>
   </div>
 </template>
 <style scoped>
@@ -254,5 +448,46 @@ async function handleRenew() {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   white-space: pre-wrap;
+}
+.billing__credit {
+  color: var(--color-success);
+  font-weight: 600;
+}
+.billing__debit {
+  color: var(--color-error, #ef4444);
+  font-weight: 600;
+}
+.billing__modal-details {
+  font-size: var(--text-sm);
+}
+.billing__modal-dl {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.billing__modal-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+.billing__modal-row:last-child {
+  border-bottom: none;
+}
+.billing__modal-row dt {
+  color: var(--color-muted);
+  font-weight: 500;
+}
+.billing__modal-row dd {
+  margin: 0;
+  font-weight: 600;
+  color: var(--color-text);
+}
+.billing__modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
 }
 </style>
